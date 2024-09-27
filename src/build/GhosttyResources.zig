@@ -197,11 +197,27 @@ pub fn init(b: *std.Build, cfg: *const Config) !GhosttyResources {
     if (cfg.target.result.os.tag == .linux) {
         // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
 
-        // Desktop file so that we have an icon and other metadata
-        try steps.append(&b.addInstallFile(
-            b.path("dist/linux/app.desktop"),
-            "share/applications/com.mitchellh.ghostty.desktop",
-        ).step);
+        if (b.option(bool, "dbus-activation", "Enable DBus activation and systemd user service.") orelse true) {
+            // Desktop file so that we have an icon and other metadata
+            try steps.append(&b.addInstallFile(
+                b.path("dist/linux/dbus/app.desktop"),
+                "share/applications/com.mitchellh.ghostty.desktop",
+            ).step);
+            try steps.append(&b.addInstallFile(
+                b.path("dist/linux/dbus/dbus.service"),
+                "share/dbus-1/services/com.mitchellh.ghostty.service",
+            ).step);
+            try steps.append(&b.addInstallFile(
+                b.path("dist/linux/dbus/systemd.service"),
+                "lib/systemd/user/com.mitchellh.ghostty.service",
+            ).step);
+        } else {
+            // Desktop file so that we have an icon and other metadata
+            try steps.append(&b.addInstallFile(
+                b.path("dist/linux/app.desktop"),
+                "share/applications/com.mitchellh.ghostty.desktop",
+            ).step);
+        }
 
         // Right click menu action for Plasma desktop
         try steps.append(&b.addInstallFile(
