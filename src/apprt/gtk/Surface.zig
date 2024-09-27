@@ -2264,6 +2264,15 @@ pub fn defaultTermioEnv(self: *Surface) !std.process.EnvMap {
     env.remove("GDK_DISABLE");
     env.remove("GSK_RENDERER");
 
+    // On Linux, remove some environment variables that are set when Ghostty
+    // is launched from a `.desktop` file, by D-Bus activation, or systemd.
+    env.remove("GIO_LAUNCHED_DESKTOP_FILE");
+    env.remove("GIO_LAUNCHED_DESKTOP_FILE_PID");
+    env.remove("DBUS_STARTER_ADDRESS");
+    env.remove("DBUS_STARTER_BUS_TYPE");
+    env.remove("INVOCATION_ID");
+    env.remove("JOURNAL_STREAM");
+
     if (self.container.window()) |window| {
         // On some window protocols we might want to add specific
         // environment variables to subprocesses, such as WINDOWID on X11.
