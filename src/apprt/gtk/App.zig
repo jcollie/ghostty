@@ -281,7 +281,7 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
     const single_instance = switch (config.@"gtk-single-instance") {
         .true => true,
         .false => false,
-        .desktop => internal_os.launchedFromDesktop(),
+        .desktop => internal_os.launchedFromDesktop() or internal_os.launchedByDBusActivation() or internal_os.launchedBySystemd(),
     };
 
     // Setup the flags for our application.
@@ -408,10 +408,12 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
     // This just calls the `activate` signal but its part of the normal startup
     // routine so we just call it, but only if the config allows it (this allows
     // for launching Ghostty in the "background" without immediately opening
-    // a window)
+    // a window). An initial window will not be immediately created if we were
+    // launched by D-Bus activation or systemd.  D-Bus activation will send it's
+    // own `activate` or `new-window` signal later.
     //
     // https://gitlab.gnome.org/GNOME/glib/-/blob/bd2ccc2f69ecfd78ca3f34ab59e42e2b462bad65/gio/gapplication.c#L2302
-    if (config.@"initial-window")
+    if (config.@"initial-window" and !internal_os.launchedByDBusActivation() and !internal_os.launchedBySystemd())
         c.g_application_activate(gapp);
 
     // Internally, GTK ensures that only one instance of this provider exists in the provider list
@@ -1014,7 +1016,7 @@ fn syncActionAccelerators(self: *App) !void {
     try self.syncActionAccelerator("app.reload-config", .{ .reload_config = {} });
     try self.syncActionAccelerator("win.toggle_inspector", .{ .inspector = .toggle });
     try self.syncActionAccelerator("win.close", .{ .close_surface = {} });
-    try self.syncActionAccelerator("win.new_window", .{ .new_window = {} });
+    try self.syncActionAccelerator("win.new-window", .{ .new_window = {} });
     try self.syncActionAccelerator("win.new_tab", .{ .new_tab = {} });
     try self.syncActionAccelerator("win.split_right", .{ .new_split = .right });
     try self.syncActionAccelerator("win.split_down", .{ .new_split = .down });
@@ -1743,6 +1745,18 @@ fn gtkActionPresentSurface(
     );
 }
 
+fn gtkActionNewWindow(
+    _: *c.GSimpleAction,
+    _: *c.GVariant,
+    ud: ?*anyopaque,
+) callconv(.C) void {
+    log.info("received new window action", .{});
+    const self: *App = @ptrCast(@alignCast(ud orelse return));
+    _ = self.core_app.mailbox.push(.{
+        .new_window = .{},
+    }, .{ .forever = {} });
+}
+
 /// This is called to setup the action map that this application supports.
 /// This should be called only once on startup.
 fn initActions(self: *App) void {
@@ -1758,6 +1772,7 @@ fn initActions(self: *App) void {
         .{ "open-config", &gtkActionOpenConfig, null },
         .{ "reload-config", &gtkActionReloadConfig, null },
         .{ "present-surface", &gtkActionPresentSurface, c.G_VARIANT_TYPE("t") },
+        .{ "new-window", &gtkActionNewWindow, null },
     };
 
     inline for (actions) |entry| {
@@ -1783,7 +1798,7 @@ fn initMenuContent(menu: *c.GMenu) void {
         const section = c.g_menu_new();
         defer c.g_object_unref(section);
         c.g_menu_append_section(menu, null, @ptrCast(@alignCast(section)));
-        c.g_menu_append(section, "New Window", "win.new_window");
+        c.g_menu_append(section, "New Window", "win.new-window");
         c.g_menu_append(section, "New Tab", "win.new_tab");
         c.g_menu_append(section, "Close Tab", "win.close_tab");
         c.g_menu_append(section, "Split Right", "win.split_right");
