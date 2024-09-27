@@ -239,6 +239,12 @@ pub fn build(b: *std.Build) !void {
         config.app_runtime == .none and
         (!emit_bench and !emit_test_exe and !emit_helpgen);
 
+    const linux_advanced_desktop = b.option(
+        bool,
+        "linux-advanced-desktop",
+        "Install advanced desktop integration files that use systemd user units and D-Bus activation.",
+    ) orelse true;
+
     // On NixOS, the built binary from `zig build` needs to patch the rpath
     // into the built binary for it to be portable across the NixOS system
     // it was built for. We default this to true if we can detect we're in
@@ -677,7 +683,13 @@ pub fn build(b: *std.Build) !void {
         // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
 
         // Desktop file so that we have an icon and other metadata
-        b.installFile("dist/linux/app.desktop", "share/applications/com.mitchellh.ghostty.desktop");
+        if (linux_advanced_desktop) {
+            b.installFile("dist/linux/dbus/app.desktop", "share/applications/com.mitchellh.ghostty.desktop");
+            b.installFile("dist/linux/dbus/dbus.service", "share/dbus-1/services/com.mitchellh.ghostty.service");
+            b.installFile("dist/linux/dbus/systemd.service", "lib/systemd/user/com.mitchellh.ghostty.service");
+        } else {
+            b.installFile("dist/linux/app.desktop", "share/applications/com.mitchellh.ghostty.desktop");
+        }
 
         // Right click menu action for Plasma desktop
         b.installFile("dist/linux/ghostty_dolphin.desktop", "share/kio/servicemenus/com.mitchellh.ghostty.desktop");
