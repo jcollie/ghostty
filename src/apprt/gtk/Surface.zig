@@ -492,6 +492,12 @@ pub fn init(self: *Surface, app: *App, opts: Options) !void {
     c.gtk_widget_set_focusable(gl_area, 1);
     c.gtk_widget_set_focus_on_click(gl_area, 1);
 
+    const ec_drop_target = c.gtk_drop_target_new(c.G_TYPE_INVALID, c.GDK_ACTION_COPY);
+    var ec_drop_target_types = [_]c.GType{c.gdk_file_list_get_type()};
+    c.gtk_drop_target_set_gtypes(ec_drop_target, @ptrCast(&ec_drop_target_types), ec_drop_target_types.len);
+
+    c.gtk_widget_add_controller(@ptrCast(overlay), @ptrCast(ec_drop_target));
+
     // Inherit the parent's font size if we have a parent.
     const font_size: ?font.face.DesiredSize = font_size: {
         if (!app.config.@"window-inherit-font-size") break :font_size null;
@@ -574,6 +580,7 @@ pub fn init(self: *Surface, app: *App, opts: Options) !void {
     _ = c.g_signal_connect_data(im_context, "preedit-changed", c.G_CALLBACK(&gtkInputPreeditChanged), self, null, c.G_CONNECT_DEFAULT);
     _ = c.g_signal_connect_data(im_context, "preedit-end", c.G_CALLBACK(&gtkInputPreeditEnd), self, null, c.G_CONNECT_DEFAULT);
     _ = c.g_signal_connect_data(im_context, "commit", c.G_CALLBACK(&gtkInputCommit), self, null, c.G_CONNECT_DEFAULT);
+    _ = c.g_signal_connect_data(ec_drop_target, "drop", c.G_CALLBACK(&gtkDrop), self, null, c.G_CONNECT_DEFAULT);
 }
 
 fn realize(self: *Surface) !void {
@@ -2017,4 +2024,43 @@ pub fn setSplitZoom(self: *Surface, new_split_zoom: bool) void {
 
 pub fn toggleSplitZoom(self: *Surface) void {
     self.setSplitZoom(!self.zoomed_in);
+}
+
+fn gtkDrop(_: *c.GtkDropTarget, value: *c.GValue, x: f64, y: f64, ud: ?*anyopaque) callconv(.C) c.gboolean {
+    _ = userdataSelf(ud.?);
+    log.info("drop at {d}×{d} ", .{ x, y });
+
+    if (g_value_holds(value, c.G_TYPE_BOXED)) {
+        const fl: *c.GdkFileList = @ptrCast(c.g_value_get_boxed(value));
+        var l = c.gdk_file_list_get_files(fl);
+        while (l != null) : (l = l.*.next) {
+            const file: *c.GFile = @ptrCast(l.*.data);
+            log.info("file: {s}", .{c.g_file_get_path(file)});
+            const uri = std.Uri{
+                .scheme = "file",
+                .path = .{ .raw = std.mem.span(c.g_file_get_path(file)) },
+            };
+            var buf: [std.fs.max_path_bytes * 3 + 7]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buf);
+            var s = std.ArrayList(u8).init(fba.allocator());
+            uri.writeToStream(.{ .scheme = true, .path = true }, s.writer()) catch {
+                log.err("unable to convert path to uri", .{});
+                continue;
+            };
+            log.info("uri: {s}", .{s.toOwnedSlice() catch {
+                log.err("unable to allocate for log", .{});
+                continue;
+            }});
+        }
+    }
+
+    return 1;
+}
+
+fn g_value_holds(vl: ?*c.GValue, t: c.GType) bool {
+    if (vl) |v| {
+        if (v.*.g_type == t) return true;
+        return c.g_type_check_value_holds(v, t) != 0;
+    }
+    return false;
 }
