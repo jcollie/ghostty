@@ -20,7 +20,7 @@
   wabt,
   wasmtime,
   wraptest,
-  zig,
+  zig_0_13,
   zip,
   llvmPackages_latest,
   bzip2,
@@ -94,7 +94,7 @@ in
         pandoc
         pkg-config
         scdoc
-        zig
+        zig_0_13
         zip
 
         # For web and wasm stuff
