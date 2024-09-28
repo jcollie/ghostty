@@ -36,22 +36,35 @@
 
   outputs = {
     self,
-    nixpkgs-unstable,
     nixpkgs-stable,
+    nixpkgs-unstable,
     zig,
     zig2nix,
     ...
   }:
-    builtins.foldl' nixpkgs-stable.lib.recursiveUpdate {} (
-      builtins.map (
+    builtins.foldl' nixpkgs-stable.lib.attrsets.recursiveUpdate {} (
+      builtins.map
+      (
         system: let
-          pkgs-stable = nixpkgs-stable.legacyPackages.${system};
-          pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
+          pkgs-stable = import nixpkgs-stable {
+            inherit system;
+          };
+          pkgs-unstable = import nixpkgs-unstable {
+            inherit system;
+          };
         in {
-          devShell.${system} = pkgs-stable.callPackage ./nix/devShell.nix {
-            zig = zig.packages.${system}."0.13.0";
-            wraptest = pkgs-stable.callPackage ./nix/wraptest.nix {};
-            zig2nix = zig2nix;
+          devShells.${system} = {
+            default = self.devShells.${system}.stable;
+            stable = pkgs-stable.callPackage ./nix/devShell.nix {
+              # zig_0_13 = zig.packages.${system}."0.13.0";
+              zig2nix = zig2nix;
+              wraptest = pkgs-unstable.callPackage ./nix/wraptest.nix {};
+            };
+            unstable = pkgs-unstable.callPackage ./nix/devShell.nix {
+              # zig_0_13 = zig.packages.${system}."0.13.0";
+              zig2nix = zig2nix;
+              wraptest = pkgs-unstable.callPackage ./nix/wraptest.nix {};
+            };
           };
 
           packages.${system} = let
@@ -60,14 +73,19 @@
 
               revision = self.shortRev or self.dirtyShortRev or "dirty";
             };
-          in rec {
+          in {
             deps = pkgs-stable.callPackage ./build.zig.zon.nix {};
-            ghostty-debug = pkgs-stable.callPackage ./nix/package.nix (mkArgs "Debug");
-            ghostty-releasesafe = pkgs-stable.callPackage ./nix/package.nix (mkArgs "ReleaseSafe");
-            ghostty-releasefast = pkgs-stable.callPackage ./nix/package.nix (mkArgs "ReleaseFast");
-
-            ghostty = ghostty-releasefast;
-            default = ghostty;
+            default = self.packages.${system}.ghostty;
+            ghostty = self.packages.${system}.ghostty-releasefast;
+            ghostty-debug = self.packages.${system}.ghostty-stable-debug;
+            ghostty-releasesafe = self.packages.${system}.ghostty-stable-releasesafe;
+            ghostty-releasefast = self.packages.${system}.ghostty-stable-releasefast;
+            ghostty-stable-debug = pkgs-stable.callPackage ./nix/package.nix (mkArgs "Debug");
+            ghostty-stable-releasesafe = pkgs-stable.callPackage ./nix/package.nix (mkArgs "ReleaseSafe");
+            ghostty-stable-releasefast = pkgs-stable.callPackage ./nix/package.nix (mkArgs "ReleaseFast");
+            ghostty-unstable-debug = pkgs-unstable.callPackage ./nix/package.nix (mkArgs "Debug");
+            ghostty-unstable-releasesafe = pkgs-unstable.callPackage ./nix/package.nix (mkArgs "ReleaseSafe");
+            ghostty-unstable-releasefast = pkgs-unstable.callPackage ./nix/package.nix (mkArgs "ReleaseFast");
           };
 
           formatter.${system} = pkgs-stable.alejandra;
