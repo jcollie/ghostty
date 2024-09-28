@@ -2038,12 +2038,13 @@ fn gtkDrop(_: *c.GtkDropTarget, value: *c.GValue, x: f64, y: f64, ud: ?*anyopaqu
             log.info("file: {s}", .{c.g_file_get_path(file)});
             const uri = std.Uri{
                 .scheme = "file",
+                .host = .{ .raw = "" },
                 .path = .{ .raw = std.mem.span(c.g_file_get_path(file)) },
             };
             var buf: [std.fs.max_path_bytes * 3 + 7]u8 = undefined;
             var fba = std.heap.FixedBufferAllocator.init(&buf);
             var s = std.ArrayList(u8).init(fba.allocator());
-            uri.writeToStream(.{ .scheme = true, .path = true }, s.writer()) catch {
+            uri.writeToStream(.{ .scheme = true, .authority = true, .path = true }, s.writer()) catch {
                 log.err("unable to convert path to uri", .{});
                 continue;
             };
