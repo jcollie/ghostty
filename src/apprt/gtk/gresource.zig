@@ -7,7 +7,7 @@ const css_files = [_][]const u8{
     "style-hc-dark.css",
 };
 
-const icons = [_]struct {
+const ghostty_icons = [_]struct {
     alias: []const u8,
     source: []const u8,
 }{
@@ -53,6 +53,21 @@ const icons = [_]struct {
     },
 };
 
+const numeric_icons = [_][]const u8{
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "9-plus",
+};
+
 pub const ui_files = [_][]const u8{};
 pub const blueprint_files = [_][]const u8{};
 
@@ -94,10 +109,16 @@ pub fn main() !void {
         \\  <gresource prefix="/com/mitchellh/ghostty/icons">
         \\
     );
-    for (icons) |icon| {
+    for (ghostty_icons) |icon| {
         try writer.print(
             "    <file alias=\"{s}/apps/com.mitchellh.ghostty.png\">images/icons/icon_{s}.png</file>\n",
             .{ icon.alias, icon.source },
+        );
+    }
+    for (numeric_icons) |icon| {
+        try writer.print(
+            "    <file alias=\"scalable/status/numeric-{0s}-circle-outline-symbolic.svg\">images/icons/numeric-{0s}-circle-outline-symbolic.svg</file>\n",
+            .{icon},
         );
     }
     try writer.writeAll(
@@ -125,15 +146,19 @@ pub fn main() !void {
 }
 
 pub const dependencies = deps: {
-    const total = css_files.len + icons.len + ui_files.len + blueprint_files.len;
+    const total = css_files.len + ghostty_icons.len + numeric_icons.len + ui_files.len + blueprint_files.len;
     var deps: [total][]const u8 = undefined;
     var index: usize = 0;
     for (css_files) |css_file| {
         deps[index] = std.fmt.comptimePrint("src/apprt/gtk/{s}", .{css_file});
         index += 1;
     }
-    for (icons) |icon| {
+    for (ghostty_icons) |icon| {
         deps[index] = std.fmt.comptimePrint("images/icons/icon_{s}.png", .{icon.source});
+        index += 1;
+    }
+    for (numeric_icons) |icon| {
+        deps[index] = std.fmt.comptimePrint("images/icons/numeric-{s}-circle-outline-symbolic.svg", .{icon});
         index += 1;
     }
     for (ui_files) |ui_file| {

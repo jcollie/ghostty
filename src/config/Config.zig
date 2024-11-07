@@ -2141,6 +2141,15 @@ keybind: Keybinds = .{},
 /// and shown when the titlebar is unmaximized. GTK only.
 @"gtk-titlebar-hide-when-maximized": bool = false,
 
+/// Determines the icon for each GTK tab header.
+///
+/// * `none` - Do not show any icons.
+/// * `numeric` - Show a numeric icon for the first 9 tabs
+///
+/// The default is `none`. This currently requires libadwaita to be enabled.
+/// GTK only.
+@"gtk-tabs-icon": GtkTabsIcon = .none,
+
 /// Determines the appearance of the top and bottom bars when using the
 /// Adwaita tab bar. This requires `gtk-adwaita` to be enabled (it is
 /// by default).
@@ -5755,6 +5764,12 @@ pub const GtkTabsLocation = enum {
     left,
     right,
     hidden,
+};
+
+/// See gtk-tabs-icon
+pub const GtkTabsIcon = enum {
+    none,
+    numeric,
 };
 
 /// See adw-toolbar-style
