@@ -7,7 +7,7 @@ const css_files = [_][]const u8{
     "style-hc-dark.css",
 };
 
-const icons = [_]struct {
+const ghostty_icons = [_]struct {
     alias: []const u8,
     source: []const u8,
 }{
@@ -51,6 +51,21 @@ const icons = [_]struct {
         .alias = "1024x1024",
         .source = "1024",
     },
+};
+
+const numeric_icons = [_][]const u8{
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "9-plus",
 };
 
 pub const gresource_xml = comptimeGenerateGResourceXML();
@@ -98,10 +113,16 @@ fn writeGResourceXML(writer: anytype) !void {
         \\  <gresource prefix="/com/mitchellh/ghostty/icons">
         \\
     );
-    for (icons) |icon| {
+    for (ghostty_icons) |icon| {
         try writer.print(
             "    <file alias=\"{s}/apps/com.mitchellh.ghostty.png\">images/icons/icon_{s}.png</file>\n",
             .{ icon.alias, icon.source },
+        );
+    }
+    for (numeric_icons) |icon| {
+        try writer.print(
+            "    <file alias=\"scalable/status/numeric-{0s}-circle-outline-symbolic.svg\">images/icons/numeric-{0s}-circle-outline-symbolic.svg</file>\n",
+            .{icon},
         );
     }
     try writer.writeAll(
@@ -129,11 +150,11 @@ fn writeGResourceXML(writer: anytype) !void {
 }
 
 pub const dependencies = deps: {
-    var deps: [css_files.len + icons.len][]const u8 = undefined;
+    var deps: [css_files.len + ghostty_icons.len][]const u8 = undefined;
     for (css_files, 0..) |css_file, i| {
         deps[i] = std.fmt.comptimePrint("src/apprt/gtk/{s}", .{css_file});
     }
-    for (icons, css_files.len..) |icon, i| {
+    for (ghostty_icons, css_files.len..) |icon, i| {
         deps[i] = std.fmt.comptimePrint("images/icons/icon_{s}.png", .{icon.source});
     }
     break :deps deps;
