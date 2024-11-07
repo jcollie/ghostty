@@ -14,6 +14,9 @@ const AdwTabView = if (adwaita.versionAtLeast(0, 0, 0)) c.AdwTabView else anyopa
 const AdwTabPage = if (adwaita.versionAtLeast(0, 0, 0)) c.AdwTabPage else anyopaque;
 
 pub const NotebookAdw = struct {
+    /// the window
+    window: *Window,
+
     /// the tab view
     tab_view: *AdwTabView,
 
@@ -24,6 +27,9 @@ pub const NotebookAdw = struct {
     /// Long term we should move to ADW alerts so we can know if we are
     /// confirming or not.
     forcing_close: bool = false,
+
+    /// last tab
+    last_tab: ?*Tab = null,
 
     pub fn init(notebook: *Notebook) void {
         const window: *Window = @fieldParentPtr("notebook", notebook);
@@ -41,14 +47,63 @@ pub const NotebookAdw = struct {
 
         notebook.* = .{
             .adw = .{
+                .window = window,
                 .tab_view = tab_view,
             },
         };
 
-        _ = c.g_signal_connect_data(tab_view, "page-attached", c.G_CALLBACK(&adwPageAttached), window, null, c.G_CONNECT_DEFAULT);
-        _ = c.g_signal_connect_data(tab_view, "close-page", c.G_CALLBACK(&adwClosePage), window, null, c.G_CONNECT_DEFAULT);
-        _ = c.g_signal_connect_data(tab_view, "create-window", c.G_CALLBACK(&adwTabViewCreateWindow), window, null, c.G_CONNECT_DEFAULT);
-        _ = c.g_signal_connect_data(tab_view, "notify::selected-page", c.G_CALLBACK(&adwSelectPage), window, null, c.G_CONNECT_DEFAULT);
+        const self = &notebook.adw;
+        self.initContextMenu(window);
+
+        _ = c.g_signal_connect_data(tab_view, "create-window", c.G_CALLBACK(&adwTabViewCreateWindow), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "close-page", c.G_CALLBACK(&adwTabPageClosePage), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "page-attached", c.G_CALLBACK(&adwTabViewPageAttached), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "page-detached", c.G_CALLBACK(&adwTabViewPageAttached), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "page-reordered", c.G_CALLBACK(&adwTabViewPageAttached), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "setup-menu", c.G_CALLBACK(&adwTabViewSetupMenu), self, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(tab_view, "notify::selected-page", c.G_CALLBACK(&adwTabViewSelectPage), self, null, c.G_CONNECT_DEFAULT);
+    }
+
+    pub fn initContextMenu(self: *NotebookAdw, window: *Window) void {
+        {
+            var buf: [32]u8 = undefined;
+            const action_name = std.fmt.bufPrintZ(
+                &buf,
+                "close-tab-{x:8>0}",
+                .{@intFromPtr(self)},
+            ) catch unreachable;
+
+            const action = c.g_simple_action_new(action_name, null);
+            defer c.g_object_unref(action);
+            _ = c.g_signal_connect_data(
+                action,
+                "activate",
+                c.G_CALLBACK(&adwTabViewCloseTab),
+                self,
+                null,
+                c.G_CONNECT_DEFAULT,
+            );
+            c.g_action_map_add_action(@ptrCast(window.window), @ptrCast(action));
+        }
+
+        const menu = c.g_menu_new();
+        errdefer c.g_object_unref(menu);
+
+        {
+            var buf: [32]u8 = undefined;
+            const action_name = std.fmt.bufPrintZ(
+                &buf,
+                "win.close-tab-{x:8>0}",
+                .{@intFromPtr(self)},
+            ) catch unreachable;
+
+            const section = c.g_menu_new();
+            defer c.g_object_unref(section);
+            c.g_menu_append_section(menu, null, @ptrCast(@alignCast(section)));
+            c.g_menu_append(section, "Close Tab", action_name);
+        }
+
+        c.adw_tab_view_set_menu_model(self.tab_view, @ptrCast(@alignCast(menu)));
     }
 
     pub fn asWidget(self: *NotebookAdw) *c.GtkWidget {
@@ -155,19 +210,52 @@ pub const NotebookAdw = struct {
             c.gtk_window_destroy(window);
         }
     }
+
+    fn setPageIcons(self: *NotebookAdw) void {
+        const count: usize = @intCast(c.adw_tab_view_get_n_pages(self.tab_view));
+        for (0..count) |position| {
+            const page = c.adw_tab_view_get_nth_page(self.tab_view, @intCast(position));
+            switch (self.window.app.config.@"gtk-tabs-icon") {
+                .numeric => {
+                    if (position <= 9) {
+                        var buf: [48]u8 = undefined;
+                        const name = std.fmt.bufPrintZ(&buf, "numeric-{d}-circle-outline-symbolic", .{if (position == 9) 0 else position + 1}) catch unreachable;
+                        const icon = c.g_themed_icon_new(name);
+                        c.adw_tab_page_set_icon(page, icon);
+                    } else {
+                        c.adw_tab_page_set_icon(page, null);
+                    }
+                },
+                .none => {
+                    c.adw_tab_page_set_icon(page, null);
+                },
+            }
+        }
+    }
 };
 
-fn adwPageAttached(_: *AdwTabView, page: *c.AdwTabPage, _: c_int, ud: ?*anyopaque) callconv(.C) void {
-    const window: *Window = @ptrCast(@alignCast(ud.?));
+fn adwTabViewPageAttached(_: *AdwTabView, page: *c.AdwTabPage, _: c_int, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
 
     const child = c.adw_tab_page_get_child(page);
     const tab: *Tab = @ptrCast(@alignCast(c.g_object_get_data(@ptrCast(child), Tab.GHOSTTY_TAB) orelse return));
-    tab.window = window;
+    tab.window = self.window;
 
-    window.focusCurrentTab();
+    self.window.focusCurrentTab();
+    self.setPageIcons();
 }
 
-fn adwClosePage(
+fn adwTabViewPageDetached(_: *AdwTabView, _: *c.AdwTabPage, _: c_int, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    self.setPageIcons();
+}
+
+fn adwTabViewPageReordered(_: *AdwTabView, _: *c.AdwTabPage, _: c_int, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    self.setPageIcons();
+}
+
+fn adwTabPageClosePage(
     _: *AdwTabView,
     page: *c.AdwTabPage,
     ud: ?*anyopaque,
@@ -178,14 +266,13 @@ fn adwClosePage(
         Tab.GHOSTTY_TAB,
     ) orelse return 0));
 
-    const window: *Window = @ptrCast(@alignCast(ud.?));
-    const notebook = window.notebook.adw;
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
     c.adw_tab_view_close_page_finish(
-        notebook.tab_view,
+        self.tab_view,
         page,
-        @intFromBool(notebook.forcing_close),
+        @intFromBool(self.forcing_close),
     );
-    if (!notebook.forcing_close) tab.closeWithConfirmation();
+    if (!self.forcing_close) tab.closeWithConfirmation();
     return 1;
 }
 
@@ -193,17 +280,35 @@ fn adwTabViewCreateWindow(
     _: *AdwTabView,
     ud: ?*anyopaque,
 ) callconv(.C) ?*AdwTabView {
-    const currentWindow: *Window = @ptrCast(@alignCast(ud.?));
-    const window = createWindow(currentWindow) catch |err| {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    const window = createWindow(self.window) catch |err| {
         log.warn("error creating new window error={}", .{err});
         return null;
     };
+    assert(window.notebook == .adw);
     return window.notebook.adw.tab_view;
 }
 
-fn adwSelectPage(_: *c.GObject, _: *c.GParamSpec, ud: ?*anyopaque) void {
-    const window: *Window = @ptrCast(@alignCast(ud.?));
-    const page = c.adw_tab_view_get_selected_page(window.notebook.adw.tab_view) orelse return;
+fn adwTabViewSelectPage(_: *c.GObject, _: *c.GParamSpec, ud: ?*anyopaque) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    const page = c.adw_tab_view_get_selected_page(self.tab_view) orelse return;
     const title = c.adw_tab_page_get_title(page);
-    window.setTitle(std.mem.span(title));
+    self.window.setTitle(std.mem.span(title));
+}
+
+fn adwTabViewSetupMenu(_: *AdwTabView, page: *AdwTabPage, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    self.last_tab = null;
+
+    const child = c.adw_tab_page_get_child(page);
+    const tab: *Tab = @ptrCast(@alignCast(
+        c.g_object_get_data(@ptrCast(child), Tab.GHOSTTY_TAB) orelse return,
+    ));
+
+    self.last_tab = tab;
+}
+
+fn adwTabViewCloseTab(_: *c.GSimpleAction, _: *c.GVariant, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    self.closeTab(self.last_tab orelse return);
 }
