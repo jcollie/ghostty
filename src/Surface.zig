@@ -939,6 +939,8 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .present_surface => try self.presentSurface(),
 
         .password_input => |v| try self.passwordInput(v),
+
+        .bell => try self.bell(),
     }
 }
 
@@ -4613,4 +4615,10 @@ fn presentSurface(self: *Surface) !void {
         .present_terminal,
         {},
     );
+}
+
+fn bell(self: *Surface) !void {
+    if (@hasDecl(apprt.Surface, "bell")) {
+        try self.rt_surface.bell();
+    } else log.warn("runtime doesn't support bell", .{});
 }

@@ -55,6 +55,11 @@ const icons = [_]struct {
 
 pub const gresource_xml = comptimeGenerateGResourceXML();
 
+const media = [_][]const u8{
+    "media/bell.oga",
+    "media/message.oga",
+};
+
 fn comptimeGenerateGResourceXML() []const u8 {
     comptime {
         @setEvalBranchQuota(13000);
@@ -101,6 +106,23 @@ fn writeGResourceXML(writer: anytype) !void {
     }
     try writer.writeAll(
         \\  </gresource>
+        \\
+    );
+    try writer.writeAll(
+        \\  <gresource prefix="/com/mitchellh/ghostty/media">
+        \\
+    );
+    for (media) |pathname| {
+        try writer.print(
+            "    <file alias=\"{s}\">{s}</file>\n",
+            .{ std.fs.path.basename(pathname), pathname },
+        );
+    }
+    try writer.writeAll(
+        \\  </gresource>
+        \\
+    );
+    try writer.writeAll(
         \\</gresources>
         \\
     );
