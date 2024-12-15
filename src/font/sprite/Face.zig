@@ -266,6 +266,9 @@ const Kind = enum {
             // 𜰡 𜰢 𜰣 𜰤 𜰥 𜰦 𜰧 𜰨 𜰩 𜰪 𜰫 𜰬 𜰭 𜰮 𜰯
             0x1CC21...0x1CC2F => .box,
 
+            // Block Octants from Symbols for Legacy Computing Supplement
+            0x1CD00...0x1CDE5 => .box,
+
             // Powerline fonts
             0xE0B0,
             0xE0B1,

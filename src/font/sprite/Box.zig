@@ -1655,6 +1655,467 @@ fn draw(self: Box, alloc: Allocator, canvas: *font.sprite.Canvas, cp: u32) !void
         // '𜰯' - SEPARATED BLOCK QUADRANT-1234
         0x1cc2f => try self.draw_separated_block_quadrant(canvas, "1234"),
 
+        // '𜴀' - BLOCK OCTANT-3
+        0x1cd00 => try self.draw_block_octant(canvas, "3"),
+        // '𜴁' - BLOCK OCTANT-23
+        0x1cd01 => try self.draw_block_octant(canvas, "23"),
+        // '𜴂' - BLOCK OCTANT-123
+        0x1cd02 => try self.draw_block_octant(canvas, "123"),
+        // '𜴃' - BLOCK OCTANT-4
+        0x1cd03 => try self.draw_block_octant(canvas, "4"),
+        // '𜴄' - BLOCK OCTANT-14
+        0x1cd04 => try self.draw_block_octant(canvas, "14"),
+        // '𜴅' - BLOCK OCTANT-124
+        0x1cd05 => try self.draw_block_octant(canvas, "124"),
+        // '𜴆' - BLOCK OCTANT-34
+        0x1cd06 => try self.draw_block_octant(canvas, "34"),
+        // '𜴇' - BLOCK OCTANT-134
+        0x1cd07 => try self.draw_block_octant(canvas, "134"),
+        // '𜴈' - BLOCK OCTANT-234
+        0x1cd08 => try self.draw_block_octant(canvas, "234"),
+        // '𜴉' - BLOCK OCTANT-5
+        0x1cd09 => try self.draw_block_octant(canvas, "5"),
+        // '𜴊' - BLOCK OCTANT-15
+        0x1cd0a => try self.draw_block_octant(canvas, "15"),
+        // '𜴋' - BLOCK OCTANT-25
+        0x1cd0b => try self.draw_block_octant(canvas, "25"),
+        // '𜴌' - BLOCK OCTANT-125
+        0x1cd0c => try self.draw_block_octant(canvas, "125"),
+        // '𜴍' - BLOCK OCTANT-135
+        0x1cd0d => try self.draw_block_octant(canvas, "135"),
+        // '𜴎' - BLOCK OCTANT-235
+        0x1cd0e => try self.draw_block_octant(canvas, "235"),
+        // '𜴏' - BLOCK OCTANT-1235
+        0x1cd0f => try self.draw_block_octant(canvas, "1235"),
+        // '𜴐' - BLOCK OCTANT-45
+        0x1cd10 => try self.draw_block_octant(canvas, "45"),
+        // '𜴑' - BLOCK OCTANT-145
+        0x1cd11 => try self.draw_block_octant(canvas, "145"),
+        // '𜴒' - BLOCK OCTANT-245
+        0x1cd12 => try self.draw_block_octant(canvas, "245"),
+        // '𜴓' - BLOCK OCTANT-1245
+        0x1cd13 => try self.draw_block_octant(canvas, "1245"),
+        // '𜴔' - BLOCK OCTANT-345
+        0x1cd14 => try self.draw_block_octant(canvas, "345"),
+        // '𜴕' - BLOCK OCTANT-1345
+        0x1cd15 => try self.draw_block_octant(canvas, "1345"),
+        // '𜴖' - BLOCK OCTANT-2345
+        0x1cd16 => try self.draw_block_octant(canvas, "2345"),
+        // '𜴗' - BLOCK OCTANT-12345
+        0x1cd17 => try self.draw_block_octant(canvas, "12345"),
+        // '𜴘' - BLOCK OCTANT-6
+        0x1cd18 => try self.draw_block_octant(canvas, "6"),
+        // '𜴙' - BLOCK OCTANT-16
+        0x1cd19 => try self.draw_block_octant(canvas, "16"),
+        // '𜴚' - BLOCK OCTANT-26
+        0x1cd1a => try self.draw_block_octant(canvas, "26"),
+        // '𜴛' - BLOCK OCTANT-126
+        0x1cd1b => try self.draw_block_octant(canvas, "126"),
+        // '𜴜' - BLOCK OCTANT-36
+        0x1cd1c => try self.draw_block_octant(canvas, "36"),
+        // '𜴝' - BLOCK OCTANT-136
+        0x1cd1d => try self.draw_block_octant(canvas, "136"),
+        // '𜴞' - BLOCK OCTANT-236
+        0x1cd1e => try self.draw_block_octant(canvas, "236"),
+        // '𜴟' - BLOCK OCTANT-1236
+        0x1cd1f => try self.draw_block_octant(canvas, "1236"),
+        // '𜴠' - BLOCK OCTANT-146
+        0x1cd20 => try self.draw_block_octant(canvas, "146"),
+        // '𜴡' - BLOCK OCTANT-246
+        0x1cd21 => try self.draw_block_octant(canvas, "246"),
+        // '𜴢' - BLOCK OCTANT-1246
+        0x1cd22 => try self.draw_block_octant(canvas, "1246"),
+        // '𜴣' - BLOCK OCTANT-346
+        0x1cd23 => try self.draw_block_octant(canvas, "346"),
+        // '𜴤' - BLOCK OCTANT-1346
+        0x1cd24 => try self.draw_block_octant(canvas, "1346"),
+        // '𜴥' - BLOCK OCTANT-2346
+        0x1cd25 => try self.draw_block_octant(canvas, "2346"),
+        // '𜴦' - BLOCK OCTANT-12346
+        0x1cd26 => try self.draw_block_octant(canvas, "12346"),
+        // '𜴧' - BLOCK OCTANT-56
+        0x1cd27 => try self.draw_block_octant(canvas, "56"),
+        // '𜴨' - BLOCK OCTANT-156
+        0x1cd28 => try self.draw_block_octant(canvas, "156"),
+        // '𜴩' - BLOCK OCTANT-256
+        0x1cd29 => try self.draw_block_octant(canvas, "256"),
+        // '𜴪' - BLOCK OCTANT-1256
+        0x1cd2a => try self.draw_block_octant(canvas, "1256"),
+        // '𜴫' - BLOCK OCTANT-356
+        0x1cd2b => try self.draw_block_octant(canvas, "356"),
+        // '𜴬' - BLOCK OCTANT-1356
+        0x1cd2c => try self.draw_block_octant(canvas, "1356"),
+        // '𜴭' - BLOCK OCTANT-2356
+        0x1cd2d => try self.draw_block_octant(canvas, "2356"),
+        // '𜴮' - BLOCK OCTANT-12356
+        0x1cd2e => try self.draw_block_octant(canvas, "12356"),
+        // '𜴯' - BLOCK OCTANT-456
+        0x1cd2f => try self.draw_block_octant(canvas, "456"),
+        // '𜴰' - BLOCK OCTANT-1456
+        0x1cd30 => try self.draw_block_octant(canvas, "1456"),
+        // '𜴱' - BLOCK OCTANT-2456
+        0x1cd31 => try self.draw_block_octant(canvas, "2456"),
+        // '𜴲' - BLOCK OCTANT-12456
+        0x1cd32 => try self.draw_block_octant(canvas, "12456"),
+        // '𜴳' - BLOCK OCTANT-3456
+        0x1cd33 => try self.draw_block_octant(canvas, "3456"),
+        // '𜴴' - BLOCK OCTANT-13456
+        0x1cd34 => try self.draw_block_octant(canvas, "13456"),
+        // '𜴵' - BLOCK OCTANT-23456
+        0x1cd35 => try self.draw_block_octant(canvas, "23456"),
+        // '𜴶' - BLOCK OCTANT-17
+        0x1cd36 => try self.draw_block_octant(canvas, "17"),
+        // '𜴷' - BLOCK OCTANT-27
+        0x1cd37 => try self.draw_block_octant(canvas, "27"),
+        // '𜴸' - BLOCK OCTANT-127
+        0x1cd38 => try self.draw_block_octant(canvas, "127"),
+        // '𜴹' - BLOCK OCTANT-37
+        0x1cd39 => try self.draw_block_octant(canvas, "37"),
+        // '𜴺' - BLOCK OCTANT-137
+        0x1cd3a => try self.draw_block_octant(canvas, "137"),
+        // '𜴻' - BLOCK OCTANT-237
+        0x1cd3b => try self.draw_block_octant(canvas, "237"),
+        // '𜴼' - BLOCK OCTANT-1237
+        0x1cd3c => try self.draw_block_octant(canvas, "1237"),
+        // '𜴽' - BLOCK OCTANT-47
+        0x1cd3d => try self.draw_block_octant(canvas, "47"),
+        // '𜴾' - BLOCK OCTANT-147
+        0x1cd3e => try self.draw_block_octant(canvas, "147"),
+        // '𜴿' - BLOCK OCTANT-247
+        0x1cd3f => try self.draw_block_octant(canvas, "247"),
+        // '𜵀' - BLOCK OCTANT-1247
+        0x1cd40 => try self.draw_block_octant(canvas, "1247"),
+        // '𜵁' - BLOCK OCTANT-347
+        0x1cd41 => try self.draw_block_octant(canvas, "347"),
+        // '𜵂' - BLOCK OCTANT-1347
+        0x1cd42 => try self.draw_block_octant(canvas, "1347"),
+        // '𜵃' - BLOCK OCTANT-2347
+        0x1cd43 => try self.draw_block_octant(canvas, "2347"),
+        // '𜵄' - BLOCK OCTANT-12347
+        0x1cd44 => try self.draw_block_octant(canvas, "12347"),
+        // '𜵅' - BLOCK OCTANT-157
+        0x1cd45 => try self.draw_block_octant(canvas, "157"),
+        // '𜵆' - BLOCK OCTANT-257
+        0x1cd46 => try self.draw_block_octant(canvas, "257"),
+        // '𜵇' - BLOCK OCTANT-1257
+        0x1cd47 => try self.draw_block_octant(canvas, "1257"),
+        // '𜵈' - BLOCK OCTANT-357
+        0x1cd48 => try self.draw_block_octant(canvas, "357"),
+        // '𜵉' - BLOCK OCTANT-2357
+        0x1cd49 => try self.draw_block_octant(canvas, "2357"),
+        // '𜵊' - BLOCK OCTANT-12357
+        0x1cd4a => try self.draw_block_octant(canvas, "12357"),
+        // '𜵋' - BLOCK OCTANT-457
+        0x1cd4b => try self.draw_block_octant(canvas, "457"),
+        // '𜵌' - BLOCK OCTANT-1457
+        0x1cd4c => try self.draw_block_octant(canvas, "1457"),
+        // '𜵍' - BLOCK OCTANT-12457
+        0x1cd4d => try self.draw_block_octant(canvas, "12457"),
+        // '𜵎' - BLOCK OCTANT-3457
+        0x1cd4e => try self.draw_block_octant(canvas, "3457"),
+        // '𜵏' - BLOCK OCTANT-13457
+        0x1cd4f => try self.draw_block_octant(canvas, "13457"),
+        // '𜵐' - BLOCK OCTANT-23457
+        0x1cd50 => try self.draw_block_octant(canvas, "23457"),
+        // '𜵑' - BLOCK OCTANT-67
+        0x1cd51 => try self.draw_block_octant(canvas, "67"),
+        // '𜵒' - BLOCK OCTANT-167
+        0x1cd52 => try self.draw_block_octant(canvas, "167"),
+        // '𜵓' - BLOCK OCTANT-267
+        0x1cd53 => try self.draw_block_octant(canvas, "267"),
+        // '𜵔' - BLOCK OCTANT-1267
+        0x1cd54 => try self.draw_block_octant(canvas, "1267"),
+        // '𜵕' - BLOCK OCTANT-367
+        0x1cd55 => try self.draw_block_octant(canvas, "367"),
+        // '𜵖' - BLOCK OCTANT-1367
+        0x1cd56 => try self.draw_block_octant(canvas, "1367"),
+        // '𜵗' - BLOCK OCTANT-2367
+        0x1cd57 => try self.draw_block_octant(canvas, "2367"),
+        // '𜵘' - BLOCK OCTANT-12367
+        0x1cd58 => try self.draw_block_octant(canvas, "12367"),
+        // '𜵙' - BLOCK OCTANT-467
+        0x1cd59 => try self.draw_block_octant(canvas, "467"),
+        // '𜵚' - BLOCK OCTANT-1467
+        0x1cd5a => try self.draw_block_octant(canvas, "1467"),
+        // '𜵛' - BLOCK OCTANT-2467
+        0x1cd5b => try self.draw_block_octant(canvas, "2467"),
+        // '𜵜' - BLOCK OCTANT-12467
+        0x1cd5c => try self.draw_block_octant(canvas, "12467"),
+        // '𜵝' - BLOCK OCTANT-3467
+        0x1cd5d => try self.draw_block_octant(canvas, "3467"),
+        // '𜵞' - BLOCK OCTANT-13467
+        0x1cd5e => try self.draw_block_octant(canvas, "13467"),
+        // '𜵟' - BLOCK OCTANT-23467
+        0x1cd5f => try self.draw_block_octant(canvas, "23467"),
+        // '𜵠' - BLOCK OCTANT-123467
+        0x1cd60 => try self.draw_block_octant(canvas, "123467"),
+        // '𜵡' - BLOCK OCTANT-567
+        0x1cd61 => try self.draw_block_octant(canvas, "567"),
+        // '𜵢' - BLOCK OCTANT-1567
+        0x1cd62 => try self.draw_block_octant(canvas, "1567"),
+        // '𜵣' - BLOCK OCTANT-2567
+        0x1cd63 => try self.draw_block_octant(canvas, "2567"),
+        // '𜵤' - BLOCK OCTANT-12567
+        0x1cd64 => try self.draw_block_octant(canvas, "12567"),
+        // '𜵥' - BLOCK OCTANT-3567
+        0x1cd65 => try self.draw_block_octant(canvas, "3567"),
+        // '𜵦' - BLOCK OCTANT-13567
+        0x1cd66 => try self.draw_block_octant(canvas, "13567"),
+        // '𜵧' - BLOCK OCTANT-23567
+        0x1cd67 => try self.draw_block_octant(canvas, "23567"),
+        // '𜵨' - BLOCK OCTANT-123567
+        0x1cd68 => try self.draw_block_octant(canvas, "123567"),
+        // '𜵩' - BLOCK OCTANT-4567
+        0x1cd69 => try self.draw_block_octant(canvas, "4567"),
+        // '𜵪' - BLOCK OCTANT-14567
+        0x1cd6a => try self.draw_block_octant(canvas, "14567"),
+        // '𜵫' - BLOCK OCTANT-24567
+        0x1cd6b => try self.draw_block_octant(canvas, "24567"),
+        // '𜵬' - BLOCK OCTANT-124567
+        0x1cd6c => try self.draw_block_octant(canvas, "124567"),
+        // '𜵭' - BLOCK OCTANT-34567
+        0x1cd6d => try self.draw_block_octant(canvas, "34567"),
+        // '𜵮' - BLOCK OCTANT-134567
+        0x1cd6e => try self.draw_block_octant(canvas, "134567"),
+        // '𜵯' - BLOCK OCTANT-234567
+        0x1cd6f => try self.draw_block_octant(canvas, "234567"),
+        // '𜵰' - BLOCK OCTANT-1234567
+        0x1cd70 => try self.draw_block_octant(canvas, "1234567"),
+        // '𜵱' - BLOCK OCTANT-18
+        0x1cd71 => try self.draw_block_octant(canvas, "18"),
+        // '𜵲' - BLOCK OCTANT-28
+        0x1cd72 => try self.draw_block_octant(canvas, "28"),
+        // '𜵳' - BLOCK OCTANT-128
+        0x1cd73 => try self.draw_block_octant(canvas, "128"),
+        // '𜵴' - BLOCK OCTANT-38
+        0x1cd74 => try self.draw_block_octant(canvas, "38"),
+        // '𜵵' - BLOCK OCTANT-138
+        0x1cd75 => try self.draw_block_octant(canvas, "138"),
+        // '𜵶' - BLOCK OCTANT-238
+        0x1cd76 => try self.draw_block_octant(canvas, "238"),
+        // '𜵷' - BLOCK OCTANT-1238
+        0x1cd77 => try self.draw_block_octant(canvas, "1238"),
+        // '𜵸' - BLOCK OCTANT-48
+        0x1cd78 => try self.draw_block_octant(canvas, "48"),
+        // '𜵹' - BLOCK OCTANT-148
+        0x1cd79 => try self.draw_block_octant(canvas, "148"),
+        // '𜵺' - BLOCK OCTANT-248
+        0x1cd7a => try self.draw_block_octant(canvas, "248"),
+        // '𜵻' - BLOCK OCTANT-1248
+        0x1cd7b => try self.draw_block_octant(canvas, "1248"),
+        // '𜵼' - BLOCK OCTANT-348
+        0x1cd7c => try self.draw_block_octant(canvas, "348"),
+        // '𜵽' - BLOCK OCTANT-1348
+        0x1cd7d => try self.draw_block_octant(canvas, "1348"),
+        // '𜵾' - BLOCK OCTANT-2348
+        0x1cd7e => try self.draw_block_octant(canvas, "2348"),
+        // '𜵿' - BLOCK OCTANT-12348
+        0x1cd7f => try self.draw_block_octant(canvas, "12348"),
+        // '𜶀' - BLOCK OCTANT-58
+        0x1cd80 => try self.draw_block_octant(canvas, "58"),
+        // '𜶁' - BLOCK OCTANT-158
+        0x1cd81 => try self.draw_block_octant(canvas, "158"),
+        // '𜶂' - BLOCK OCTANT-258
+        0x1cd82 => try self.draw_block_octant(canvas, "258"),
+        // '𜶃' - BLOCK OCTANT-1258
+        0x1cd83 => try self.draw_block_octant(canvas, "1258"),
+        // '𜶄' - BLOCK OCTANT-358
+        0x1cd84 => try self.draw_block_octant(canvas, "358"),
+        // '𜶅' - BLOCK OCTANT-1358
+        0x1cd85 => try self.draw_block_octant(canvas, "1358"),
+        // '𜶆' - BLOCK OCTANT-2358
+        0x1cd86 => try self.draw_block_octant(canvas, "2358"),
+        // '𜶇' - BLOCK OCTANT-12358
+        0x1cd87 => try self.draw_block_octant(canvas, "12358"),
+        // '𜶈' - BLOCK OCTANT-458
+        0x1cd88 => try self.draw_block_octant(canvas, "458"),
+        // '𜶉' - BLOCK OCTANT-1458
+        0x1cd89 => try self.draw_block_octant(canvas, "1458"),
+        // '𜶊' - BLOCK OCTANT-2458
+        0x1cd8a => try self.draw_block_octant(canvas, "2458"),
+        // '𜶋' - BLOCK OCTANT-12458
+        0x1cd8b => try self.draw_block_octant(canvas, "12458"),
+        // '𜶌' - BLOCK OCTANT-3458
+        0x1cd8c => try self.draw_block_octant(canvas, "3458"),
+        // '𜶍' - BLOCK OCTANT-13458
+        0x1cd8d => try self.draw_block_octant(canvas, "13458"),
+        // '𜶎' - BLOCK OCTANT-23458
+        0x1cd8e => try self.draw_block_octant(canvas, "23458"),
+        // '𜶏' - BLOCK OCTANT-123458
+        0x1cd8f => try self.draw_block_octant(canvas, "123458"),
+        // '𜶐' - BLOCK OCTANT-168
+        0x1cd90 => try self.draw_block_octant(canvas, "168"),
+        // '𜶑' - BLOCK OCTANT-268
+        0x1cd91 => try self.draw_block_octant(canvas, "268"),
+        // '𜶒' - BLOCK OCTANT-1268
+        0x1cd92 => try self.draw_block_octant(canvas, "1268"),
+        // '𜶓' - BLOCK OCTANT-368
+        0x1cd93 => try self.draw_block_octant(canvas, "368"),
+        // '𜶔' - BLOCK OCTANT-2368
+        0x1cd94 => try self.draw_block_octant(canvas, "2368"),
+        // '𜶕' - BLOCK OCTANT-12368
+        0x1cd95 => try self.draw_block_octant(canvas, "12368"),
+        // '𜶖' - BLOCK OCTANT-468
+        0x1cd96 => try self.draw_block_octant(canvas, "468"),
+        // '𜶗' - BLOCK OCTANT-1468
+        0x1cd97 => try self.draw_block_octant(canvas, "1468"),
+        // '𜶘' - BLOCK OCTANT-12468
+        0x1cd98 => try self.draw_block_octant(canvas, "12468"),
+        // '𜶙' - BLOCK OCTANT-3468
+        0x1cd99 => try self.draw_block_octant(canvas, "3468"),
+        // '𜶚' - BLOCK OCTANT-13468
+        0x1cd9a => try self.draw_block_octant(canvas, "13468"),
+        // '𜶛' - BLOCK OCTANT-23468
+        0x1cd9b => try self.draw_block_octant(canvas, "23468"),
+        // '𜶜' - BLOCK OCTANT-568
+        0x1cd9c => try self.draw_block_octant(canvas, "568"),
+        // '𜶝' - BLOCK OCTANT-1568
+        0x1cd9d => try self.draw_block_octant(canvas, "1568"),
+        // '𜶞' - BLOCK OCTANT-2568
+        0x1cd9e => try self.draw_block_octant(canvas, "2568"),
+        // '𜶟' - BLOCK OCTANT-12568
+        0x1cd9f => try self.draw_block_octant(canvas, "12568"),
+        // '𜶠' - BLOCK OCTANT-3568
+        0x1cda0 => try self.draw_block_octant(canvas, "3568"),
+        // '𜶡' - BLOCK OCTANT-13568
+        0x1cda1 => try self.draw_block_octant(canvas, "13568"),
+        // '𜶢' - BLOCK OCTANT-23568
+        0x1cda2 => try self.draw_block_octant(canvas, "23568"),
+        // '𜶣' - BLOCK OCTANT-123568
+        0x1cda3 => try self.draw_block_octant(canvas, "123568"),
+        // '𜶤' - BLOCK OCTANT-4568
+        0x1cda4 => try self.draw_block_octant(canvas, "4568"),
+        // '𜶥' - BLOCK OCTANT-14568
+        0x1cda5 => try self.draw_block_octant(canvas, "14568"),
+        // '𜶦' - BLOCK OCTANT-24568
+        0x1cda6 => try self.draw_block_octant(canvas, "24568"),
+        // '𜶧' - BLOCK OCTANT-124568
+        0x1cda7 => try self.draw_block_octant(canvas, "124568"),
+        // '𜶨' - BLOCK OCTANT-34568
+        0x1cda8 => try self.draw_block_octant(canvas, "34568"),
+        // '𜶩' - BLOCK OCTANT-134568
+        0x1cda9 => try self.draw_block_octant(canvas, "134568"),
+        // '𜶪' - BLOCK OCTANT-234568
+        0x1cdaa => try self.draw_block_octant(canvas, "234568"),
+        // '𜶫' - BLOCK OCTANT-1234568
+        0x1cdab => try self.draw_block_octant(canvas, "1234568"),
+        // '𜶬' - BLOCK OCTANT-178
+        0x1cdac => try self.draw_block_octant(canvas, "178"),
+        // '𜶭' - BLOCK OCTANT-278
+        0x1cdad => try self.draw_block_octant(canvas, "278"),
+        // '𜶮' - BLOCK OCTANT-1278
+        0x1cdae => try self.draw_block_octant(canvas, "1278"),
+        // '𜶯' - BLOCK OCTANT-378
+        0x1cdaf => try self.draw_block_octant(canvas, "378"),
+        // '𜶰' - BLOCK OCTANT-1378
+        0x1cdb0 => try self.draw_block_octant(canvas, "1378"),
+        // '𜶱' - BLOCK OCTANT-2378
+        0x1cdb1 => try self.draw_block_octant(canvas, "2378"),
+        // '𜶲' - BLOCK OCTANT-12378
+        0x1cdb2 => try self.draw_block_octant(canvas, "12378"),
+        // '𜶳' - BLOCK OCTANT-478
+        0x1cdb3 => try self.draw_block_octant(canvas, "478"),
+        // '𜶴' - BLOCK OCTANT-1478
+        0x1cdb4 => try self.draw_block_octant(canvas, "1478"),
+        // '𜶵' - BLOCK OCTANT-2478
+        0x1cdb5 => try self.draw_block_octant(canvas, "2478"),
+        // '𜶶' - BLOCK OCTANT-12478
+        0x1cdb6 => try self.draw_block_octant(canvas, "12478"),
+        // '𜶷' - BLOCK OCTANT-3478
+        0x1cdb7 => try self.draw_block_octant(canvas, "3478"),
+        // '𜶸' - BLOCK OCTANT-13478
+        0x1cdb8 => try self.draw_block_octant(canvas, "13478"),
+        // '𜶹' - BLOCK OCTANT-23478
+        0x1cdb9 => try self.draw_block_octant(canvas, "23478"),
+        // '𜶺' - BLOCK OCTANT-123478
+        0x1cdba => try self.draw_block_octant(canvas, "123478"),
+        // '𜶻' - BLOCK OCTANT-578
+        0x1cdbb => try self.draw_block_octant(canvas, "578"),
+        // '𜶼' - BLOCK OCTANT-1578
+        0x1cdbc => try self.draw_block_octant(canvas, "1578"),
+        // '𜶽' - BLOCK OCTANT-2578
+        0x1cdbd => try self.draw_block_octant(canvas, "2578"),
+        // '𜶾' - BLOCK OCTANT-12578
+        0x1cdbe => try self.draw_block_octant(canvas, "12578"),
+        // '𜶿' - BLOCK OCTANT-3578
+        0x1cdbf => try self.draw_block_octant(canvas, "3578"),
+        // '𜷀' - BLOCK OCTANT-13578
+        0x1cdc0 => try self.draw_block_octant(canvas, "13578"),
+        // '𜷁' - BLOCK OCTANT-23578
+        0x1cdc1 => try self.draw_block_octant(canvas, "23578"),
+        // '𜷂' - BLOCK OCTANT-123578
+        0x1cdc2 => try self.draw_block_octant(canvas, "123578"),
+        // '𜷃' - BLOCK OCTANT-4578
+        0x1cdc3 => try self.draw_block_octant(canvas, "4578"),
+        // '𜷄' - BLOCK OCTANT-14578
+        0x1cdc4 => try self.draw_block_octant(canvas, "14578"),
+        // '𜷅' - BLOCK OCTANT-24578
+        0x1cdc5 => try self.draw_block_octant(canvas, "24578"),
+        // '𜷆' - BLOCK OCTANT-124578
+        0x1cdc6 => try self.draw_block_octant(canvas, "124578"),
+        // '𜷇' - BLOCK OCTANT-34578
+        0x1cdc7 => try self.draw_block_octant(canvas, "34578"),
+        // '𜷈' - BLOCK OCTANT-134578
+        0x1cdc8 => try self.draw_block_octant(canvas, "134578"),
+        // '𜷉' - BLOCK OCTANT-234578
+        0x1cdc9 => try self.draw_block_octant(canvas, "234578"),
+        // '𜷊' - BLOCK OCTANT-1234578
+        0x1cdca => try self.draw_block_octant(canvas, "1234578"),
+        // '𜷋' - BLOCK OCTANT-678
+        0x1cdcb => try self.draw_block_octant(canvas, "678"),
+        // '𜷌' - BLOCK OCTANT-1678
+        0x1cdcc => try self.draw_block_octant(canvas, "1678"),
+        // '𜷍' - BLOCK OCTANT-2678
+        0x1cdcd => try self.draw_block_octant(canvas, "2678"),
+        // '𜷎' - BLOCK OCTANT-12678
+        0x1cdce => try self.draw_block_octant(canvas, "12678"),
+        // '𜷏' - BLOCK OCTANT-3678
+        0x1cdcf => try self.draw_block_octant(canvas, "3678"),
+        // '𜷐' - BLOCK OCTANT-13678
+        0x1cdd0 => try self.draw_block_octant(canvas, "13678"),
+        // '𜷑' - BLOCK OCTANT-23678
+        0x1cdd1 => try self.draw_block_octant(canvas, "23678"),
+        // '𜷒' - BLOCK OCTANT-123678
+        0x1cdd2 => try self.draw_block_octant(canvas, "123678"),
+        // '𜷓' - BLOCK OCTANT-4678
+        0x1cdd3 => try self.draw_block_octant(canvas, "4678"),
+        // '𜷔' - BLOCK OCTANT-14678
+        0x1cdd4 => try self.draw_block_octant(canvas, "14678"),
+        // '𜷕' - BLOCK OCTANT-24678
+        0x1cdd5 => try self.draw_block_octant(canvas, "24678"),
+        // '𜷖' - BLOCK OCTANT-124678
+        0x1cdd6 => try self.draw_block_octant(canvas, "124678"),
+        // '𜷗' - BLOCK OCTANT-34678
+        0x1cdd7 => try self.draw_block_octant(canvas, "34678"),
+        // '𜷘' - BLOCK OCTANT-134678
+        0x1cdd8 => try self.draw_block_octant(canvas, "134678"),
+        // '𜷙' - BLOCK OCTANT-234678
+        0x1cdd9 => try self.draw_block_octant(canvas, "234678"),
+        // '𜷚' - BLOCK OCTANT-1234678
+        0x1cdda => try self.draw_block_octant(canvas, "1234678"),
+        // '𜷛' - BLOCK OCTANT-15678
+        0x1cddb => try self.draw_block_octant(canvas, "15678"),
+        // '𜷜' - BLOCK OCTANT-25678
+        0x1cddc => try self.draw_block_octant(canvas, "25678"),
+        // '𜷝' - BLOCK OCTANT-125678
+        0x1cddd => try self.draw_block_octant(canvas, "125678"),
+        // '𜷞' - BLOCK OCTANT-35678
+        0x1cdde => try self.draw_block_octant(canvas, "35678"),
+        // '𜷟' - BLOCK OCTANT-235678
+        0x1cddf => try self.draw_block_octant(canvas, "235678"),
+        // '𜷠' - BLOCK OCTANT-1235678
+        0x1cde0 => try self.draw_block_octant(canvas, "1235678"),
+        // '𜷡' - BLOCK OCTANT-45678
+        0x1cde1 => try self.draw_block_octant(canvas, "45678"),
+        // '𜷢' - BLOCK OCTANT-145678
+        0x1cde2 => try self.draw_block_octant(canvas, "145678"),
+        // '𜷣' - BLOCK OCTANT-1245678
+        0x1cde3 => try self.draw_block_octant(canvas, "1245678"),
+        // '𜷤' - BLOCK OCTANT-1345678
+        0x1cde4 => try self.draw_block_octant(canvas, "1345678"),
+        // '𜷥' - BLOCK OCTANT-2345678
+        0x1cde5 => try self.draw_block_octant(canvas, "2345678"),
+
         else => return error.InvalidCodepoint,
     }
 }
@@ -2979,6 +3440,62 @@ fn draw_separated_block_quadrant(self: Box, canvas: *font.sprite.Canvas, comptim
     }
 }
 
+// Block Octants from Symbols for Legacy Computing Supplement
+fn draw_block_octant(self: Box, canvas: *font.sprite.Canvas, comptime fmt: []const u8) !void {
+    comptime {
+        if (fmt.len > 8) @compileError("cannot have more than eight octants");
+        var seen = [_]bool{false} ** (std.math.maxInt(u8) + 1);
+        for (fmt) |c| {
+            if (seen[c]) @compileError("repeated octants not allowed");
+            seen[c] = true;
+            switch (c) {
+                '1'...'8' => {},
+                else => @compileError("invalid octant"),
+            }
+        }
+    }
+
+    var ctx: z2d.Context = .{
+        .surface = canvas.sfc,
+        .pattern = .{
+            .opaque_pattern = .{
+                .pixel = .{ .alpha8 = .{ .a = @intFromEnum(Shade.on) } },
+            },
+        },
+    };
+
+    const delta_x: f64 = if (self.metrics.cell_width % 2 == 0) 0.0 else 0.5;
+    const delta_y: f64 = if (self.metrics.cell_width % 2 == 0) 0.0 else 0.5;
+    const left: f64 = 0.0;
+    const right = @as(f64, @floatFromInt(self.metrics.cell_width));
+    const top: f64 = 0.0;
+    const bottom = @as(f64, @floatFromInt(self.metrics.cell_height));
+    const center = @as(f64, @floatFromInt(self.metrics.cell_width)) / 2.0;
+    const quarter = @as(f64, @floatFromInt(self.metrics.cell_height)) / 4.0;
+
+    inline for (fmt) |c| {
+        const l, const t, const r, const b = switch (c) {
+            '1' => .{ left, top, center + delta_x, quarter * 1.0 + delta_y },
+            '2' => .{ center - delta_x, top, right, quarter * 1.0 + delta_y },
+            '3' => .{ left, quarter * 1.0 - delta_y, center + delta_x, quarter * 2.0 + delta_y },
+            '4' => .{ center - delta_x, quarter * 1.0 - delta_y, right, quarter * 2.0 + delta_y },
+            '5' => .{ left, quarter * 2.0 - delta_y, center + delta_x, quarter * 3.0 + delta_y },
+            '6' => .{ center - delta_x, quarter * 2.0 - delta_y, right, quarter * 3.0 + delta_y },
+            '7' => .{ left, quarter * 3.0 - delta_y, center + delta_x, bottom },
+            '8' => .{ center - delta_x, quarter * 3.0 - delta_y, right, bottom },
+            else => unreachable,
+        };
+        var path = z2d.Path.init(canvas.alloc);
+        defer path.deinit();
+        try path.moveTo(l, t);
+        try path.lineTo(r, t);
+        try path.lineTo(r, b);
+        try path.lineTo(l, b);
+        try path.close();
+        try ctx.fill(canvas.alloc, path);
+    }
+}
+
 test "all" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -3110,11 +3627,18 @@ fn testRenderAll(self: Box, alloc: Allocator, atlas: *font.Atlas) !void {
     }
 
     // Symbols for Legacy Computing Supplement.
-    // 𜰡 𜰢 𜰣 𜰤 𜰥 𜰦 𜰧 𜰨 𜰩 𜰪 𜰫 𜰬 𜰭 𜰮 𜰯
-    cp = 0x1cc21;
-    while (cp <= 0x1cc2f) : (cp += 1) {
+    cp = 0x1cc00;
+    while (cp <= 0x1cebf) : (cp += 1) {
         switch (cp) {
+            // Separated Block Quadrants
+            // 𜰡 𜰢 𜰣 𜰤 𜰥 𜰦 𜰧 𜰨 𜰩 𜰪 𜰫 𜰬 𜰭 𜰮 𜰯
             0x1cc21...0x1cc2f => _ = try self.renderGlyph(
+                alloc,
+                atlas,
+                cp,
+            ),
+            // Block Octants
+            0x1cd00...0x1cde5 => _ = try self.renderGlyph(
                 alloc,
                 atlas,
                 cp,
