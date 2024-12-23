@@ -1429,7 +1429,7 @@ fn addDeps(
             "--output=/dev/stdout",
         });
 
-        var src = try std.fs.cwd().openDir("src", .{ .iterate = true });
+        var src = try b.build_root.handle.openDir("src", .{ .iterate = true });
         defer src.close();
 
         var it = try src.walk(b.allocator);
@@ -1452,7 +1452,12 @@ fn addDeps(
 
         const output_file = xgettext.captureStdOut();
 
-        const output_path = try std.fs.path.join(b.allocator, &.{ "share", "ghostty", "gettext", "messages.pot" });
+        const output_path = try std.fs.path.join(b.allocator, &.{
+            "share",
+            "ghostty",
+            "gettext",
+            "messages.pot",
+        });
         defer b.allocator.free(output_path);
 
         const install = b.addInstallFile(output_file, output_path);
@@ -1460,7 +1465,7 @@ fn addDeps(
     }
 
     {
-        var po = try std.fs.cwd().openDir("po", .{ .iterate = true });
+        var po = try b.build_root.handle.openDir("po", .{ .iterate = true });
         defer po.close();
 
         var it = po.iterate();
@@ -1484,7 +1489,14 @@ fn addDeps(
 
                 const output_file = msgfmt.captureStdOut();
 
-                const output_path = try std.fs.path.join(b.allocator, &.{ "share", "ghostty", "gettext", language, "LC_MESSAGES", "message.mo" });
+                const output_path = try std.fs.path.join(b.allocator, &.{
+                    "share",
+                    "ghostty",
+                    "gettext",
+                    language,
+                    "LC_MESSAGES",
+                    "message.mo",
+                });
                 defer b.allocator.free(output_path);
 
                 const install = b.addInstallFile(output_file, output_path);
