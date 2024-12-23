@@ -1,0 +1,63 @@
+# Chinese translations for PACKAGE package.
+# Copyright (C) 2024 THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Leah <hi@pluie.me>, 2024.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-12-24 00:58+0800\n"
+"PO-Revision-Date: 2024-12-24 00:59+0800\n"
+"Last-Translator: Leah <hi@pluie.me>\n"
+"Language-Team: Chinese (simplified) <i18n-zh@googlegroups.com>\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# Leave it as is.
+#: src/apprt/gtk/Window.zig:101 src/apprt/gtk/Window.zig:737
+msgid "Ghostty"
+msgstr ""
+
+#: src/apprt/gtk/Window.zig:162
+msgid "Main Menu"
+msgstr "主菜单"
+
+#: src/apprt/gtk/Window.zig:175
+msgid "View Open Tabs"
+msgstr "查看标签页"
+
+#: src/apprt/gtk/Window.zig:202
+msgid "New Tab"
+msgstr "新标签页"
+
+#: src/apprt/gtk/Window.zig:219
+msgid ""
+"⚠️ You're running a debug build of Ghostty! Performance will be degraded."
+msgstr "⚠️ Ghostty正在以调试模式运行！性能将可能大打折扣。"
+
+#: src/apprt/gtk/Window.zig:535
+msgid "Reloaded the configuration"
+msgstr "已重新加载配置"
+
+#: src/apprt/gtk/Window.zig:647
+msgid "Close this window?"
+msgstr "要关闭此窗口吗？"
+
+#: src/apprt/gtk/Window.zig:651
+msgid "All terminal sessions in this window will be terminated."
+msgstr ""
+
+#: src/apprt/gtk/Window.zig:750
+msgid "Ghostty Developers"
+msgstr ""
+
+#: src/apprt/gtk/Window.zig:769
+msgid "About Ghostty"
+msgstr "关于Ghostty"
+
+#: src/apprt/gtk/Window.zig:891
+msgid "Copied to clipboard"
+msgstr ""

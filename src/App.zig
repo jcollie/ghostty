@@ -20,6 +20,7 @@ const font = @import("font/main.zig");
 const internal_os = @import("os/main.zig");
 const macos = @import("macos");
 const objc = @import("objc");
+const i18n = @import("i18n.zig");
 
 const log = std.log.scoped(.app);
 
@@ -93,6 +94,8 @@ pub fn create(
 
     var font_grid_set = try font.SharedGridSet.init(alloc);
     errdefer font_grid_set.deinit();
+
+    try i18n.init();
 
     app.* = .{
         .alloc = alloc,

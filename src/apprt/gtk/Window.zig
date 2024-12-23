@@ -14,6 +14,7 @@ const configpkg = @import("../../config.zig");
 const font = @import("../../font/main.zig");
 const input = @import("../../input.zig");
 const CoreSurface = @import("../../Surface.zig");
+const i18n = @import("../../i18n.zig");
 
 const App = @import("App.zig");
 const Color = configpkg.Config.Color;
@@ -97,7 +98,7 @@ pub fn init(self: *Window, app: *App) !void {
 
     const gtk_window: *c.GtkWindow = @ptrCast(window);
     self.window = gtk_window;
-    c.gtk_window_set_title(gtk_window, "Ghostty");
+    c.gtk_window_set_title(gtk_window, i18n._("Ghostty"));
     c.gtk_window_set_default_size(gtk_window, 1000, 600);
 
     // GTK4 grabs F10 input by default to focus the menubar icon. We want
@@ -158,7 +159,7 @@ pub fn init(self: *Window, app: *App) !void {
 
         {
             const btn = c.gtk_menu_button_new();
-            c.gtk_widget_set_tooltip_text(btn, "Main Menu");
+            c.gtk_widget_set_tooltip_text(btn, i18n._("Main Menu"));
             c.gtk_menu_button_set_icon_name(@ptrCast(btn), "open-menu-symbolic");
             c.gtk_menu_button_set_menu_model(@ptrCast(btn), @ptrCast(@alignCast(app.menu)));
             header.packEnd(btn);
@@ -171,7 +172,7 @@ pub fn init(self: *Window, app: *App) !void {
             const btn = switch (app.config.@"gtk-tabs-location") {
                 .top, .bottom, .left, .right => btn: {
                     const btn = c.gtk_toggle_button_new();
-                    c.gtk_widget_set_tooltip_text(btn, "View Open Tabs");
+                    c.gtk_widget_set_tooltip_text(btn, i18n._("View Open Tabs"));
                     c.gtk_button_set_icon_name(@ptrCast(btn), "view-grid-symbolic");
                     _ = c.g_object_bind_property(
                         btn,
@@ -198,7 +199,7 @@ pub fn init(self: *Window, app: *App) !void {
 
         {
             const btn = c.gtk_button_new_from_icon_name("tab-new-symbolic");
-            c.gtk_widget_set_tooltip_text(btn, "New Tab");
+            c.gtk_widget_set_tooltip_text(btn, i18n._("New Tab"));
             _ = c.g_signal_connect_data(btn, "clicked", c.G_CALLBACK(&gtkTabNewClick), self, null, c.G_CONNECT_DEFAULT);
             header.packEnd(btn);
         }
@@ -215,7 +216,7 @@ pub fn init(self: *Window, app: *App) !void {
     // This is a really common issue where people build from source in debug and performance is really bad.
     if (comptime std.debug.runtime_safety) {
         const warning_box = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
-        const warning_text = "⚠️ You're running a debug build of Ghostty! Performance will be degraded.";
+        const warning_text = i18n._("⚠️ You're running a debug build of Ghostty! Performance will be degraded.");
         if ((comptime adwaita.versionAtLeast(1, 3, 0)) and
             adwaita.enabled(&app.config) and
             adwaita.versionAtLeast(1, 3, 0))
@@ -531,7 +532,7 @@ pub fn focusCurrentTab(self: *Window) void {
 }
 
 pub fn onConfigReloaded(self: *Window) void {
-    self.sendToast("Reloaded the configuration");
+    self.sendToast(i18n._("Reloaded the configuration"));
 }
 
 fn sendToast(self: *Window, title: [:0]const u8) void {
@@ -643,11 +644,11 @@ fn gtkCloseRequest(v: *c.GtkWindow, ud: ?*anyopaque) callconv(.C) bool {
         c.GTK_DIALOG_MODAL,
         c.GTK_MESSAGE_QUESTION,
         c.GTK_BUTTONS_YES_NO,
-        "Close this window?",
+        i18n._("Close this window?"),
     );
     c.gtk_message_dialog_format_secondary_text(
         @ptrCast(alert),
-        "All terminal sessions in this window will be terminated.",
+        i18n._("All terminal sessions in this window will be terminated."),
     );
 
     // We want the "yes" to appear destructive.
@@ -733,7 +734,7 @@ fn gtkActionAbout(
 ) callconv(.C) void {
     const self: *Window = @ptrCast(@alignCast(ud orelse return));
 
-    const name = "Ghostty";
+    const name = &i18n._("Ghostty");
     const icon = "com.mitchellh.ghostty";
     const website = "https://github.com/ghostty-org/ghostty";
 
@@ -746,7 +747,7 @@ fn gtkActionAbout(
             "application-name",
             name,
             "developer-name",
-            "Ghostty Developers",
+            &i18n._("Ghostty Developers"),
             "application-icon",
             icon,
             "version",
@@ -765,7 +766,7 @@ fn gtkActionAbout(
             "logo-icon-name",
             icon,
             "title",
-            "About Ghostty",
+            &i18n._("About Ghostty"),
             "version",
             build_config.version_string.ptr,
             "website",
@@ -887,7 +888,7 @@ fn gtkActionCopy(
         return;
     };
 
-    self.sendToast("Copied to clipboard");
+    self.sendToast(i18n._("Copied to clipboard"));
 }
 
 fn gtkActionPaste(

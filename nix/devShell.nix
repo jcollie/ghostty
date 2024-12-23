@@ -51,6 +51,7 @@
   pandoc,
   hyperfine,
   typos,
+  gettext,
 }: let
   # See package.nix. Keep in sync.
   rpathLibs =
@@ -138,6 +139,7 @@ in
         oniguruma
         simdutf
         zlib
+        gettext
 
         glslang
         spirv-cross
