@@ -78,7 +78,7 @@ config_conditional_state: configpkg.ConditionalState,
 /// if they are the first surface.
 first: bool = true,
 
-pub const CreateError = Allocator.Error || font.SharedGridSet.InitError;
+pub const CreateError = Allocator.Error || font.SharedGridSet.InitError || i18n.Error;
 
 /// Initialize the main app instance. This creates the main window, sets
 /// up the renderer state, compiles the shaders, etc. This is the primary
@@ -95,7 +95,7 @@ pub fn create(
     var font_grid_set = try font.SharedGridSet.init(alloc);
     errdefer font_grid_set.deinit();
 
-    try i18n.init();
+    try i18n.init(alloc);
 
     app.* = .{
         .alloc = alloc,

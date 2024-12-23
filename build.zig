@@ -1413,6 +1413,85 @@ fn addDeps(
         }
     }
 
+    {
+        const version = try std.fmt.allocPrint(b.allocator, "--package-version={}", .{app_version});
+        defer b.allocator.free(version);
+
+        const xgettext = b.addSystemCommand(&.{
+            "xgettext",
+            "--language=C",
+            "--from-code=utf-8",
+            "--keyword=_",
+            "--copyright-holder=Mitchell Hashimoto <m@mitchellh.com>",
+            "--msgid-bugs-address=m@mitchellh.com",
+            "--package-name=ghostty",
+            version,
+            "--output=/dev/stdout",
+        });
+
+        var src = try std.fs.cwd().openDir("src", .{ .iterate = true });
+        defer src.close();
+
+        var it = try src.walk(b.allocator);
+        defer it.deinit();
+
+        while (try it.next()) |entry| {
+            switch (entry.kind) {
+                .file => if (!std.mem.eql(u8, std.fs.path.extension(entry.path), ".zig")) continue,
+                else => continue,
+            }
+            {
+                const source_file = try std.fs.path.join(
+                    b.allocator,
+                    &.{ "src", entry.path },
+                );
+                defer b.allocator.free(source_file);
+                xgettext.addFileArg(b.path(source_file));
+            }
+        }
+
+        const output_file = xgettext.captureStdOut();
+
+        const output_path = try std.fs.path.join(b.allocator, &.{ "share", "ghostty", "gettext", "messages.pot" });
+        defer b.allocator.free(output_path);
+
+        const install = b.addInstallFile(output_file, output_path);
+        b.getInstallStep().dependOn(&install.step);
+    }
+
+    {
+        var po = try std.fs.cwd().openDir("po", .{ .iterate = true });
+        defer po.close();
+
+        var it = po.iterate();
+        while (try it.next()) |entry| {
+            switch (entry.kind) {
+                .file => if (!std.mem.eql(u8, std.fs.path.extension(entry.name), ".po")) continue,
+                else => continue,
+            }
+            {
+                const language = std.fs.path.stem(entry.name);
+                defer b.allocator.free(language);
+
+                const msgfmt = b.addSystemCommand(&.{
+                    "msgfmt",
+                    "--output=/dev/stdout",
+                });
+
+                const input_path = try std.fs.path.join(b.allocator, &.{ "po", entry.name });
+                defer b.allocator.free(input_path);
+                msgfmt.addFileArg(b.path(input_path));
+
+                const output_file = msgfmt.captureStdOut();
+
+                const output_path = try std.fs.path.join(b.allocator, &.{ "share", "ghostty", "gettext", language, "LC_MESSAGES", "message.mo" });
+                defer b.allocator.free(output_path);
+
+                const install = b.addInstallFile(output_file, output_path);
+                b.getInstallStep().dependOn(&install.step);
+            }
+        }
+    }
     try addHelp(b, step, config);
     try addUnicodeTables(b, step);
 
