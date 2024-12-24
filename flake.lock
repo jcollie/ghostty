@@ -37,11 +37,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1705309234,
-        "narHash": "sha256-uNRRNRKmJyCRC/8y1RqBkqWBLM034y4qN7EprSdmgyA=",
+        "lastModified": 1731533236,
+        "narHash": "sha256-l0KFg5HjrsfsO/JpG+r7fRrqm12kzFHyUHqHCVpMMbI=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "1ef2e671c3b0c19053962c07dbda38332dcebf26",
+        "rev": "11707dc2f618dd54ca8739b309ec4fc024de578b",
         "type": "github"
       },
       "original": {
@@ -85,9 +85,11 @@
     "root": {
       "inputs": {
         "flake-compat": "flake-compat",
+        "flake-utils": "flake-utils",
         "nixpkgs-stable": "nixpkgs-stable",
         "nixpkgs-unstable": "nixpkgs-unstable",
-        "zig": "zig"
+        "zig": "zig",
+        "zig2nix": "zig2nix"
       }
     },
     "systems": {
@@ -108,7 +110,9 @@
     "zig": {
       "inputs": {
         "flake-compat": "flake-compat_2",
-        "flake-utils": "flake-utils",
+        "flake-utils": [
+          "flake-utils"
+        ],
         "nixpkgs": [
           "nixpkgs-stable"
         ]
@@ -124,6 +128,30 @@
       "original": {
         "owner": "mitchellh",
         "repo": "zig-overlay",
+        "type": "github"
+      }
+    },
+    "zig2nix": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs-stable"
+        ]
+      },
+      "locked": {
+        "lastModified": 1735003571,
+        "narHash": "sha256-cBRMQbncZKcTs6b8sVQ7K3TMfSCuTMWZMCwKFOgsdJA=",
+        "owner": "Cloudef",
+        "repo": "zig2nix",
+        "rev": "4e829ebe775fd0fa49585c375aeb568657ed2ad4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Cloudef",
+        "ref": "4e829ebe775fd0fa49585c375aeb568657ed2ad4",
+        "repo": "zig2nix",
         "type": "github"
       }
     }

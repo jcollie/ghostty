@@ -54,6 +54,8 @@
   wayland,
   wayland-scanner,
   wayland-protocols,
+  zig2nix,
+  system,
 }: let
   # See package.nix. Keep in sync.
   rpathLibs =
@@ -100,6 +102,7 @@ in
         scdoc
         zig_0_13
         zip
+        zig2nix.packages.${system}.zon2nix
 
         # For web and wasm stuff
         nodejs
