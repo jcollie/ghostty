@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs-stable.url = "github:nixos/nixpkgs/nixos-24.11";
     nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
 
     # Used for shell.nix
     flake-compat = {
@@ -15,6 +16,15 @@
       url = "github:mitchellh/zig-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs-stable";
+        flake-utils.follows = "flake-utils";
+      };
+    };
+
+    zig2nix = {
+      url = "github:Cloudef/zig2nix?ref=4e829ebe775fd0fa49585c375aeb568657ed2ad4";
+      inputs = {
+        nixpkgs.follows = "nixpkgs-stable";
+        flake-utils.follows = "flake-utils";
       };
     };
   };
@@ -24,6 +34,7 @@
     nixpkgs-stable,
     nixpkgs-unstable,
     zig,
+    zig2nix,
     ...
   }:
     builtins.foldl' nixpkgs-stable.lib.attrsets.recursiveUpdate {} (
@@ -41,10 +52,12 @@
             default = self.devShells.${system}.stable;
             stable = pkgs-stable.callPackage ./nix/devShell.nix {
               # zig_0_13 = zig.packages.${system}."0.13.0";
+              zig2nix = zig2nix;
               wraptest = pkgs-unstable.callPackage ./nix/wraptest.nix {};
             };
             unstable = pkgs-unstable.callPackage ./nix/devShell.nix {
               # zig_0_13 = zig.packages.${system}."0.13.0";
+              zig2nix = zig2nix;
               wraptest = pkgs-unstable.callPackage ./nix/wraptest.nix {};
             };
           };

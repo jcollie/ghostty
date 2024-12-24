@@ -2,6 +2,7 @@
   lib,
   stdenv,
   bzip2,
+  callPackage,
   expat,
   fontconfig,
   freetype,
@@ -29,6 +30,7 @@
   optimize ? "Debug",
   x11 ? true,
 }: let
+  version = "1.0.2";
   # The Zig hook has no way to select the release type without actual
   # overriding of the default flags.
   #
@@ -37,8 +39,10 @@
   # ultimately acted on and has made its way to a nixpkgs implementation, this
   # can probably be removed in favor of that.
   zig_hook = zig_0_13.hook.overrideAttrs {
-    zig_default_flags = "-Dcpu=baseline -Doptimize=${optimize}";
+    zig_default_flags = "-Dcpu=baseline -Doptimize=${optimize} --color off";
   };
+
+  deps = callPackage ../build.zig.zon.nix {name = "ghostty-cache-${version}";};
 
   # We limit source like this to try and reduce the amount of rebuilds as possible
   # thus we only provide the source that is needed for the build
@@ -59,62 +63,14 @@
         ../vendor
         ../build.zig
         ../build.zig.zon
-        ./build-support/fetch-zig-cache.sh
+        ../build.zig.zon.nix
       ]
     );
-  };
-
-  # This hash is the computation of the zigCache fixed-output derivation. This
-  # allows us to use remote package dependencies without breaking the sandbox.
-  #
-  # This will need updating whenever dependencies get updated (e.g. changes are
-  # made to zig.build.zon). If you see that the main build is trying to reach
-  # out to the internet and failing, this is likely the cause. Change this
-  # value back to lib.fakeHash, and re-run. The build failure should emit the
-  # updated hash, which of course, should be validated before updating here.
-  #
-  # (It's also possible that you might see a hash mismatch - without the
-  # network errors - if you don't have a previous instance of the cache
-  # derivation in your store already. If so, just update the value as above.)
-  zigCacheHash = import ./zigCacheHash.nix;
-
-  zigCache = stdenv.mkDerivation {
-    inherit src;
-    name = "ghostty-cache";
-    nativeBuildInputs = [
-      git
-      zig_hook
-    ];
-
-    dontConfigure = true;
-    dontUseZigBuild = true;
-    dontUseZigInstall = true;
-    dontFixup = true;
-
-    buildPhase = ''
-      runHook preBuild
-
-      sh ./nix/build-support/fetch-zig-cache.sh
-
-      runHook postBuild
-    '';
-
-    installPhase = ''
-      runHook preInstall
-
-      cp -r --reflink=auto $ZIG_GLOBAL_CACHE_DIR $out
-
-      runHook postInstall
-    '';
-
-    outputHashMode = "recursive";
-    outputHash = zigCacheHash;
   };
 in
   stdenv.mkDerivation (finalAttrs: {
     pname = "ghostty";
-    version = "1.0.2";
-    inherit src;
+    inherit src version;
 
     nativeBuildInputs = [
       git
@@ -155,15 +111,15 @@ in
         libXrandr
       ];
 
+    dontPatch = true;
     dontConfigure = true;
 
-    zigBuildFlags = "-Dversion-string=${finalAttrs.version}-${revision}-nix -Dgtk-x11=${lib.boolToString x11}";
-
-    preBuild = ''
-      rm -rf $ZIG_GLOBAL_CACHE_DIR
-      cp -r --reflink=auto ${zigCache} $ZIG_GLOBAL_CACHE_DIR
-      chmod u+rwX -R $ZIG_GLOBAL_CACHE_DIR
-    '';
+    zigBuildFlags = [
+      "--system"
+      "${deps}"
+      "-Dversion-string=${finalAttrs.version}-${revision}-nix"
+      "-Dgtk-x11=${lib.boolToString x11}"
+    ];
 
     outputs = [
       "out"
@@ -206,7 +162,7 @@ in
     '';
 
     meta = {
-      homepage = "https://github.com/ghostty-org/ghostty";
+      homepage = "https://ghostty.org";
       license = lib.licenses.mit;
       platforms = [
         "x86_64-linux"
