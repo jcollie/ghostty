@@ -22,6 +22,7 @@
   wrapGAppsHook4,
   gsettings-desktop-schemas,
   git,
+  glslang,
   ncurses,
   pkg-config,
   zig_0_13,
@@ -114,12 +115,16 @@ in
     dontPatch = true;
     dontConfigure = true;
 
-    zigBuildFlags = [
-      "--system"
-      "${deps}"
-      "-Dversion-string=${finalAttrs.version}-${revision}-nix"
-      "-Dgtk-x11=${lib.boolToString x11}"
-    ];
+    zigBuildFlags =
+      [
+        "--system"
+        "${deps}"
+        "-Dversion-string=${finalAttrs.version}-${revision}-nix"
+        "-Dgtk-x11=${lib.boolToString x11}"
+      ]
+      ++ lib.mapAttrsToList (name: package: "-fsys=${name} --search-prefix ${lib.getLib package}") {
+        inherit fontconfig glslang;
+      };
 
     outputs = [
       "out"
