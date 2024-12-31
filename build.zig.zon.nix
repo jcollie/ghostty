@@ -14,9 +14,11 @@ with lib; let
     name,
     artifact,
   }:
-    runCommandLocal name {
+    runCommandLocal name
+    {
       nativeBuildInputs = [zig];
-    } ''
+    }
+    ''
       hash="$(zig fetch --global-cache-dir "$TMPDIR" ${artifact})"
       mv "$TMPDIR/p/$hash" "$out"
       chmod 755 "$out"
@@ -75,10 +77,6 @@ with lib; let
       https = fetchZig {
         inherit name hash;
         url = "https://${path}";
-      };
-      file = unpackZigArtifact {
-        inherit name;
-        artifact = /. + path;
       };
     };
   in
@@ -166,11 +164,11 @@ in
       };
     }
     {
-      name = "1220d1090ac2edf1e47059b592403deacd56e7289c7ad8744ed20dd2f297596744b8";
+      name = "1220cc25b537556a42b0948437c791214c229efb78b551c80b1e9b18d70bf0498620";
       path = fetchZigArtifact {
         name = "iterm2_themes";
-        url = "https://github.com/mbadolato/iTerm2-Color-Schemes/archive/08df2e8a72dde535f8d17d8115fe792dbcdc6f35.tar.gz";
-        hash = "sha256-oKzPIQkTwoztavF8Fdz78upi1x5BvkJNd1R9UJc9HJw=";
+        url = "https://github.com/mbadolato/iTerm2-Color-Schemes/archive/e030599a6a6e19fcd1ea047c7714021170129d56.tar.gz";
+        hash = "sha256-hFGjD0rNfZ7Qd7uJZgVn+FmIVXunbjLT+E1BoXhXoJE=";
       };
     }
     {
