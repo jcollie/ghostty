@@ -4244,7 +4244,7 @@ fn writeScreenFile(
     // Open our scrollback file
     var file = try tmp_dir.dir.createFile(
         filename,
-        switch (builtin.os.tag) {
+        switch (comptime builtin.os.tag) {
             .windows => .{},
             else => .{ .mode = 0o600 },
         },
