@@ -17,6 +17,7 @@
   wrapGAppsHook4,
   gsettings-desktop-schemas,
   git,
+  glslang,
   ncurses,
   pkg-config,
   zig_0_13,
@@ -118,13 +119,17 @@ in
 
     dontConfigure = true;
 
-    zigBuildFlags = [
-      "--system"
-      "${deps}"
-      "-Dversion-string=${finalAttrs.version}-${revision}-nix"
-      "-Dgtk-x11=${lib.boolToString enableX11}"
-      "-Dgtk-wayland=${lib.boolToString enableWayland}"
-    ];
+    zigBuildFlags =
+      [
+        "--system"
+        "${deps}"
+        "-Dversion-string=${finalAttrs.version}-${revision}-nix"
+        "-Dgtk-x11=${lib.boolToString enableX11}"
+        "-Dgtk-wayland=${lib.boolToString enableWayland}"
+      ]
+      ++ lib.mapAttrsToList (name: package: "-fsys=${name} --search-prefix ${lib.getLib package}") {
+        inherit glslang;
+      };
 
     outputs = [
       "out"
