@@ -995,6 +995,31 @@ fn loadRuntimeCss(
         unfocused_fill.b,
     });
 
+    if (config.@"window-title-font-family") |font_family| {
+        try writer.print(
+            \\.terminal-window headerbar {{
+            \\  font-family: "{[font_family]s}";
+            \\}}
+            \\
+            \\.inspector-window headerbar {{
+            \\  font-family: "{[font_family]s}";
+            \\}}
+            \\
+            \\.clipboard-confirmation-window headerbar {{
+            \\  font-family: "{[font_family]s}";
+            \\}}
+            \\
+            \\.config-errors-window headerbar {{
+            \\  font-family: "{[font_family]s}";
+            \\}}
+            \\
+        ,
+            .{
+                .font_family = font_family,
+            },
+        );
+    }
+
     if (version.atLeast(4, 16, 0)) {
         switch (window_theme) {
             .ghostty => try writer.print(
