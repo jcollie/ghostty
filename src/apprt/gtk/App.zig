@@ -1100,10 +1100,8 @@ fn loadCustomCss(self: *App) !void {
         defer file.close();
 
         log.info("loading gtk-custom-css path={s}", .{path});
-        const contents = try file.reader().readAllAlloc(
-            self.core_app.alloc,
-            5 * 1024 * 1024 // 5MB
-        );
+        const max_size = 5 * 1024 * 1024; // 5MiB
+        const contents = try file.reader().readAllAlloc(self.core_app.alloc, max_size);
         defer self.core_app.alloc.free(contents);
 
         const provider = c.gtk_css_provider_new();
