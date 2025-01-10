@@ -689,6 +689,7 @@ pub const Config = struct {
     resources_dir: ?[]const u8,
     term: []const u8,
     linux_cgroup: Command.LinuxCgroup = Command.linux_cgroup_default,
+    uuid: ?[]const u8 = null,
 };
 
 const Subprocess = struct {
@@ -725,6 +726,10 @@ const Subprocess = struct {
         // Get our env. If a default env isn't provided by the caller
         // then we get it ourselves.
         var env = cfg.env;
+
+        if (cfg.uuid) |uuid| {
+            try env.put("GHOSTTY_SURFACE", uuid);
+        }
 
         // If we have a resources dir then set our env var
         if (cfg.resources_dir) |dir| {

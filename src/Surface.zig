@@ -44,6 +44,11 @@ const log = std.log.scoped(.surface);
 // The renderer implementation to use.
 const Renderer = renderer.Renderer;
 
+/// hash function used to generate the surface uuid
+const uuid_hash = std.hash.XxHash3.hash;
+/// the string length of the surface uuid
+const uuid_len = @sizeOf(@typeInfo(@TypeOf(uuid_hash)).Fn.return_type.?) * 2;
+
 /// Allocator
 alloc: Allocator,
 
@@ -130,6 +135,10 @@ child_exited: bool = false,
 /// If we're not initially focused then apprts can call focusCallback
 /// to let us know.
 focused: bool = true,
+
+/// uuid used to target surface from external applications
+uuid_buf: [uuid_len]u8 = undefined,
+uuid: []const u8 = undefined,
 
 /// The effect of an input event. This can be used by callers to take
 /// the appropriate action after an input event. For example, key
@@ -503,11 +512,26 @@ pub fn init(
         .io_thr = undefined,
         .size = size,
         .config = derived_config,
+        // uuid_buf and uuid must be initialized in this order, or else the
+        // compiler will overwrite uuid_buf with undefined
+        .uuid_buf = undefined,
+        .uuid = std.fmt.bufPrint(
+            &self.uuid_buf,
+            std.fmt.comptimePrint("{{x:0>{d}}}", .{uuid_len}),
+            .{uuid_hash(0, std.mem.asBytes(self))},
+        ) catch unreachable,
 
         // Our conditional state is initialized to the app state. This
         // lets us get the most likely correct color theme and so on.
         .config_conditional_state = app.config_conditional_state,
     };
+
+    // self.uuid = std.fmt.bufPrint(
+    //     &self.uuid_buf,
+    //     std.fmt.comptimePrint("{{x:0>{d}}}", .{uuid_len}),
+    //     .{std.hash.XxHash3.hash(0, std.mem.asBytes(self))},
+    // ) catch unreachable;
+    // log.warn("UUID: {s}", .{self.uuid});
 
     // The command we're going to execute
     const command: ?[]const u8 = if (app.first)
@@ -536,6 +560,7 @@ pub fn init(
             .working_directory = config.@"working-directory",
             .resources_dir = global_state.resources_dir,
             .term = config.term,
+            .uuid = self.uuid,
 
             // Get the cgroup if we're on linux and have the decl. I'd love
             // to change this from a decl to a surface options struct because
