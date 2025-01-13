@@ -49,3 +49,7 @@ window.ssd.no-border-radius {
   background-color: rgba(250, 250, 250, 1);
   background-clip: content-box;
 }
+
+widget.nsfw {
+  opacity: 1;
+}

@@ -19,12 +19,14 @@ view: PrimaryView,
 data: [:0]u8,
 core_surface: *CoreSurface,
 pending_req: apprt.ClipboardRequest,
+secure_input: bool,
 
 pub fn create(
     app: *App,
     data: []const u8,
     core_surface: *CoreSurface,
     request: apprt.ClipboardRequest,
+    secure_input: bool,
 ) !void {
     if (app.clipboard_confirmation_window != null) return error.WindowAlreadyExists;
 
@@ -37,6 +39,7 @@ pub fn create(
         data,
         core_surface,
         request,
+        secure_input,
     );
 
     app.clipboard_confirmation_window = self;
@@ -56,6 +59,7 @@ fn init(
     data: []const u8,
     core_surface: *CoreSurface,
     request: apprt.ClipboardRequest,
+    secure_input: bool,
 ) !void {
     // Create the window
     const window = c.gtk_window_new();
@@ -83,6 +87,7 @@ fn init(
         .data = try app.core_app.alloc.dupeZ(u8, data),
         .core_surface = core_surface,
         .pending_req = request,
+        .secure_input = secure_input,
     };
 
     // Show the window
@@ -114,16 +119,46 @@ const PrimaryView = struct {
         const buf = unsafeBuffer(data);
         defer c.g_object_unref(buf);
         const buttons = try ButtonsView.init(root);
+
         const text_scroll = c.gtk_scrolled_window_new();
         errdefer c.g_object_unref(text_scroll);
         const text = c.gtk_text_view_new_with_buffer(buf);
         errdefer c.g_object_unref(text);
         c.gtk_scrolled_window_set_child(@ptrCast(text_scroll), text);
 
+        const overlay = c.gtk_overlay_new();
+        c.gtk_overlay_set_child(@ptrCast(overlay), text_scroll);
+        c.gtk_widget_set_focusable(@ptrCast(overlay), 0);
+        c.gtk_widget_set_focus_on_click(@ptrCast(overlay), 0);
+
+        // const nsfw_buf = unsafeBuffer("The clipboard contents may contain sensitive data. Click to reveal.");
+        // defer c.g_object_unref(nsfw_buf);
+        // const nsfw_widget = c.gtk_text_view_new_with_buffer(nsfw_buf);
+        // errdefer c.g_object_unref(nsfw_widget);
+
+        const nsfw_box = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
+        c.gtk_widget_add_css_class(nsfw_box, "nsfw");
+
+        const nsfw_label = c.gtk_label_new("The clipboard contents may contain sensitive data. Click to reveal.");
+        // c.gtk_widget_set_hexpand(nsfw_label, 1);
+        // c.gtk_widget_set_vexpand(nsfw_label, 1);
+
+        c.gtk_box_append(@ptrCast(nsfw_box), nsfw_label);
+
+        c.gtk_overlay_add_overlay(@ptrCast(overlay), nsfw_box);
+        // c.gtk_overlay_add_overlay(@ptrCast(overlay), nsfw_label);
+
+        const gesture_click = c.gtk_gesture_click_new();
+        errdefer c.g_object_unref(gesture_click);
+        c.gtk_gesture_single_set_button(@ptrCast(gesture_click), 0);
+        c.gtk_widget_add_controller(@ptrCast(@alignCast(overlay)), @ptrCast(gesture_click));
+        _ = c.g_signal_connect_data(gesture_click, "pressed", c.G_CALLBACK(&gtkMouseDown), root, null, c.G_CONNECT_DEFAULT);
+        _ = c.g_signal_connect_data(gesture_click, "released", c.G_CALLBACK(&gtkMouseUp), root, null, c.G_CONNECT_DEFAULT);
+
         // Create our view
         const view = try View.init(&.{
             .{ .name = "label", .widget = label },
-            .{ .name = "text", .widget = text_scroll },
+            .{ .name = "overlay", .widget = overlay },
             .{ .name = "buttons", .widget = buttons.root },
         }, &vfl);
         errdefer view.deinit();
@@ -153,11 +188,43 @@ const PrimaryView = struct {
 
     const vfl = [_][*:0]const u8{
         "H:|-8-[label]-8-|",
-        "H:|[text]|",
+        "H:|[overlay]|",
         "H:|[buttons]|",
-        "V:|[label(<=80)][text(>=100)]-[buttons]-|",
+        "V:|[label(<=80)][overlay(>=100)]-[buttons]-|",
     };
 };
+
+fn gtkMouseDown(
+    gesture: *c.GtkGestureClick,
+    _: c.gint,
+    _: c.gdouble,
+    _: c.gdouble,
+    ud: ?*anyopaque,
+) callconv(.C) void {
+    const event = c.gtk_event_controller_get_current_event(@ptrCast(gesture)) orelse return;
+
+    const root: *ClipboardConfirmation = @ptrCast(@alignCast(ud orelse return));
+    _ = event;
+    _ = root;
+
+    log.info("mouse down", .{});
+}
+
+fn gtkMouseUp(
+    gesture: *c.GtkGestureClick,
+    _: c.gint,
+    _: c.gdouble,
+    _: c.gdouble,
+    ud: ?*anyopaque,
+) callconv(.C) void {
+    const event = c.gtk_event_controller_get_current_event(@ptrCast(gesture)) orelse return;
+
+    const root: *ClipboardConfirmation = @ptrCast(@alignCast(ud orelse return));
+    _ = event;
+    _ = root;
+
+    log.info("mouse up", .{});
+}
 
 const ButtonsView = struct {
     root: *c.GtkWidget,

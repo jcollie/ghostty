@@ -379,6 +379,9 @@ im_len: u7 = 0,
 /// details on what this is.
 cgroup_path: ?[]const u8 = null,
 
+/// `true` if we are in secure input mode
+secure_input: bool = false,
+
 /// Configuration used for initializing the surface. We have to copy some
 /// data since initialization is delayed with GTK (on realize).
 pub const InitConfig = struct {
@@ -1150,6 +1153,7 @@ pub fn setClipboardString(
         val,
         &self.core_surface,
         .{ .osc_52_write = clipboard_type },
+        self.secure_input,
     ) catch |window_err| {
         log.err("failed to create clipboard confirmation window err={}", .{window_err});
     };
@@ -1198,6 +1202,7 @@ fn gtkClipboardRead(
                 str,
                 &self.core_surface,
                 req.state,
+                self.secure_input,
             ) catch |window_err| {
                 log.err("failed to create clipboard confirmation window err={}", .{window_err});
             };
@@ -1214,6 +1219,21 @@ fn getClipboard(widget: *c.GtkWidget, clipboard: apprt.Clipboard) ?*c.GdkClipboa
         .selection, .primary => c.gtk_widget_get_primary_clipboard(widget),
     };
 }
+
+pub fn secureInput(self: *Surface, secure: apprt.action.SecureInput) void {
+    switch (secure) {
+        .on => {
+            self.secure_input = true;
+        },
+        .off => {
+            self.secure_input = false;
+        },
+        .toggle => {
+            self.secure_input = !self.secure_input;
+        },
+    }
+}
+
 pub fn getCursorPos(self: *const Surface) !apprt.CursorPos {
     return self.cursor_pos;
 }
@@ -2172,6 +2192,7 @@ fn doPaste(self: *Surface, data: [:0]const u8) void {
                 data,
                 &self.core_surface,
                 .paste,
+                self.secure_input,
             ) catch |window_err| {
                 log.err("failed to create clipboard confirmation window err={}", .{window_err});
             };

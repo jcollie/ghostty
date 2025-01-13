@@ -534,13 +534,13 @@ pub fn performAction(
         .toggle_split_zoom => self.toggleSplitZoom(target),
         .toggle_window_decorations => self.toggleWindowDecorations(target),
         .quit_timer => self.quitTimer(value),
+        .secure_input => self.secureInput(target, value),
 
         // Unimplemented
         .close_all_windows,
         .toggle_quick_terminal,
         .toggle_visibility,
         .cell_size,
-        .secure_input,
         .key_sequence,
         .render_inspector,
         .renderer_health,
@@ -975,6 +975,13 @@ pub fn reloadConfig(
     // Update the existing config, be sure to clean up the old one.
     self.config.deinit();
     self.config = config;
+}
+
+pub fn secureInput(_: *App, target: apprt.action.Target, secure: apprt.action.SecureInput) void {
+    switch (target) {
+        .app => {},
+        .surface => |core_surface| core_surface.rt_surface.secureInput(secure),
+    }
 }
 
 /// Call this anytime the configuration changes.
