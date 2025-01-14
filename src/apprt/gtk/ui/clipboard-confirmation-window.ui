@@ -1,0 +1,91 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.90.4 -->
+<interface>
+  <!-- interface-name paste.ui -->
+  <requires lib="gtk" version="4.12"/>
+  <object class="GtkWindow" id="window">
+    <property name="css-classes">csd
+background
+window
+clipboard-confirmation-window</property>
+    <property name="default-height">275</property>
+    <property name="default-width">550</property>
+    <property name="modal">True</property>
+    <property name="resizable">False</property>
+    <child>
+      <object class="GtkBox">
+        <property name="orientation">vertical</property>
+        <property name="vexpand">True</property>
+        <child>
+          <object class="GtkLabel" id="prompt">
+            <property name="margin-bottom">16</property>
+            <property name="margin-end">16</property>
+            <property name="margin-start">16</property>
+            <property name="margin-top">16</property>
+            <property name="valign">start</property>
+            <property name="wrap">True</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkOverlay" id="overlay">
+                <property name="can-focus">False</property>
+                <property name="child">
+                  <object class="GtkScrolledWindow">
+                    <property name="child">
+                      <object class="GtkTextView" id="text">
+                        <property name="bottom-margin">8</property>
+                        <property name="cursor-visible">False</property>
+                        <property name="editable">False</property>
+                        <property name="left-margin">8</property>
+                        <property name="monospace">True</property>
+                        <property name="right-margin">8</property>
+                        <property name="top-margin">8</property>
+                      </object>
+                    </property>
+                    <property name="height-request">100</property>
+                  </object>
+                </property>
+                <property name="css-classes">view</property>
+                <property name="focus-on-click">False</property>
+                <property name="height-request">100</property>
+                <property name="overflow">hidden</property>
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="halign">end</property>
+            <property name="spacing">8</property>
+            <property name="valign">end</property>
+            <child>
+              <object class="GtkButton" id="cancel">
+                <property name="css-classes">suggested-action</property>
+                <property name="label">Cancel</property>
+                <property name="margin-bottom">8</property>
+                <property name="margin-end">8</property>
+                <property name="margin-start">8</property>
+                <property name="margin-top">8</property>
+                <property name="receives-default">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="confirm">
+                <property name="css-classes">destructive-action</property>
+                <property name="label">Paste</property>
+                <property name="margin-bottom">8</property>
+                <property name="margin-end">8</property>
+                <property name="margin-start">8</property>
+                <property name="margin-top">8</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

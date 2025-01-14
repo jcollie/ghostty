@@ -52,4 +52,5 @@ window.ssd.no-border-radius {
 
 widget.nsfw {
   opacity: 1;
+  background-color: var(--view-bg-color);
 }
