@@ -25,6 +25,7 @@ const graphics = macos.graphics;
 const fgMode = @import("cell.zig").fgMode;
 const isCovering = @import("cell.zig").isCovering;
 const shadertoy = @import("shadertoy.zig");
+const CursorPosition = @import("cursor_position.zig").CursorPosition;
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -160,6 +161,9 @@ health: std.atomic.Value(Health) = .{ .raw = .healthy },
 
 /// Our GPU state
 gpu_state: GPUState,
+
+/// The cursor position as of the last frame update
+cursor_position: CursorPosition(Metal) = .{},
 
 /// State we need for the GPU that is shared between all frames.
 pub const GPUState = struct {
@@ -991,6 +995,10 @@ pub fn updateFrame(
         cursor_style: ?renderer.CursorStyle,
         color_palette: terminal.color.Palette,
         viewport_pin: terminal.Pin,
+        cursor_position: struct {
+            x: terminal.size.CellCountInt,
+            y: terminal.size.CellCountInt,
+        },
 
         /// If true, rebuild the full screen.
         full_rebuild: bool,
@@ -1154,6 +1162,10 @@ pub fn updateFrame(
             .color_palette = state.terminal.color_palette.colors,
             .viewport_pin = viewport_pin,
             .full_rebuild = full_rebuild,
+            .cursor_position = .{
+                .x = state.terminal.screen.cursor.x,
+                .y = state.terminal.screen.cursor.y,
+            },
         };
     };
     defer {
@@ -1240,6 +1252,8 @@ pub fn updateFrame(
             }
         }
     }
+
+    self.cursor_position.update(critical.cursor_position.x, critical.cursor_position.y);
 }
 
 /// Draw the frame to the screen.

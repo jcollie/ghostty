@@ -81,6 +81,12 @@ pub const Message = union(enum) {
     /// The terminal has reported a change in the working directory.
     pwd_change: WriteReq,
 
+    /// Report cursor position
+    report_cursor_position: struct {
+        x: terminal.size.CellCountInt,
+        y: terminal.size.CellCountInt,
+    },
+
     pub const ReportTitleStyle = enum {
         csi_21_t,
 

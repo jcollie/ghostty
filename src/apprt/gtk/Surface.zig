@@ -2189,3 +2189,8 @@ fn g_value_holds(value_: ?*c.GValue, g_type: c.GType) bool {
     }
     return false;
 }
+
+pub fn reportCursorPosition(self: *Surface, position: apprt.action.CursorPositionReport) void {
+    _ = self;
+    log.debug("cursor position: {d}×{d}", .{ position.x, position.y });
+}

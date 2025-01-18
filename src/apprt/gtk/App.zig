@@ -535,6 +535,7 @@ pub fn performAction(
         .toggle_split_zoom => self.toggleSplitZoom(target),
         .toggle_window_decorations => self.toggleWindowDecorations(target),
         .quit_timer => self.quitTimer(value),
+        .report_cursor_position => self.reportCursorPosition(target, value),
 
         // Unimplemented
         .close_all_windows,
@@ -1896,6 +1897,17 @@ fn initContextMenu(self: *App) void {
 pub fn refreshContextMenu(_: *App, window: ?*c.GtkWindow, has_selection: bool) void {
     const action: ?*c.GSimpleAction = @ptrCast(c.g_action_map_lookup_action(@ptrCast(window), "copy"));
     c.g_simple_action_set_enabled(action, if (has_selection) 1 else 0);
+}
+
+fn reportCursorPosition(
+    _: *const App,
+    target: apprt.Target,
+    value: apprt.action.CursorPositionReport,
+) void {
+    switch (target) {
+        .app => {},
+        .surface => |v| v.rt_surface.reportCursorPosition(value),
+    }
 }
 
 fn isValidAppId(app_id: [:0]const u8) bool {

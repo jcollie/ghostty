@@ -71,6 +71,10 @@ renderer_thread: renderer.Thread,
 /// The actual thread
 renderer_thr: std.Thread,
 
+/// Cursor state. Updated at most once per frame so it may not be accurate 100%
+/// of the time.
+cursor: Cursor,
+
 /// Mouse state.
 mouse: Mouse,
 
@@ -148,6 +152,37 @@ pub const InputEffect = enum {
     /// the surface, runtime surface, etc. pointers may all be
     /// unsafe to use so exit immediately.
     closed,
+};
+
+/// Cursor state for the surface.
+const Cursor = struct {
+    x: terminal.size.CellCountInt = 0,
+    y: terminal.size.CellCountInt = 0,
+
+    pub fn reportCursorPosition(self: *Cursor, x: terminal.size.CellCountInt, y: terminal.size.CellCountInt) void {
+        const surface: *Surface = @alignCast(@fieldParentPtr("cursor", self));
+
+        // Defer updating the stored cursor position until after the apprt has been
+        // informed of the new position.
+        defer {
+            self.x = x;
+            self.y = y;
+        }
+
+        surface.rt_app.performAction(
+            .{ .surface = surface },
+            .report_cursor_position,
+            .{
+                .x = x,
+                .y = y,
+            },
+        ) catch |err| {
+            log.warn(
+                "failed to notify surface of cursor position err={}",
+                .{err},
+            );
+        };
+    }
 };
 
 /// Mouse state for the surface.
@@ -496,6 +531,7 @@ pub fn init(
             .terminal = &self.io.terminal,
         },
         .renderer_thr = undefined,
+        .cursor = .{},
         .mouse = .{},
         .keyboard = .{},
         .io = undefined,
@@ -943,6 +979,8 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .present_surface => try self.presentSurface(),
 
         .password_input => |v| try self.passwordInput(v),
+
+        .report_cursor_position => |v| self.cursor.reportCursorPosition(v.x, v.y),
     }
 }
 

@@ -30,6 +30,7 @@ const custom = @import("opengl/custom.zig");
 const Image = gl_image.Image;
 const ImageMap = gl_image.ImageMap;
 const ImagePlacementList = std.ArrayListUnmanaged(gl_image.Placement);
+const CursorPosition = @import("cursor_position.zig").CursorPosition;
 
 const log = std.log.scoped(.grid);
 
@@ -145,6 +146,9 @@ image_placements: ImagePlacementList = .{},
 image_bg_end: u32 = 0,
 image_text_end: u32 = 0,
 image_virtual: bool = false,
+
+/// The cursor position as of the last frame update.
+cursor_position: CursorPosition(OpenGL) = .{},
 
 /// Deferred OpenGL operation to update the screen size.
 const SetScreenSize = struct {
@@ -700,6 +704,10 @@ pub fn updateFrame(
         screen_type: terminal.ScreenType,
         mouse: renderer.State.Mouse,
         preedit: ?renderer.State.Preedit,
+        cursor_position: struct {
+            x: terminal.size.CellCountInt,
+            y: terminal.size.CellCountInt,
+        },
         cursor_style: ?renderer.CursorStyle,
         color_palette: terminal.color.Palette,
     };
@@ -861,6 +869,10 @@ pub fn updateFrame(
             .screen_type = state.terminal.active_screen,
             .mouse = state.mouse,
             .preedit = preedit,
+            .cursor_position = .{
+                .x = state.terminal.screen.cursor.x,
+                .y = state.terminal.screen.cursor.y,
+            },
             .cursor_style = cursor_style,
             .color_palette = state.terminal.color_palette.colors,
         };
@@ -893,6 +905,8 @@ pub fn updateFrame(
         // CoreText this triggers off-thread cleanup logic.
         self.font_shaper.endFrame();
     }
+
+    self.cursor_position.update(critical.cursor_position.x, critical.cursor_position.y);
 }
 
 /// This goes through the Kitty graphic placements and accumulates the

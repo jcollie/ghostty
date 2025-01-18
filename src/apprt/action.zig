@@ -226,6 +226,10 @@ pub const Action = union(Key) {
     /// for changes.
     config_change: ConfigChange,
 
+    /// Report the location of the cursor. This will happen at most once per
+    /// frame, and only if the cursor has moved since the last update.
+    report_cursor_position: CursorPositionReport,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -266,6 +270,7 @@ pub const Action = union(Key) {
         color_change,
         reload_config,
         config_change,
+        report_cursor_position,
     };
 
     /// Sync with: ghostty_action_u
@@ -548,4 +553,10 @@ pub const ConfigChange = struct {
             .config = self.config,
         };
     }
+};
+
+/// Used to report the location of the cursor.
+pub const CursorPositionReport = extern struct {
+    x: terminal.size.CellCountInt,
+    y: terminal.size.CellCountInt,
 };
