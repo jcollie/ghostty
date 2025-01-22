@@ -682,6 +682,7 @@ pub const ThreadData = struct {
 
 pub const Config = struct {
     command: ?[]const u8 = null,
+    env: configpkg.RepeatableStringMap = .{},
     shell_integration: configpkg.Config.ShellIntegration = .detect,
     shell_integration_features: configpkg.Config.ShellIntegrationFeatures = .{},
     working_directory: ?[]const u8 = null,
@@ -874,6 +875,18 @@ const Subprocess = struct {
             env.remove("GDK_DEBUG");
             env.remove("GDK_DISABLE");
             env.remove("GSK_RENDERER");
+        }
+
+        // Add environment variables from the config
+        {
+            var it = cfg.env.iterator();
+            while (it.next()) |entry| {
+                const key_copy = try alloc.dupe(u8, entry.key_ptr.*);
+                errdefer alloc.free(key_copy);
+                const value_copy = try alloc.dupe(u8, entry.value_ptr.*);
+                errdefer alloc.free(value_copy);
+                try env.put(key_copy, value_copy);
+            }
         }
 
         // Setup our shell integration, if we can.
