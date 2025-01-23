@@ -1293,6 +1293,86 @@ fn showContextMenu(self: *Surface, x: f32, y: f32) void {
     c.gtk_popover_popup(@ptrCast(@alignCast(window.context_menu)));
 }
 
+pub fn bell(self: *Surface) void {
+    inline for (std.meta.fields(configpkg.BellFeatures.Features)) |field| {
+        const feature = std.meta.stringToEnum(configpkg.BellFeatures.Features, field.name) orelse unreachable;
+        const enabled = @field(self.app.config.@"bell-features", field.name);
+        switch (feature) {
+            .audio => audio: {
+                if (!enabled) break :audio;
+                const stream = switch (self.app.config.@"bell-audio") {
+                    .bell => c.gtk_media_file_new_for_resource("/com/mitchellh/ghostty/media/bell.oga"),
+                    .message => c.gtk_media_file_new_for_resource("/com/mitchellh/ghostty/media/message.oga"),
+                    .custom => |filename| stream: {
+                        var arena = std.heap.ArenaAllocator.init(self.app.core_app.alloc);
+                        defer arena.deinit();
+                        const alloc = arena.allocator();
+                        const pathname = pathname: {
+                            if (std.fs.path.isAbsolute(filename))
+                                break :pathname alloc.dupeZ(u8, filename) catch |err| {
+                                    log.warn("unable to allocate space for bell audio pathname: {}", .{err});
+                                    return;
+                                }
+                            else
+                                break :pathname std.fs.path.joinZ(alloc, &.{
+                                    internal_os.xdg.config(
+                                        alloc,
+                                        .{ .subdir = "ghostty/media" },
+                                    ) catch |err| {
+                                        log.warn("unable to determine media config subdir: {}", .{err});
+                                        return;
+                                    },
+                                    filename,
+                                }) catch |err| {
+                                    log.warn("unable to allocate space for bell audio pathname: {}", .{err});
+                                    return;
+                                };
+                        };
+                        std.fs.accessAbsoluteZ(pathname, .{ .mode = .read_only }) catch {
+                            log.warn("unable to find sound file: {s}", .{filename});
+                            break :audio;
+                        };
+                        break :stream c.gtk_media_file_new_for_filename(pathname);
+                    },
+                };
+                _ = c.g_signal_connect_data(
+                    stream,
+                    "notify::error",
+                    c.G_CALLBACK(&gtkStreamError),
+                    stream,
+                    null,
+                    c.G_CONNECT_DEFAULT,
+                );
+                _ = c.g_signal_connect_data(
+                    stream,
+                    "notify::ended",
+                    c.G_CALLBACK(&gtkStreamEnded),
+                    stream,
+                    null,
+                    c.G_CONNECT_DEFAULT,
+                );
+                c.gtk_media_stream_set_volume(stream, 1.0);
+                c.gtk_media_stream_play(stream);
+            },
+            inline else => {
+                if (enabled) {
+                    log.warn("bell feature '{s}' is not supported", .{field.name});
+                }
+            },
+        }
+    }
+}
+
+fn gtkStreamError(stream: ?*c.GObject) callconv(.C) void {
+    const err = c.gtk_media_stream_get_error(@ptrCast(stream));
+    if (err) |e|
+        log.err("error playing bell: {s} {d} {s}", .{ c.g_quark_to_string(e.*.domain), e.*.code, e.*.message });
+}
+
+fn gtkStreamEnded(stream: ?*c.GObject) callconv(.C) void {
+    c.g_object_unref(stream);
+}
+
 fn gtkRealize(area: *c.GtkGLArea, ud: ?*anyopaque) callconv(.C) void {
     log.debug("gl surface realized", .{});
 

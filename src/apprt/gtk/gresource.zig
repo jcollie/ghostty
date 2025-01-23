@@ -70,6 +70,11 @@ const numeric_icons = [_][]const u8{
 
 pub const gresource_xml = comptimeGenerateGResourceXML();
 
+const media = [_][]const u8{
+    "media/bell.oga",
+    "media/message.oga",
+};
+
 fn comptimeGenerateGResourceXML() []const u8 {
     comptime {
         @setEvalBranchQuota(13000);
@@ -122,18 +127,41 @@ fn writeGResourceXML(writer: anytype) !void {
     }
     try writer.writeAll(
         \\  </gresource>
+        \\
+    );
+    try writer.writeAll(
+        \\  <gresource prefix="/com/mitchellh/ghostty/media">
+        \\
+    );
+    for (media) |pathname| {
+        try writer.print(
+            "    <file alias=\"{s}\">{s}</file>\n",
+            .{ std.fs.path.basename(pathname), pathname },
+        );
+    }
+    try writer.writeAll(
+        \\  </gresource>
+        \\
+    );
+    try writer.writeAll(
         \\</gresources>
         \\
     );
 }
 
 pub const dependencies = deps: {
-    var deps: [css_files.len + ghostty_icons.len][]const u8 = undefined;
+    var deps: [css_files.len + ghostty_icons.len + numeric_icons.len + media.len][]const u8 = undefined;
     for (css_files, 0..) |css_file, i| {
         deps[i] = std.fmt.comptimePrint("src/apprt/gtk/{s}", .{css_file});
     }
     for (ghostty_icons, css_files.len..) |icon, i| {
         deps[i] = std.fmt.comptimePrint("images/icons/icon_{s}.png", .{icon.source});
+    }
+    for (numeric_icons, css_files.len + ghostty_icons.len..) |icon, i| {
+        deps[i] = std.fmt.comptimePrint("images/icons/numeric-{0s}-circle-outline-symbolic.svg", .{icon});
+    }
+    for (media, css_files.len + ghostty_icons.len + numeric_icons.len..) |pathname, i| {
+        deps[i] = std.fmt.comptimePrint("{s}", .{pathname});
     }
     break :deps deps;
 };
