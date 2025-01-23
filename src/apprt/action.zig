@@ -244,6 +244,7 @@ pub const Action = union(Key) {
     /// Closes the currently focused window.
     close_window,
 
+    /// The system has received a request to activate the bell.
     ring_bell,
 
     /// Open a URL using the native OS mechanisms. On macOS this might be `open`
