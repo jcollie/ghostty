@@ -504,6 +504,7 @@ pub fn performAction(
         .quit_timer => self.quitTimer(value),
         .prompt_title => try self.promptTitle(target),
         .toggle_quick_terminal => return try self.toggleQuickTerminal(),
+        .bell => self.bell(target),
 
         // Unimplemented
         .close_all_windows,
@@ -1009,6 +1010,16 @@ pub fn reloadConfig(
     // Update the existing config, be sure to clean up the old one.
     self.config.deinit();
     self.config = config;
+}
+
+fn bell(
+    _: *App,
+    target: apprt.Target,
+) void {
+    switch (target) {
+        .app => {},
+        .surface => |surface| surface.rt_surface.bell(),
+    }
 }
 
 /// Call this anytime the configuration changes.

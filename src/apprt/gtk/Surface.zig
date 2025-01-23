@@ -8,6 +8,7 @@ const std = @import("std");
 const adw = @import("adw");
 const gtk = @import("gtk");
 const gio = @import("gio");
+const glib = @import("glib");
 const gobject = @import("gobject");
 
 const Allocator = std.mem.Allocator;
@@ -1260,6 +1261,81 @@ pub fn showDesktopNotification(
     // We set the notification ID to the body content. If the content is the
     // same, this notification may replace a previous notification
     c.g_application_send_notification(g_app, body.ptr, notification);
+}
+
+pub fn bell(self: *Surface) void {
+    inline for (std.meta.fields(configpkg.Config.BellFeatures.Features)) |field| {
+        const feature = std.meta.stringToEnum(configpkg.Config.BellFeatures.Features, field.name) orelse unreachable;
+        const enabled = @field(self.app.config.@"bell-features", field.name);
+        if (enabled) {
+            switch (feature) {
+                .system => system: {
+                    const native = gtk.Widget.getNative(@ptrCast(@alignCast(self.overlay))) orelse break :system;
+                    const surface = native.getSurface() orelse break :system;
+                    surface.beep();
+                },
+                .audio => audio: {
+                    var arena = std.heap.ArenaAllocator.init(self.app.core_app.alloc);
+                    defer arena.deinit();
+                    const alloc = arena.allocator();
+                    const filename = self.app.config.@"bell-audio" orelse break :audio;
+                    const pathname = pathname: {
+                        if (std.fs.path.isAbsolute(filename))
+                            break :pathname alloc.dupeZ(u8, filename) catch |err| {
+                                log.warn("unable to allocate space for bell audio pathname: {}", .{err});
+                                break :audio;
+                            }
+                        else
+                            break :pathname std.fs.path.joinZ(alloc, &.{
+                                internal_os.xdg.config(alloc, .{ .subdir = "ghostty/media" }) catch |err| {
+                                    log.warn("unable to determine media config subdir: {}", .{err});
+                                    break :audio;
+                                },
+                                filename,
+                            }) catch |err| {
+                                log.warn("unable to allocate space for bell audio pathname: {}", .{err});
+                                break :audio;
+                            };
+                    };
+                    std.fs.accessAbsoluteZ(pathname, .{ .mode = .read_only }) catch {
+                        log.warn("unable to find sound file: {s}", .{filename});
+                        break :audio;
+                    };
+
+                    const file = gtk.MediaFile.newForFilename(pathname);
+                    const stream = file.as(gtk.MediaStream);
+
+                    _ = gobject.Object.signals.notify.connect(
+                        stream,
+                        ?*anyopaque,
+                        gtkStreamError,
+                        null,
+                        .{ .detail = "error" },
+                    );
+                    _ = gobject.Object.signals.notify.connect(
+                        stream,
+                        ?*anyopaque,
+                        gtkStreamEnded,
+                        null,
+                        .{ .detail = "ended" },
+                    );
+
+                    stream.setVolume(1.0);
+                    stream.play();
+                },
+            }
+        }
+    }
+}
+
+fn gtkStreamError(stream: *gtk.MediaStream, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.C) void {
+    const err = stream.getError();
+    if (err) |e|
+        log.err("error playing bell: {s} {d} {s}", .{ glib.quarkToString(e.f_domain), e.f_code, e.f_message orelse "" });
+}
+
+fn gtkStreamEnded(stream: *gtk.MediaStream, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.C) void {
+    stream.unref();
 }
 
 fn gtkRealize(area: *c.GtkGLArea, ud: ?*anyopaque) callconv(.C) void {
