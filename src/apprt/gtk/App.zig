@@ -542,6 +542,7 @@ pub fn performAction(
         .toggle_split_zoom => self.toggleSplitZoom(target),
         .toggle_window_decorations => self.toggleWindowDecorations(target),
         .quit_timer => self.quitTimer(value),
+        .bell => self.bell(target),
 
         // Unimplemented
         .close_all_windows,
@@ -1010,6 +1011,16 @@ pub fn reloadConfig(
     // Update the existing config, be sure to clean up the old one.
     self.config.deinit();
     self.config = config;
+}
+
+fn bell(
+    _: *App,
+    target: apprt.Target,
+) void {
+    switch (target) {
+        .app => {},
+        .surface => |surface| surface.rt_surface.bell(),
+    }
 }
 
 /// Call this anytime the configuration changes.
