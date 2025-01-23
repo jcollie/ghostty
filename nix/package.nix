@@ -15,6 +15,7 @@
   gtk4,
   gtk4-layer-shell,
   gobject-introspection,
+  gst_all_1,
   libadwaita,
   blueprint-compiler,
   libxml2,
@@ -110,6 +111,9 @@ in
         libadwaita
         gtk4
         glib
+        gst_all_1.gstreamer
+        gst_all_1.gst-plugins-base
+        gst_all_1.gst-plugins-good
         gsettings-desktop-schemas
       ]
       ++ lib.optionals enableX11 [
@@ -162,6 +166,10 @@ in
       mv $out/share/vim/vimfiles "$vim"
       ln -sf "$vim" "$out/share/vim/vimfiles"
       echo "$vim" >> "$out/nix-support/propagated-user-env-packages"
+
+      echo "gst_all_1.gstreamer" >> "$out/nix-support/propagated-user-env-packages"
+      echo "gst_all_1.gst-plugins-base" >> "$out/nix-support/propagated-user-env-packages"
+      echo "gst_all_1.gst-plugins-good" >> "$out/nix-support/propagated-user-env-packages"
     '';
 
     meta = {

@@ -241,6 +241,9 @@ pub const Action = union(Key) {
     /// for changes.
     config_change: ConfigChange,
 
+    /// The system has received a request to activate the bell.
+    bell: void,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -283,6 +286,7 @@ pub const Action = union(Key) {
         color_change,
         reload_config,
         config_change,
+        bell,
     };
 
     /// Sync with: ghostty_action_u
