@@ -238,6 +238,7 @@ pub const App = struct {
             .pwd,
             .config_change,
             .toggle_maximize,
+            .bell,
             => log.info("unimplemented action={}", .{action}),
         }
     }
