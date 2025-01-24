@@ -373,7 +373,7 @@ pub fn init(b: *std.Build) !Config {
                 .{
                     // If we're not on darwin we want to use whatever the
                     // default is via the system package mode
-                    .default = if (target.result.isDarwin()) false else null,
+                    .default = if (target.result.isDarwin()) false else true,
                 },
             );
         }
