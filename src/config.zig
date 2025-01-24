@@ -30,6 +30,7 @@ pub const RepeatableString = Config.RepeatableString;
 pub const RepeatablePath = Config.RepeatablePath;
 pub const ShellIntegrationFeatures = Config.ShellIntegrationFeatures;
 pub const WindowPaddingColor = Config.WindowPaddingColor;
+pub const WindowTheme = Config.WindowTheme;
 
 // Alternate APIs
 pub const CAPI = @import("config/CAPI.zig");

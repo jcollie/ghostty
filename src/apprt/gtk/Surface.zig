@@ -378,6 +378,8 @@ im_len: u7 = 0,
 /// details on what this is.
 cgroup_path: ?[]const u8 = null,
 
+cfg: DerivedConfig = undefined,
+
 /// Configuration used for initializing the surface. We have to copy some
 /// data since initialization is delayed with GTK (on realize).
 pub const InitConfig = struct {
@@ -408,6 +410,25 @@ pub const InitConfig = struct {
     }
 };
 
+// copy of configurations necessary to for the operation of the
+// surface.
+
+pub const DerivedConfig = struct {
+    pub fn init(self: *DerivedConfig, config: *const configpkg.Config) void {
+        _ = self;
+        _ = config;
+    }
+
+    pub fn reconfigure(self: *DerivedConfig, config: *const configpkg.Config) void {
+        _ = self;
+        _ = config;
+    }
+
+    pub fn deinit(self: *DerivedConfig) void {
+        _ = self;
+    }
+};
+
 pub fn create(alloc: Allocator, app: *App, opts: Options) !*Surface {
     var surface = try alloc.create(Surface);
     errdefer alloc.destroy(surface);
@@ -416,6 +437,8 @@ pub fn create(alloc: Allocator, app: *App, opts: Options) !*Surface {
 }
 
 pub fn init(self: *Surface, app: *App, opts: Options) !void {
+    self.cfg.init(&app.config);
+
     const gl_area = c.gtk_gl_area_new();
 
     // Create an overlay so we can layer the GL area with other widgets.

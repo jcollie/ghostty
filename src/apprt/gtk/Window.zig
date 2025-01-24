@@ -31,6 +31,8 @@ const log = std.log.scoped(.gtk);
 
 app: *App,
 
+cfg: DerivedConfig,
+
 /// Our window
 window: *c.GtkWindow,
 
@@ -73,10 +75,51 @@ pub fn create(alloc: Allocator, app: *App) !*Window {
     return window;
 }
 
+// copy of configurations necessary to for the operation of the
+// surface.
+
+pub const DerivedConfig = struct {
+    // adwaita_enabled should not be refreshed
+    adwaita_enabled: bool,
+    background_opacity: f64,
+    gtk_titlebar: bool,
+    window_theme: configpkg.WindowTheme,
+
+    pub fn init(self: *DerivedConfig, config: *const configpkg.Config) void {
+        self.* = .{
+            .adwaita_enabled = adwaita.enabled(config),
+            .background_opacity = config.@"background-opacity",
+            .gtk_titlebar = config.@"gtk-titlebar",
+            .window_theme = config.@"window-theme",
+        };
+    }
+
+    pub fn updateConfig(self: *DerivedConfig, config: *const configpkg.Config) void {
+        const window: *Window = @fieldParentPtr("cfg", self);
+
+        self.background_opacity = config.@"background-opacity";
+        self.gtk_titlebar = config.@"gtk-titlebar";
+        self.window_theme = config.@"window-theme";
+
+        window.winproto.updateConfigEvent(config) catch |err| {
+            // We want to continue attempting to make the other config
+            // changes necessary so we just log the error and continue.
+            log.warn("failed to update window protocol config error={}", .{err});
+        };
+
+        window.syncAppearance();
+    }
+
+    pub fn deinit(self: *DerivedConfig) void {
+        _ = self;
+    }
+};
+
 pub fn init(self: *Window, app: *App) !void {
     // Set up our own state
     self.* = .{
         .app = app,
+        .cfg = undefined,
         .window = undefined,
         .headerbar = undefined,
         .tab_overview = null,
@@ -86,9 +129,11 @@ pub fn init(self: *Window, app: *App) !void {
         .winproto = .none,
     };
 
+    self.cfg.init(&app.config);
+
     // Create the window
     const window: *c.GtkWidget = window: {
-        if ((comptime adwaita.versionAtLeast(0, 0, 0)) and adwaita.enabled(&self.app.config)) {
+        if ((comptime adwaita.versionAtLeast(0, 0, 0)) and self.cfg.adwaita_enabled) {
             const window = c.adw_application_window_new(app.app);
             c.gtk_widget_add_css_class(@ptrCast(window), "adw");
             break :window window;
@@ -116,7 +161,7 @@ pub fn init(self: *Window, app: *App) !void {
     // Apply class to color headerbar if window-theme is set to `ghostty` and
     // GTK version is before 4.16. The conditional is because above 4.16
     // we use GTK CSS color variables.
-    if (!version.atLeast(4, 16, 0) and app.config.@"window-theme" == .ghostty) {
+    if (!version.atLeast(4, 16, 0) and self.cfg.window_theme == .ghostty) {
         c.gtk_widget_add_css_class(@ptrCast(gtk_window), "window-theme-ghostty");
     }
 
@@ -374,14 +419,7 @@ pub fn updateConfig(
     self: *Window,
     config: *const configpkg.Config,
 ) !void {
-    self.winproto.updateConfigEvent(config) catch |err| {
-        // We want to continue attempting to make the other config
-        // changes necessary so we just log the error and continue.
-        log.warn("failed to update window protocol config error={}", .{err});
-    };
-
-    // We always resync our appearance whenever the config changes.
-    try self.syncAppearance(config);
+    self.cfg.updateConfig(config);
 }
 
 /// Updates appearance based on config settings. Will be called once upon window
@@ -389,7 +427,7 @@ pub fn updateConfig(
 ///
 /// TODO: Many of the initial style settings in `create` could possibly be made
 /// reactive by moving them here.
-pub fn syncAppearance(self: *Window, config: *const configpkg.Config) !void {
+pub fn syncAppearance(self: *Window) void {
     self.winproto.syncAppearance() catch |err| {
         log.warn("failed to sync winproto appearance error={}", .{err});
     };
@@ -397,7 +435,7 @@ pub fn syncAppearance(self: *Window, config: *const configpkg.Config) !void {
     toggleCssClass(
         @ptrCast(self.window),
         "background",
-        config.@"background-opacity" >= 1,
+        self.cfg.background_opacity >= 1,
     );
 
     // If we are disabling CSDs then disable them right away.
@@ -405,13 +443,13 @@ pub fn syncAppearance(self: *Window, config: *const configpkg.Config) !void {
     c.gtk_window_set_decorated(self.window, @intFromBool(csd_enabled));
 
     // If we are not decorated then we hide the titlebar.
-    self.headerbar.setVisible(config.@"gtk-titlebar" and csd_enabled);
+    self.headerbar.setVisible(self.cfg.gtk_titlebar and csd_enabled);
 
     // Disable the title buttons (close, maximize, minimize, ...)
     // *inside* the tab overview if CSDs are disabled.
     // We do spare the search button, though.
     if ((comptime adwaita.versionAtLeast(1, 4, 0)) and
-        adwaita.enabled(&self.app.config))
+        self.cfg.adwaita_enabled)
     {
         if (self.tab_overview) |tab_overview| {
             c.adw_tab_overview_set_show_start_title_buttons(
@@ -626,9 +664,7 @@ fn gtkRealize(v: *c.GtkWindow, ud: ?*anyopaque) callconv(.C) bool {
     }
 
     // When we are realized we always setup our appearance
-    self.syncAppearance(&self.app.config) catch |err| {
-        log.err("failed to initialize appearance={}", .{err});
-    };
+    self.syncAppearance();
 
     return true;
 }
