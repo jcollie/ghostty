@@ -380,7 +380,7 @@ im_len: u7 = 0,
 cgroup_path: ?[]const u8 = null,
 
 /// Our context menu.
-context_menu: Menu(Surface, .context, .popover_menu),
+context_menu: Menu(Surface, "context_menu", .popover_menu),
 
 /// The state of the key event while we're doing IM composition.
 /// See gtkKeyPressed for detailed descriptions.

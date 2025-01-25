@@ -68,6 +68,12 @@ const numeric_icons = [_][]const u8{
     "9-plus",
 };
 
+pub const ui_files = [_][]const u8{
+    "menu-surface-context_menu",
+    "menu-window-menubar",
+    "menu-window-titlebar_menu",
+};
+
 pub const gresource_xml = comptimeGenerateGResourceXML();
 
 const media = [_][]const u8{
@@ -138,13 +144,27 @@ fn writeGResourceXML(writer: anytype) !void {
         \\
     );
     try writer.writeAll(
+        \\  <gresource prefix="/com/mitchellh/ghostty/ui">
+        \\
+    );
+    for (ui_files) |ui_file| {
+        try writer.print(
+            "    <file alias=\"{0s}.ui\">src/apprt/gtk/ui/{0s}.ui</file>\n",
+            .{ui_file},
+        );
+    }
+    try writer.writeAll(
+        \\  </gresource>
+        \\
+    );
+    try writer.writeAll(
         \\</gresources>
         \\
     );
 }
 
 pub const dependencies = deps: {
-    const total = css_files.len + ghostty_icons.len + numeric_icons.len + media.len;
+    const total = css_files.len + ghostty_icons.len + numeric_icons.len + media.len + ui_files.len;
     var deps: [total][]const u8 = undefined;
     var index: usize = 0;
     for (css_files) |css_file| {
@@ -161,6 +181,10 @@ pub const dependencies = deps: {
     }
     for (media) |pathname| {
         deps[index] = std.fmt.comptimePrint("{s}", .{pathname});
+        index += 1;
+    }
+    for (ui_files) |ui_file| {
+        deps[index] = std.fmt.comptimePrint("src/apprt/gtk/ui/{s}.ui", .{ui_file});
         index += 1;
     }
     break :deps deps;
