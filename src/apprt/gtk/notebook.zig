@@ -23,7 +23,7 @@ pub const Notebook = union(enum) {
     pub fn init(self: *Notebook) void {
         const window: *Window = @fieldParentPtr("notebook", self);
         const app = window.app;
-        if (adwaita.enabled(&app.config)) return NotebookAdw.init(self);
+        if (app.adwaitaEnabled(0, 0, 0)) return NotebookAdw.init(self);
 
         return NotebookGtk.init(self);
     }

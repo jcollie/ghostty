@@ -17,6 +17,7 @@ const CoreSurface = @import("../../Surface.zig");
 
 const App = @import("App.zig");
 const Color = configpkg.Config.Color;
+const Config = configpkg.Config;
 const Surface = @import("Surface.zig");
 const Tab = @import("Tab.zig");
 const c = @import("c.zig").c;
@@ -79,27 +80,64 @@ pub fn create(alloc: Allocator, app: *App) !*Window {
 // surface.
 
 pub const DerivedConfig = struct {
-    // adwaita_enabled should not be refreshed
-    adwaita_enabled: bool,
-    background_opacity: f64,
-    gtk_titlebar: bool,
-    window_theme: configpkg.WindowTheme,
+    static: struct {
+        adwaita_enabled: bool,
+        adw_toolbar_style: Config.AdwToolbarStyle,
+        fullscreen: bool,
+        gtk_tabs_location: Config.GtkTabsLocation,
+        gtk_wide_tabs: bool,
+        maximize: bool,
+
+        pub fn init(self: *@This(), config: *const configpkg.Config) void {
+            self.* = .{
+                .adwaita_enabled = adwaita.enabled(config),
+                .adw_toolbar_style = config.@"adw-toolbar-style",
+                .fullscreen = config.fullscreen,
+                .gtk_tabs_location = config.@"gtk-tabs-location",
+                .gtk_wide_tabs = config.@"gtk-wide-tabs",
+                .maximize = config.maximize,
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            _ = self;
+        }
+    },
+
+    dynamic: struct {
+        background_opacity: f64,
+        gtk_titlebar: bool,
+        gtk_titlebar_hide_when_maximized: bool,
+        window_theme: configpkg.WindowTheme,
+
+        pub fn init(self: *@This(), config: *const configpkg.Config) void {
+            self.* = .{
+                .background_opacity = config.@"background-opacity",
+                .gtk_titlebar = config.@"gtk-titlebar",
+                .gtk_titlebar_hide_when_maximized = config.@"gtk-titlebar-hide-when-maximized",
+                .window_theme = config.@"window-theme",
+            };
+        }
+
+        pub fn updateConfig(self: *@This(), config: *const configpkg.Config) void {
+            self.deinit();
+            self.init(config);
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.* = undefined;
+        }
+    },
 
     pub fn init(self: *DerivedConfig, config: *const configpkg.Config) void {
-        self.* = .{
-            .adwaita_enabled = adwaita.enabled(config),
-            .background_opacity = config.@"background-opacity",
-            .gtk_titlebar = config.@"gtk-titlebar",
-            .window_theme = config.@"window-theme",
-        };
+        self.static.init(config);
+        self.dynamic.init(config);
     }
 
     pub fn updateConfig(self: *DerivedConfig, config: *const configpkg.Config) void {
         const window: *Window = @fieldParentPtr("cfg", self);
 
-        self.background_opacity = config.@"background-opacity";
-        self.gtk_titlebar = config.@"gtk-titlebar";
-        self.window_theme = config.@"window-theme";
+        self.dynamic.updateConfig(config);
 
         window.winproto.updateConfigEvent(config) catch |err| {
             // We want to continue attempting to make the other config
@@ -111,7 +149,8 @@ pub const DerivedConfig = struct {
     }
 
     pub fn deinit(self: *DerivedConfig) void {
-        _ = self;
+        self.static.deinit();
+        self.dynamic.deinit();
     }
 };
 
@@ -129,11 +168,11 @@ pub fn init(self: *Window, app: *App) !void {
         .winproto = .none,
     };
 
-    self.cfg.init(&app.config);
+    self.cfg.init(&app._config);
 
     // Create the window
     const window: *c.GtkWidget = window: {
-        if ((comptime adwaita.versionAtLeast(0, 0, 0)) and self.cfg.adwaita_enabled) {
+        if ((comptime adwaita.versionAtLeast(0, 0, 0)) and self.cfg.static.adwaita_enabled) {
             const window = c.adw_application_window_new(app.app);
             c.gtk_widget_add_css_class(@ptrCast(window), "adw");
             break :window window;
@@ -161,7 +200,7 @@ pub fn init(self: *Window, app: *App) !void {
     // Apply class to color headerbar if window-theme is set to `ghostty` and
     // GTK version is before 4.16. The conditional is because above 4.16
     // we use GTK CSS color variables.
-    if (!version.atLeast(4, 16, 0) and self.cfg.window_theme == .ghostty) {
+    if (!version.atLeast(4, 16, 0) and self.cfg.dynamic.window_theme == .ghostty) {
         c.gtk_widget_add_css_class(@ptrCast(gtk_window), "window-theme-ghostty");
     }
 
@@ -172,7 +211,7 @@ pub fn init(self: *Window, app: *App) !void {
     self.notebook.init();
 
     // If we are using Adwaita, then we can support the tab overview.
-    self.tab_overview = if ((comptime adwaita.versionAtLeast(1, 4, 0)) and adwaita.enabled(&self.app.config) and adwaita.versionAtLeast(1, 4, 0)) overview: {
+    self.tab_overview = if ((comptime adwaita.versionAtLeast(1, 4, 0)) and self.cfg.static.adwaita_enabled and adwaita.versionAtLeast(1, 4, 0)) overview: {
         const tab_overview = c.adw_tab_overview_new();
         c.adw_tab_overview_set_view(@ptrCast(tab_overview), self.notebook.adw.tab_view);
         c.adw_tab_overview_set_enable_new_tab(@ptrCast(tab_overview), 1);
@@ -212,8 +251,8 @@ pub fn init(self: *Window, app: *App) !void {
     // If we're using an AdwWindow then we can support the tab overview.
     if (self.tab_overview) |tab_overview| {
         if (comptime !adwaita.versionAtLeast(1, 4, 0)) unreachable;
-        assert(self.app.config.@"gtk-adwaita" and adwaita.versionAtLeast(1, 4, 0));
-        const btn = switch (app.config.@"gtk-tabs-location") {
+        assert(self.cfg.static.adwaita_enabled and adwaita.versionAtLeast(1, 4, 0));
+        const btn = switch (self.cfg.static.gtk_tabs_location) {
             .top, .bottom, .left, .right => btn: {
                 const btn = c.gtk_toggle_button_new();
                 c.gtk_widget_set_tooltip_text(btn, "View Open Tabs");
@@ -254,7 +293,7 @@ pub fn init(self: *Window, app: *App) !void {
 
     // If Adwaita is enabled and is older than 1.4.0 we don't have the tab overview and so we
     // need to stick the headerbar into the content box.
-    if (!adwaita.versionAtLeast(1, 4, 0) and adwaita.enabled(&self.app.config)) {
+    if (!adwaita.versionAtLeast(1, 4, 0) and self.cfg.static.adwaita_enabled) {
         c.gtk_box_append(@ptrCast(box), self.headerbar.asWidget());
     }
 
@@ -264,7 +303,7 @@ pub fn init(self: *Window, app: *App) !void {
         const warning_box = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
         const warning_text = "⚠️ You're running a debug build of Ghostty! Performance will be degraded.";
         if ((comptime adwaita.versionAtLeast(1, 3, 0)) and
-            adwaita.enabled(&app.config) and
+            self.cfg.static.adwaita_enabled and
             adwaita.versionAtLeast(1, 3, 0))
         {
             const banner = c.adw_banner_new(warning_text);
@@ -282,7 +321,7 @@ pub fn init(self: *Window, app: *App) !void {
     }
 
     // Setup our toast overlay if we have one
-    self.toast_overlay = if (adwaita.enabled(&self.app.config)) toast: {
+    self.toast_overlay = if (self.cfg.static.adwaita_enabled) toast: {
         const toast_overlay = c.adw_toast_overlay_new();
         c.adw_toast_overlay_set_child(
             @ptrCast(toast_overlay),
@@ -308,10 +347,10 @@ pub fn init(self: *Window, app: *App) !void {
     c.gtk_widget_set_halign(self.context_menu, c.GTK_ALIGN_START);
 
     // If we want the window to be maximized, we do that here.
-    if (app.config.maximize) c.gtk_window_maximize(self.window);
+    if (self.cfg.static.maximize) c.gtk_window_maximize(self.window);
 
     // If we are in fullscreen mode, new windows start fullscreen.
-    if (app.config.fullscreen) c.gtk_window_fullscreen(self.window);
+    if (self.cfg.static.fullscreen) c.gtk_window_fullscreen(self.window);
 
     // We register a key event controller with the window so
     // we can catch key events when our surface may not be
@@ -330,19 +369,19 @@ pub fn init(self: *Window, app: *App) !void {
     // Our actions for the menu
     initActions(self);
 
-    if ((comptime adwaita.versionAtLeast(1, 4, 0)) and adwaita.versionAtLeast(1, 4, 0) and adwaita.enabled(&self.app.config)) {
+    if ((comptime adwaita.versionAtLeast(1, 4, 0)) and adwaita.versionAtLeast(1, 4, 0) and self.cfg.static.adwaita_enabled) {
         const toolbar_view: *c.AdwToolbarView = @ptrCast(c.adw_toolbar_view_new());
 
         c.adw_toolbar_view_add_top_bar(toolbar_view, self.headerbar.asWidget());
 
-        if (self.app.config.@"gtk-tabs-location" != .hidden) {
+        if (self.cfg.static.gtk_tabs_location != .hidden) {
             const tab_bar = c.adw_tab_bar_new();
             c.adw_tab_bar_set_view(tab_bar, self.notebook.adw.tab_view);
 
-            if (!app.config.@"gtk-wide-tabs") c.adw_tab_bar_set_expand_tabs(tab_bar, 0);
+            if (!self.cfg.static.gtk_wide_tabs) c.adw_tab_bar_set_expand_tabs(tab_bar, 0);
 
             const tab_bar_widget: *c.GtkWidget = @ptrCast(@alignCast(tab_bar));
-            switch (self.app.config.@"gtk-tabs-location") {
+            switch (self.cfg.static.gtk_tabs_location) {
                 // left and right are not supported in libadwaita.
                 .top, .left, .right => c.adw_toolbar_view_add_top_bar(toolbar_view, tab_bar_widget),
                 .bottom => c.adw_toolbar_view_add_bottom_bar(toolbar_view, tab_bar_widget),
@@ -351,7 +390,7 @@ pub fn init(self: *Window, app: *App) !void {
         }
         c.adw_toolbar_view_set_content(toolbar_view, box);
 
-        const toolbar_style: c.AdwToolbarStyle = switch (self.app.config.@"adw-toolbar-style") {
+        const toolbar_style: c.AdwToolbarStyle = switch (self.cfg.static.adw_toolbar_style) {
             .flat => c.ADW_TOOLBAR_FLAT,
             .raised => c.ADW_TOOLBAR_RAISED,
             .@"raised-border" => c.ADW_TOOLBAR_RAISED_BORDER,
@@ -371,12 +410,12 @@ pub fn init(self: *Window, app: *App) !void {
     } else tab_bar: {
         switch (self.notebook) {
             .adw => |*adw| if (comptime adwaita.versionAtLeast(0, 0, 0)) {
-                if (app.config.@"gtk-tabs-location" == .hidden) break :tab_bar;
+                if (self.cfg.static.gtk_tabs_location == .hidden) break :tab_bar;
                 // In earlier adwaita versions, we need to add the tabbar manually since we do not use
                 // an AdwToolbarView.
                 const tab_bar: *c.AdwTabBar = c.adw_tab_bar_new().?;
                 c.gtk_widget_add_css_class(@ptrCast(@alignCast(tab_bar)), "inline");
-                switch (app.config.@"gtk-tabs-location") {
+                switch (self.cfg.static.gtk_tabs_location) {
                     .top,
                     .left,
                     .right,
@@ -393,14 +432,14 @@ pub fn init(self: *Window, app: *App) !void {
                 }
                 c.adw_tab_bar_set_view(tab_bar, adw.tab_view);
 
-                if (!app.config.@"gtk-wide-tabs") c.adw_tab_bar_set_expand_tabs(tab_bar, 0);
+                if (!self.cfg.static.gtk_wide_tabs) c.adw_tab_bar_set_expand_tabs(tab_bar, 0);
             },
 
             .gtk => {},
         }
 
         // The box is our main child
-        if (!adwaita.versionAtLeast(1, 4, 0) and adwaita.enabled(&self.app.config)) {
+        if (!adwaita.versionAtLeast(1, 4, 0) and self.cfg.static.adwaita_enabled) {
             c.adw_application_window_set_content(
                 @ptrCast(gtk_window),
                 box,
@@ -435,7 +474,7 @@ pub fn syncAppearance(self: *Window) void {
     toggleCssClass(
         @ptrCast(self.window),
         "background",
-        self.cfg.background_opacity >= 1,
+        self.cfg.dynamic.background_opacity >= 1,
     );
 
     // If we are disabling CSDs then disable them right away.
@@ -443,14 +482,12 @@ pub fn syncAppearance(self: *Window) void {
     c.gtk_window_set_decorated(self.window, @intFromBool(csd_enabled));
 
     // If we are not decorated then we hide the titlebar.
-    self.headerbar.setVisible(self.cfg.gtk_titlebar and csd_enabled);
+    self.headerbar.setVisible(self.cfg.dynamic.gtk_titlebar and csd_enabled);
 
     // Disable the title buttons (close, maximize, minimize, ...)
     // *inside* the tab overview if CSDs are disabled.
     // We do spare the search button, though.
-    if ((comptime adwaita.versionAtLeast(1, 4, 0)) and
-        self.cfg.adwaita_enabled)
-    {
+    if (self.app.adwaitaEnabled(1, 4, 0)) {
         if (self.tab_overview) |tab_overview| {
             c.adw_tab_overview_set_show_start_title_buttons(
                 @ptrCast(tab_overview),
@@ -656,7 +693,7 @@ fn gtkRealize(v: *c.GtkWindow, ud: ?*anyopaque) callconv(.C) bool {
         self.app.core_app.alloc,
         &self.app.winproto,
         v,
-        &self.app.config,
+        &self.app._config,
     )) |winproto_win| {
         self.winproto = winproto_win;
     } else |err| {
@@ -684,12 +721,12 @@ fn gtkWindowNotifyMaximized(
     // if it was originally visible.
     const maximized = c.gtk_window_is_maximized(self.window) != 0;
     if (!maximized) {
-        self.headerbar.setVisible(self.app.config.@"gtk-titlebar");
+        self.headerbar.setVisible(self.cfg.dynamic.gtk_titlebar);
         return;
     }
 
     // If we are maximized, we should hide the headerbar if requested.
-    if (self.app.config.@"gtk-titlebar-hide-when-maximized") {
+    if (self.cfg.dynamic.gtk_titlebar_hide_when_maximized) {
         self.headerbar.setVisible(false);
     }
 }
@@ -718,7 +755,7 @@ fn gtkWindowNotifyFullscreened(
     const fullscreened = c.gtk_window_is_fullscreen(@ptrCast(object)) != 0;
     if (!fullscreened) {
         const csd_enabled = self.winproto.clientSideDecorationEnabled();
-        self.headerbar.setVisible(self.app.config.@"gtk-titlebar" and csd_enabled);
+        self.headerbar.setVisible(self.cfg.dynamic.gtk_titlebar and csd_enabled);
         return;
     }
 
@@ -740,7 +777,7 @@ fn gtkTabNewClick(_: *c.GtkButton, ud: ?*anyopaque) callconv(.C) void {
 /// because we need to return an AdwTabPage from this function.
 fn gtkNewTabFromOverview(_: *c.GtkWidget, ud: ?*anyopaque) callconv(.C) ?*c.AdwTabPage {
     const self: *Window = userdataSelf(ud.?);
-    assert((comptime adwaita.versionAtLeast(1, 4, 0)) and adwaita.versionAtLeast(1, 4, 0) and adwaita.enabled(&self.app.config));
+    assert(self.app.adwaitaEnabled(1, 4, 0));
 
     const alloc = self.app.core_app.alloc;
     const surface = self.actionSurface();

@@ -28,12 +28,12 @@ pub const NotebookAdw = struct {
     pub fn init(notebook: *Notebook) void {
         const window: *Window = @fieldParentPtr("notebook", notebook);
         const app = window.app;
-        assert(adwaita.enabled(&app.config));
+        assert(app.adwaitaEnabled(0, 0, 0));
 
         const tab_view: *c.AdwTabView = c.adw_tab_view_new().?;
         c.gtk_widget_add_css_class(@ptrCast(@alignCast(tab_view)), "notebook");
 
-        if (comptime adwaita.versionAtLeast(1, 2, 0) and adwaita.versionAtLeast(1, 2, 0)) {
+        if (adwaita.versionAtLeast(1, 2, 0)) {
             // Adwaita enables all of the shortcuts by default.
             // We want to manage keybindings ourselves.
             c.adw_tab_view_remove_shortcuts(tab_view, c.ADW_TAB_VIEW_SHORTCUT_ALL_SHORTCUTS);

@@ -13,7 +13,7 @@ pub const HeaderBar = union(enum) {
 
     pub fn init(self: *HeaderBar) void {
         const window: *Window = @fieldParentPtr("headerbar", self);
-        if ((comptime adwaita.versionAtLeast(1, 4, 0)) and adwaita.enabled(&window.app.config)) {
+        if (window.app.adwaitaEnabled(1, 4, 0)) {
             HeaderBarAdw.init(self);
         } else {
             HeaderBarGtk.init(self);

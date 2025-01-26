@@ -65,7 +65,7 @@ pub fn init(app: *App) ![]const u8 {
     // of "max" because it's a soft limit that can be exceeded and
     // can be monitored by things like systemd-oomd to kill if needed,
     // versus an instant hard kill.
-    if (app.config.@"linux-cgroup-memory-limit") |limit| {
+    if (app.cfg.static.linux_cgroup_memory_limit) |limit| {
         try internal_os.cgroup.configureLimit(surfaces, .{
             .memory_high = limit,
         });
@@ -73,7 +73,7 @@ pub fn init(app: *App) ![]const u8 {
 
     // Configure the "max" pids limit. This is a hard limit and cannot be
     // exceeded.
-    if (app.config.@"linux-cgroup-processes-limit") |limit| {
+    if (app.cfg.static.linux_cgroup_processes_limit) |limit| {
         try internal_os.cgroup.configureLimit(surfaces, .{
             .pids_max = limit,
         });

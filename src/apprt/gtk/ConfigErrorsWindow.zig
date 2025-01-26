@@ -29,12 +29,12 @@ pub fn create(app: *App) !void {
 }
 
 pub fn update(self: *ConfigErrors) void {
-    if (self.app.config._diagnostics.empty()) {
+    if (self.app._config._diagnostics.empty()) {
         c.gtk_window_destroy(@ptrCast(self.window));
         return;
     }
 
-    self.view.update(&self.app.config);
+    self.view.update(&self.app._config);
     _ = c.gtk_window_present(self.window);
     _ = c.gtk_widget_grab_focus(@ptrCast(self.window));
 }
@@ -93,7 +93,7 @@ const PrimaryView = struct {
                 "the configuration. Please review the errors below and reload " ++
                 "your configuration or ignore the erroneous lines.",
         );
-        const buf = contentsBuffer(&root.app.config);
+        const buf = contentsBuffer(&root.app._config);
         defer c.g_object_unref(buf);
         const buttons = try ButtonsView.init(root);
         const text_scroll = c.gtk_scrolled_window_new();

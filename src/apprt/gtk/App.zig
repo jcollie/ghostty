@@ -44,7 +44,7 @@ const log = std.log.scoped(.gtk);
 pub const Options = struct {};
 
 core_app: *CoreApp,
-config: Config,
+_config: Config,
 
 app: *c.GtkApplication,
 ctx: *c.GMainContext,
@@ -96,7 +96,109 @@ quit_timer: union(enum) {
     expired: void,
 } = .{ .off = {} },
 
-pub fn init(core_app: *CoreApp, opts: Options) !App {
+cfg: DerivedConfig,
+
+// copy of configurations necessary to for the operation of the
+// surface.
+
+pub const DerivedConfig = struct {
+    static: struct {
+        // these options should not be refreshed
+        linux_cgroup: configpkg.LinuxCgroup,
+        linux_cgroup_hard_fail: bool,
+        linux_cgroup_memory_limit: ?u64,
+        linux_cgroup_processes_limit: ?u64,
+
+        pub fn init(self: *@This(), _: Allocator, config: *const configpkg.Config) void {
+            self.* = .{
+                .linux_cgroup = config.@"linux-cgroup",
+                .linux_cgroup_hard_fail = config.@"linux-cgroup-hard-fail",
+                .linux_cgroup_memory_limit = config.@"linux-cgroup-memory-limit",
+                .linux_cgroup_processes_limit = config.@"linux-cgroup-processes-limit",
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            _ = self;
+        }
+    },
+
+    dynamic: struct {
+        // these options should be refreshed
+        gtk_custom_css: configpkg.RepeatablePath,
+        headerbar_background: Config.Color,
+        headerbar_foreground: Config.Color,
+        quit_after_last_window_closed: bool,
+        quit_after_last_window_closed_delay: ?configpkg.Duration,
+        split_divider_color: ?Config.Color,
+        unfocused_fill: Config.Color,
+        unfocused_split_opacity: f64,
+        window_theme: Config.WindowTheme,
+        window_title_font_family: ?[]const u8,
+
+        _arena: std.heap.ArenaAllocator,
+
+        pub fn init(self: *@This(), alloc: Allocator, config: *const configpkg.Config) Allocator.Error!void {
+            var arena = std.heap.ArenaAllocator.init(alloc);
+            const arena_alloc = arena.allocator();
+
+            self.* = .{
+                .gtk_custom_css = try config.@"gtk-custom-css".clone(arena_alloc),
+                .headerbar_background = config.@"window-titlebar-background" orelse config.background,
+                .headerbar_foreground = config.@"window-titlebar-foreground" orelse config.foreground,
+                .quit_after_last_window_closed = config.@"quit-after-last-window-closed",
+                .quit_after_last_window_closed_delay = config.@"quit-after-last-window-closed-delay",
+                .split_divider_color = config.@"split-divider-color",
+                .unfocused_fill = config.@"unfocused-split-fill" orelse config.background,
+                .unfocused_split_opacity = config.@"unfocused-split-opacity",
+                .window_theme = config.@"window-theme",
+                .window_title_font_family = if (config.@"window-title-font-family") |family| try arena_alloc.dupe(u8, family) else null,
+
+                ._arena = arena,
+            };
+        }
+
+        pub fn updateConfig(self: *@This(), config: *const configpkg.Config) void {
+            const alloc = self._arena.child_allocator;
+
+            self.deinit();
+            self.init(alloc, config);
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self._arena.deinit();
+            self.* = undefined;
+        }
+    },
+
+    pub fn init(self: *DerivedConfig, alloc: Allocator, config: *const configpkg.Config) Allocator.Error!void {
+        self.static.init(alloc, config);
+        try self.dynamic.init(alloc, config);
+    }
+
+    pub fn updateConfig(self: *DerivedConfig, config: *const configpkg.Config) void {
+        const app: *App = @fieldParentPtr("cfg", self);
+
+        self.dynamic.updateConfig(config);
+
+        app.winproto.updateConfigEvent(config) catch |err| {
+            // We want to continue attempting to make the other config
+            // changes necessary so we just log the error and continue.
+            log.warn("failed to update window protocol config error={}", .{err});
+        };
+
+        // window.syncAppearance();
+    }
+
+    pub fn deinit(self: *DerivedConfig) void {
+        self.static.deinit();
+        self.dynamic.deinit();
+    }
+};
+
+/// Initialize the GTK app. `self` must be a stable pointer to an uninitialzed
+/// `App` struct so that we can refer to it in other locations.
+pub fn init(self: *App, core_app: *CoreApp, opts: Options) !void {
     _ = opts;
 
     // Log our GTK version
@@ -460,10 +562,11 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
         c.GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 3,
     );
 
-    return .{
+    self.* = .{
+        .cfg = undefined,
         .core_app = core_app,
         .app = app,
-        .config = config,
+        ._config = config,
         .ctx = ctx,
         .cursor_none = cursor_none,
         .winproto = winproto_app,
@@ -474,6 +577,17 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
         .running = c.g_application_get_is_remote(gapp) == 0,
         .css_provider = css_provider,
     };
+
+    try self.cfg.init(core_app.alloc, &self._config);
+}
+
+pub inline fn adwaitaEnabled(
+    self: *App,
+    comptime major: u16,
+    comptime minor: u16,
+    comptime micro: u16,
+) bool {
+    return adwaita.versionAtLeast(major, minor, micro) and adwaita.enabled(&self._config);
 }
 
 // Terminate the application. The application will not be restarted after
@@ -496,7 +610,8 @@ pub fn terminate(self: *App) void {
 
     self.winproto.deinit(self.core_app.alloc);
 
-    self.config.deinit();
+    self.cfg.deinit();
+    self._config.deinit();
 }
 
 /// Perform a given action.
@@ -938,6 +1053,7 @@ fn configChange(
 ) void {
     switch (target) {
         .surface => |surface| surface: {
+            surface.updateConfig(original: *const configpkg.Config)
             const window = surface.rt_surface.container.window() orelse break :surface;
             window.updateConfig(new_config) catch |err| {
                 log.warn("error updating config for window err={}", .{err});
@@ -947,8 +1063,8 @@ fn configChange(
         .app => {
             // We clone (to take ownership) and update our configuration.
             if (new_config.clone(self.core_app.alloc)) |config_clone| {
-                self.config.deinit();
-                self.config = config_clone;
+                self._config.deinit();
+                self._config = config_clone;
             } else |err| {
                 log.warn("error cloning configuration err={}", .{err});
             }
@@ -959,7 +1075,7 @@ fn configChange(
 
             // App changes needs to show a toast that our configuration
             // has reloaded.
-            if (adwaita.enabled(&self.config)) {
+            if (self.adwaitaEnabled(0, 0, 0)) {
                 if (self.core_app.focusedSurface()) |core_surface| {
                     const surface = core_surface.rt_surface;
                     if (surface.container.window()) |window| window.onConfigReloaded();
@@ -976,9 +1092,9 @@ pub fn reloadConfig(
 ) !void {
     if (opts.soft) {
         switch (target) {
-            .app => try self.core_app.updateConfig(self, &self.config),
+            .app => try self.core_app.updateConfig(self, &self._config),
             .surface => |core_surface| try core_surface.updateConfig(
-                &self.config,
+                &self._config,
             ),
         }
         return;
@@ -995,8 +1111,8 @@ pub fn reloadConfig(
     }
 
     // Update the existing config, be sure to clean up the old one.
-    self.config.deinit();
-    self.config = config;
+    self._config.deinit();
+    self._config = config;
 }
 
 /// Call this anytime the configuration changes.
@@ -1022,7 +1138,7 @@ fn syncConfigChanges(self: *App) !void {
 /// there are new configuration errors and hide the window if the errors
 /// are resolved.
 fn updateConfigErrors(self: *App) !void {
-    if (!self.config._diagnostics.empty()) {
+    if (!self._config._diagnostics.empty()) {
         if (self.config_errors_window == null) {
             try ConfigErrorsWindow.create(self);
             assert(self.config_errors_window != null);
@@ -1060,7 +1176,7 @@ fn syncActionAccelerator(
     const zero = [_]?[*:0]const u8{null};
     c.gtk_application_set_accels_for_action(@ptrCast(self.app), gtk_action.ptr, &zero);
 
-    const trigger = self.config.keybind.set.getTrigger(action) orelse return;
+    const trigger = self._config.keybind.set.getTrigger(action) orelse return;
     var buf: [256]u8 = undefined;
     const accel = try key.accelFromTrigger(&buf, trigger) orelse return;
     const accels = [_]?[*:0]const u8{ accel, null };
@@ -1080,11 +1196,10 @@ fn loadRuntimeCss(
     defer buf.deinit();
     const writer = buf.writer();
 
-    const config: *const Config = &self.config;
-    const window_theme = config.@"window-theme";
-    const unfocused_fill: Config.Color = config.@"unfocused-split-fill" orelse config.background;
-    const headerbar_background = config.@"window-titlebar-background" orelse config.background;
-    const headerbar_foreground = config.@"window-titlebar-foreground" orelse config.foreground;
+    const window_theme = self.cfg.dynamic.window_theme;
+    const unfocused_fill = self.cfg.dynamic.unfocused_fill;
+    const headerbar_background = self.cfg.dynamic.headerbar_background;
+    const headerbar_foreground = self.cfg.dynamic.headerbar_foreground;
 
     try writer.print(
         \\widget.unfocused-split {{
@@ -1092,13 +1207,13 @@ fn loadRuntimeCss(
         \\ background-color: rgb({d},{d},{d});
         \\}}
     , .{
-        1.0 - config.@"unfocused-split-opacity",
+        1.0 - self.cfg.dynamic.unfocused_split_opacity,
         unfocused_fill.r,
         unfocused_fill.g,
         unfocused_fill.b,
     });
 
-    if (config.@"split-divider-color") |color| {
+    if (self.cfg.dynamic.split_divider_color) |color| {
         try writer.print(
             \\.terminal-window .notebook separator {{
             \\  color: rgb({[r]d},{[g]d},{[b]d});
@@ -1111,7 +1226,7 @@ fn loadRuntimeCss(
         });
     }
 
-    if (config.@"window-title-font-family") |font_family| {
+    if (self.cfg.dynamic.window_title_font_family) |font_family| {
         try writer.print(
             \\.window headerbar {{
             \\  font-family: "{[font_family]s}";
@@ -1187,7 +1302,7 @@ fn loadCustomCss(self: *App) !void {
     }
     self.custom_css_providers.clearRetainingCapacity();
 
-    for (self.config.@"gtk-custom-css".value.items) |p| {
+    for (self.cfg.dynamic.gtk_custom_css.value.items) |p| {
         const path, const optional = switch (p) {
             .optional => |path| .{ path, true },
             .required => |path| .{ path, false },
@@ -1239,6 +1354,8 @@ pub fn wakeup(self: App) void {
     c.g_main_context_wakeup(null);
 }
 
+pub const RunError = error{CgroupInitFailed};
+
 /// Run the event loop. This doesn't return until the app exits.
 pub fn run(self: *App) !void {
     // Running will be false when we're not the primary instance and should
@@ -1249,7 +1366,7 @@ pub fn run(self: *App) !void {
     // If we are running, then we proceed to setup our app.
 
     // Setup our cgroup configurations for our surfaces.
-    if (switch (self.config.@"linux-cgroup") {
+    if (switch (self.cfg.static.linux_cgroup) {
         .never => false,
         .always => true,
         .@"single-instance" => self.single_instance,
@@ -1264,7 +1381,7 @@ pub fn run(self: *App) !void {
             );
 
             // If we have hard fail enabled then we exit now.
-            if (self.config.@"linux-cgroup-hard-fail") {
+            if (self.cfg.static.linux_cgroup_hard_fail) {
                 log.err("linux-cgroup-hard-fail enabled, exiting", .{});
                 return error.CgroupInitFailed;
             }
@@ -1274,7 +1391,7 @@ pub fn run(self: *App) !void {
 
         log.info("cgroup isolation enabled base={s}", .{path});
         self.transient_cgroup_base = path;
-    } else log.debug("cgroup isolation disabled config={}", .{self.config.@"linux-cgroup"});
+    } else log.debug("cgroup isolation disabled config={}", .{self.cfg.static.linux_cgroup});
 
     // Setup our D-Bus connection for listening to settings changes,
     // and asynchronously request the initial color scheme
@@ -1301,7 +1418,7 @@ pub fn run(self: *App) !void {
         // Check if we must quit based on the current state.
         const must_quit = q: {
             // If we are configured to always stay running, don't quit.
-            if (!self.config.@"quit-after-last-window-closed") break :q false;
+            if (!self.cfg.dynamic.quit_after_last_window_closed) break :q false;
 
             // If the quit timer has expired, quit.
             if (self.quit_timer == .expired) break :q true;
@@ -1364,9 +1481,9 @@ fn startQuitTimer(self: *App) void {
     self.stopQuitTimer();
 
     // This is a no-op unless we are configured to quit after last window is closed.
-    if (!self.config.@"quit-after-last-window-closed") return;
+    if (!self.cfg.quit_after_last_window_closed) return;
 
-    if (self.config.@"quit-after-last-window-closed-delay") |v| {
+    if (self.cfg.quit_after_last_window_closed_delay) |v| {
         // If a delay is configured, set a timeout function to quit after the delay.
         self.quit_timer = .{ .active = c.g_timeout_add(v.asMilliseconds(), gtkQuitTimerExpired, self) };
     } else {

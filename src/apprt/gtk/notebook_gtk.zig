@@ -16,14 +16,13 @@ pub const NotebookGtk = struct {
 
     pub fn init(notebook: *Notebook) void {
         const window: *Window = @fieldParentPtr("notebook", notebook);
-        const app = window.app;
 
         // Create a notebook to hold our tabs.
         const notebook_widget: *c.GtkWidget = c.gtk_notebook_new();
         c.gtk_widget_add_css_class(notebook_widget, "notebook");
 
         const gtk_notebook: *c.GtkNotebook = @ptrCast(notebook_widget);
-        const notebook_tab_pos: c_uint = switch (app.config.@"gtk-tabs-location") {
+        const notebook_tab_pos: c_uint = switch (window.cfg.static.gtk_tabs_location) {
             .top, .hidden => c.GTK_POS_TOP,
             .bottom => c.GTK_POS_BOTTOM,
             .left => c.GTK_POS_LEFT,

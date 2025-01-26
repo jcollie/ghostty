@@ -20,6 +20,7 @@ const App = @import("App.zig");
 const Split = @import("Split.zig");
 const Tab = @import("Tab.zig");
 const Window = @import("Window.zig");
+const Config = configpkg.Config;
 const ClipboardConfirmationWindow = @import("ClipboardConfirmationWindow.zig");
 const ResizeOverlay = @import("ResizeOverlay.zig");
 const inspector = @import("inspector.zig");
@@ -393,7 +394,7 @@ pub const InitConfig = struct {
     ) Allocator.Error!InitConfig {
         const parent = opts.parent orelse return .{};
 
-        const pwd: ?[]const u8 = if (app.config.@"window-inherit-working-directory")
+        const pwd: ?[]const u8 = if (app._config.@"window-inherit-working-directory")
             try parent.pwd(alloc)
         else
             null;
@@ -414,18 +415,48 @@ pub const InitConfig = struct {
 // surface.
 
 pub const DerivedConfig = struct {
+    static: struct {
+        pub fn init(self: *@This(), config: *const configpkg.Config) void {
+            _ = self;
+            _ = config;
+        }
+
+        pub fn deinit(self: *@This()) void {
+            _ = self;
+        }
+    },
+
+    dynamic: struct {
+        resize_overlay: Config.ResizeOverlay,
+
+        pub fn init(self: *@This(), config: *const configpkg.Config) void {
+            self.* = .{
+                .resize_overlay = config.@"resize-overlay",
+            };
+        }
+
+        pub fn updateConfig(self: *@This(), config: *const configpkg.Config) void {
+            self.deinit();
+            self.init(config);
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.* = undefined;
+        }
+    },
+
     pub fn init(self: *DerivedConfig, config: *const configpkg.Config) void {
-        _ = self;
-        _ = config;
+        self.static.init(config);
+        self.dynamic.init(config);
     }
 
-    pub fn reconfigure(self: *DerivedConfig, config: *const configpkg.Config) void {
-        _ = self;
-        _ = config;
+    pub fn updateConfig(self: *DerivedConfig, config: *const configpkg.Config) void {
+        self.dynamic.updateConfig(config);
     }
 
     pub fn deinit(self: *DerivedConfig) void {
-        _ = self;
+        self.static.deinit();
+        self.dynamic.deinit();
     }
 };
 
@@ -437,7 +468,7 @@ pub fn create(alloc: Allocator, app: *App, opts: Options) !*Surface {
 }
 
 pub fn init(self: *Surface, app: *App, opts: Options) !void {
-    self.cfg.init(&app.config);
+    self.cfg.init(&app._config);
 
     const gl_area = c.gtk_gl_area_new();
 
@@ -531,7 +562,7 @@ pub fn init(self: *Surface, app: *App, opts: Options) !void {
 
     // Inherit the parent's font size if we have a parent.
     const font_size: ?font.face.DesiredSize = font_size: {
-        if (!app.config.@"window-inherit-font-size") break :font_size null;
+        if (!app._config.@"window-inherit-font-size") break :font_size null;
         const parent = opts.parent orelse break :font_size null;
         break :font_size parent.font_size;
     };
@@ -630,7 +661,7 @@ fn realize(self: *Surface) !void {
     errdefer self.app.core_app.deleteSurface(self);
 
     // Get our new surface config
-    var config = try apprt.surface.newConfig(self.app.core_app, &self.app.config);
+    var config = try apprt.surface.newConfig(self.app.core_app, &self.app._config);
     defer config.deinit();
 
     if (self.init_config.pwd) |pwd| {
@@ -638,7 +669,7 @@ fn realize(self: *Surface) !void {
         config.@"working-directory" = pwd;
     } else if (!self.init_config.parent) {
         // A hack, see the "parent_surface" field for more information.
-        config.@"working-directory" = self.app.config.@"working-directory";
+        config.@"working-directory" = self.app._config.@"working-directory";
     }
 
     // Initialize our surface now that we have the stable pointer.
@@ -997,7 +1028,7 @@ pub fn setPwd(self: *Surface, pwd: [:0]const u8) !void {
 
         if (tab.focus_child == self) {
             if (self.container.window()) |window| {
-                if (self.app.config.@"window-subtitle" == .@"working-directory") window.setSubtitle(pwd);
+                if (self.app._config.@"window-subtitle" == .@"working-directory") window.setSubtitle(pwd);
             }
         }
     }
@@ -1156,7 +1187,7 @@ pub fn setClipboardString(
         c.gdk_clipboard_set_text(clipboard, val.ptr);
         // We only toast if we are copying to the standard clipboard.
         if (clipboard_type == .standard and
-            self.app.config.@"app-notifications".@"clipboard-copy")
+            self.app._config.@"app-notifications".@"clipboard-copy")
         {
             if (self.container.window()) |window|
                 window.sendToast("Copied to clipboard");
@@ -1528,7 +1559,7 @@ fn gtkMouseMotion(
     if (!is_cursor_still) {
         // If we don't have focus, and we want it, grab it.
         const gl_widget = @as(*c.GtkWidget, @ptrCast(self.gl_area));
-        if (c.gtk_widget_has_focus(gl_widget) == 0 and self.app.config.@"focus-follows-mouse") {
+        if (c.gtk_widget_has_focus(gl_widget) == 0 and self.app._config.@"focus-follows-mouse") {
             self.grabFocus();
         }
 
@@ -2018,7 +2049,7 @@ fn gtkFocusEnter(_: *c.GtkEventControllerFocus, ud: ?*anyopaque) callconv(.C) vo
 
     if (self.pwd) |pwd| {
         if (self.container.window()) |window| {
-            if (self.app.config.@"window-subtitle" == .@"working-directory") window.setSubtitle(pwd);
+            if (self.app._config.@"window-subtitle" == .@"working-directory") window.setSubtitle(pwd);
         }
     }
 
