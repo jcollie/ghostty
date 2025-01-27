@@ -7,6 +7,8 @@ const Tab = @import("Tab.zig");
 const Notebook = @import("notebook.zig").Notebook;
 const createWindow = @import("notebook.zig").createWindow;
 const adwaita = @import("adwaita.zig");
+const Builder = @import("Builder.zig");
+const RenameTabAdw = if (adwaita.versionAtLeast(0, 0, 0)) @import("RenameTabAdw.zig") else struct {};
 
 const log = std.log.scoped(.gtk);
 
@@ -14,7 +16,7 @@ const AdwTabView = if (adwaita.versionAtLeast(0, 0, 0)) c.AdwTabView else anyopa
 const AdwTabPage = if (adwaita.versionAtLeast(0, 0, 0)) c.AdwTabPage else anyopaque;
 
 pub const NotebookAdw = struct {
-    /// the window
+    /// The window that we belong to
     window: *Window,
 
     /// the tab view
@@ -28,10 +30,14 @@ pub const NotebookAdw = struct {
     /// confirming or not.
     forcing_close: bool = false,
 
-    /// last tab
-    last_tab: ?*Tab = null,
+    /// The last tab that was selected with the "setup-menu" signal.
+    last_setup_menu_tab: ?*Tab = null,
+
+    /// rename tab window
+    rename_tab: RenameTabAdw = .{},
 
     pub fn init(notebook: *Notebook) void {
+        if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
         const window: *Window = @fieldParentPtr("notebook", notebook);
         const app = window.app;
         assert(adwaita.enabled(&app.config));
@@ -39,11 +45,16 @@ pub const NotebookAdw = struct {
         const tab_view: *c.AdwTabView = c.adw_tab_view_new().?;
         c.gtk_widget_add_css_class(@ptrCast(@alignCast(tab_view)), "notebook");
 
-        if (comptime adwaita.versionAtLeast(1, 2, 0) and adwaita.versionAtLeast(1, 2, 0)) {
+        if (adwaita.versionAtLeast(1, 2, 0)) {
             // Adwaita enables all of the shortcuts by default.
             // We want to manage keybindings ourselves.
             c.adw_tab_view_remove_shortcuts(tab_view, c.ADW_TAB_VIEW_SHORTCUT_ALL_SHORTCUTS);
         }
+
+        const builder = Builder.init("menu-adw-notebook-tab");
+        defer builder.deinit();
+
+        c.adw_tab_view_set_menu_model(tab_view, builder.getObject(c.GMenuModel, "menu"));
 
         notebook.* = .{
             .adw = .{
@@ -53,7 +64,6 @@ pub const NotebookAdw = struct {
         };
 
         const self = &notebook.adw;
-        self.initContextMenu(window);
 
         _ = c.g_signal_connect_data(tab_view, "create-window", c.G_CALLBACK(&adwTabViewCreateWindow), self, null, c.G_CONNECT_DEFAULT);
         _ = c.g_signal_connect_data(tab_view, "close-page", c.G_CALLBACK(&adwTabPageClosePage), self, null, c.G_CONNECT_DEFAULT);
@@ -64,57 +74,19 @@ pub const NotebookAdw = struct {
         _ = c.g_signal_connect_data(tab_view, "notify::selected-page", c.G_CALLBACK(&adwTabViewSelectPage), self, null, c.G_CONNECT_DEFAULT);
     }
 
-    pub fn initContextMenu(self: *NotebookAdw, window: *Window) void {
-        {
-            var buf: [32]u8 = undefined;
-            const action_name = std.fmt.bufPrintZ(
-                &buf,
-                "close-tab-{x:8>0}",
-                .{@intFromPtr(self)},
-            ) catch unreachable;
-
-            const action = c.g_simple_action_new(action_name, null);
-            defer c.g_object_unref(action);
-            _ = c.g_signal_connect_data(
-                action,
-                "activate",
-                c.G_CALLBACK(&adwTabViewCloseTab),
-                self,
-                null,
-                c.G_CONNECT_DEFAULT,
-            );
-            c.g_action_map_add_action(@ptrCast(window.window), @ptrCast(action));
-        }
-
-        const menu = c.g_menu_new();
-        errdefer c.g_object_unref(menu);
-
-        {
-            var buf: [32]u8 = undefined;
-            const action_name = std.fmt.bufPrintZ(
-                &buf,
-                "win.close-tab-{x:8>0}",
-                .{@intFromPtr(self)},
-            ) catch unreachable;
-
-            const section = c.g_menu_new();
-            defer c.g_object_unref(section);
-            c.g_menu_append_section(menu, null, @ptrCast(@alignCast(section)));
-            c.g_menu_append(section, "Close Tab", action_name);
-        }
-
-        c.adw_tab_view_set_menu_model(self.tab_view, @ptrCast(@alignCast(menu)));
+    pub fn deinit(self: *NotebookAdw) void {
+        if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
+        self.rename_tab.deinit();
     }
 
     pub fn asWidget(self: *NotebookAdw) *c.GtkWidget {
+        if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
         return @ptrCast(@alignCast(self.tab_view));
     }
 
     pub fn nPages(self: *NotebookAdw) c_int {
-        if (comptime adwaita.versionAtLeast(0, 0, 0))
-            return c.adw_tab_view_get_n_pages(self.tab_view)
-        else
-            unreachable;
+        if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
+        return c.adw_tab_view_get_n_pages(self.tab_view);
     }
 
     /// Returns the index of the currently selected page.
@@ -153,7 +125,7 @@ pub const NotebookAdw = struct {
         _ = c.adw_tab_view_reorder_page(self.tab_view, page, position);
     }
 
-    pub fn setTabLabel(self: *NotebookAdw, tab: *Tab, title: [:0]const u8) void {
+    pub fn setTabTitle(self: *NotebookAdw, tab: *Tab, title: [:0]const u8) void {
         if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
         const page = c.adw_tab_view_get_page(self.tab_view, @ptrCast(tab.box));
         c.adw_tab_page_set_title(page, title.ptr);
@@ -232,10 +204,17 @@ pub const NotebookAdw = struct {
             }
         }
     }
+
+    pub fn showRenameTab(self: *NotebookAdw) void {
+        if (comptime !adwaita.versionAtLeast(0, 0, 0)) unreachable;
+        const tab = self.last_setup_menu_tab orelse return;
+        assert(tab.window == self.window);
+        self.rename_tab.show(tab);
+    }
 };
 
 fn adwTabViewPageAttached(_: *AdwTabView, page: *c.AdwTabPage, _: c_int, ud: ?*anyopaque) callconv(.C) void {
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud orelse return));
 
     const child = c.adw_tab_page_get_child(page);
     const tab: *Tab = @ptrCast(@alignCast(c.g_object_get_data(@ptrCast(child), Tab.GHOSTTY_TAB) orelse return));
@@ -260,13 +239,14 @@ fn adwTabPageClosePage(
     page: *c.AdwTabPage,
     ud: ?*anyopaque,
 ) callconv(.C) c.gboolean {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud orelse return 0));
+
     const child = c.adw_tab_page_get_child(page);
     const tab: *Tab = @ptrCast(@alignCast(c.g_object_get_data(
         @ptrCast(child),
         Tab.GHOSTTY_TAB,
     ) orelse return 0));
 
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
     c.adw_tab_view_close_page_finish(
         self.tab_view,
         page,
@@ -280,7 +260,7 @@ fn adwTabViewCreateWindow(
     _: *AdwTabView,
     ud: ?*anyopaque,
 ) callconv(.C) ?*AdwTabView {
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud orelse return null));
     const window = createWindow(self.window) catch |err| {
         log.warn("error creating new window error={}", .{err});
         return null;
@@ -290,25 +270,22 @@ fn adwTabViewCreateWindow(
 }
 
 fn adwTabViewSelectPage(_: *c.GObject, _: *c.GParamSpec, ud: ?*anyopaque) void {
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud orelse return));
+
     const page = c.adw_tab_view_get_selected_page(self.tab_view) orelse return;
     const title = c.adw_tab_page_get_title(page);
     self.window.setTitle(std.mem.span(title));
 }
 
-fn adwTabViewSetupMenu(_: *AdwTabView, page: *AdwTabPage, ud: ?*anyopaque) callconv(.C) void {
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
-    self.last_tab = null;
+fn adwTabViewSetupMenu(tab_view: *AdwTabView, page: *AdwTabPage, ud: ?*anyopaque) callconv(.C) void {
+    const self: *NotebookAdw = @ptrCast(@alignCast(ud orelse return));
+
+    assert(self.tab_view == tab_view);
 
     const child = c.adw_tab_page_get_child(page);
     const tab: *Tab = @ptrCast(@alignCast(
         c.g_object_get_data(@ptrCast(child), Tab.GHOSTTY_TAB) orelse return,
     ));
 
-    self.last_tab = tab;
-}
-
-fn adwTabViewCloseTab(_: *c.GSimpleAction, _: *c.GVariant, ud: ?*anyopaque) callconv(.C) void {
-    const self: *NotebookAdw = @ptrCast(@alignCast(ud.?));
-    self.closeTab(self.last_tab orelse return);
+    self.last_setup_menu_tab = tab;
 }
