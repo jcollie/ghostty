@@ -366,7 +366,7 @@ jobs:
         run: nix develop -c zig build -Dapp-runtime=none test
 
       - name: Test GTK Build
-        run: nix develop -c zig build -Dapp-runtime=gtk -Dgtk-adwaita=true -Demit-docs
+        run: nix develop -c zig build -Dapp-runtime=gtk -Demit-docs
 
       - name: Test GLFW Build
         run: nix develop -c zig build -Dapp-runtime=glfw
@@ -379,10 +379,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        adwaita: ["true", "false"]
         x11: ["true", "false"]
         wayland: ["true", "false"]
-    name: GTK adwaita=${{ matrix.adwaita }} x11=${{ matrix.x11 }} wayland=${{ matrix.wayland }}
+    name: GTK x11=${{ matrix.x11 }} wayland=${{ matrix.wayland }}
     runs-on: namespace-profile-ghostty-sm
     needs: test
     env:
@@ -413,7 +412,6 @@ jobs:
           nix develop -c \
             zig build \
             -Dapp-runtime=gtk \
-            -Dgtk-adwaita=${{ matrix.adwaita }} \
             -Dgtk-x11=${{ matrix.x11 }} \
             -Dgtk-wayland=${{ matrix.wayland }}
 

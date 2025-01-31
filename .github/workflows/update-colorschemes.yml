@@ -55,7 +55,7 @@ jobs:
       # Verify the build still works. We choose an arbitrary build type
       # as a canary instead of testing all build types.
       - name: Test Build
-        run: nix develop -c zig build -Dapp-runtime=gtk -Dgtk-adwaita=true
+        run: nix develop -c zig build -Dapp-runtime=gtk
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
