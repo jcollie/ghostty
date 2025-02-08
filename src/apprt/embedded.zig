@@ -477,13 +477,14 @@ pub const App = struct {
         surface.queueInspectorRender();
     }
 
-    /// Perform a given action.
+    /// Perform a given action. Returns `true` if the action was able to be
+    /// performed, `false` otherwise.
     pub fn performAction(
         self: *App,
         target: apprt.Target,
         comptime action: apprt.Action.Key,
         value: apprt.Action.Value(action),
-    ) !void {
+    ) !bool {
         // Special case certain actions before they are sent to the
         // embedded apprt.
         self.performPreAction(target, action, value);
@@ -498,6 +499,8 @@ pub const App = struct {
             target.cval(),
             @unionInit(apprt.Action, @tagName(action), value).cval(),
         );
+
+        return true;
     }
 
     fn performPreAction(
@@ -1005,7 +1008,7 @@ pub const Surface = struct {
     }
 
     fn queueInspectorRender(self: *Surface) void {
-        self.app.performAction(
+        _ = self.app.performAction(
             .{ .surface = &self.core_surface },
             .render_inspector,
             {},
@@ -1432,7 +1435,7 @@ pub const CAPI = struct {
 
     /// Open the configuration.
     export fn ghostty_app_open_config(v: *App) void {
-        v.performAction(.app, .open_config, {}) catch |err| {
+        _ = v.performAction(.app, .open_config, {}) catch |err| {
             log.err("error reloading config err={}", .{err});
             return;
         };
@@ -1775,7 +1778,7 @@ pub const CAPI = struct {
 
     /// Request that the surface split in the given direction.
     export fn ghostty_surface_split(ptr: *Surface, direction: apprt.action.SplitDirection) void {
-        ptr.app.performAction(
+        _ = ptr.app.performAction(
             .{ .surface = &ptr.core_surface },
             .new_split,
             direction,
@@ -1790,7 +1793,7 @@ pub const CAPI = struct {
         ptr: *Surface,
         direction: apprt.action.GotoSplit,
     ) void {
-        ptr.app.performAction(
+        _ = ptr.app.performAction(
             .{ .surface = &ptr.core_surface },
             .goto_split,
             direction,
@@ -1809,7 +1812,7 @@ pub const CAPI = struct {
         direction: apprt.action.ResizeSplit.Direction,
         amount: u16,
     ) void {
-        ptr.app.performAction(
+        _ = ptr.app.performAction(
             .{ .surface = &ptr.core_surface },
             .resize_split,
             .{ .direction = direction, .amount = amount },
@@ -1821,7 +1824,7 @@ pub const CAPI = struct {
 
     /// Equalize the size of all splits in the current window.
     export fn ghostty_surface_split_equalize(ptr: *Surface) void {
-        ptr.app.performAction(
+        _ = ptr.app.performAction(
             .{ .surface = &ptr.core_surface },
             .equalize_splits,
             {},
