@@ -68,7 +68,10 @@ const numeric_icons = [_][]const u8{
     "9-plus",
 };
 
-pub const ui_files = [_][]const u8{};
+pub const ui_files = [_][]const u8{
+    "menu-window-titlebar_menu",
+    "menu-surface-context_menu",
+};
 pub const blueprint_files = [_][]const u8{};
 
 pub fn main() !void {
