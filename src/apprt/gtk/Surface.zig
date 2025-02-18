@@ -2491,3 +2491,8 @@ fn gtkStreamError(media_file: *gtk.MediaFile, _: *gobject.ParamSpec, _: ?*anyopa
 fn gtkStreamEnded(media_file: *gtk.MediaFile, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.c) void {
     media_file.unref();
 }
+
+/// Return the PID of the "root" process being served by this surface.
+pub fn getPid(self: *Surface) ?std.posix.pid_t {
+    return self.core_surface.getPid();
+}
