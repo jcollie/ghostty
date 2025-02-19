@@ -5258,3 +5258,8 @@ pub fn getPid(self: *Surface) ?std.posix.pid_t {
     const command = self.io.backend.exec.subprocess.command orelse return null;
     return command.pid;
 }
+
+pub fn getPtyFd(self: *Surface) ?Pty.Fd {
+    const pty = self.io.backend.exec.subprocess.pty orelse return null;
+    return pty.master;
+}

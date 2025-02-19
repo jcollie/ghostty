@@ -22,6 +22,7 @@ const termio = @import("../termio.zig");
 const Command = @import("../Command.zig");
 const SegmentedPool = @import("../datastruct/main.zig").SegmentedPool;
 const ptypkg = @import("../pty.zig");
+const ProcessScanner = @import("ProcessScanner.zig");
 const Pty = ptypkg.Pty;
 const EnvMap = std.process.EnvMap;
 const PasswdEntry = internal_os.passwd.Entry;

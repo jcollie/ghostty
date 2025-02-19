@@ -32,6 +32,7 @@ const Window = @import("Window.zig");
 const Menu = @import("menu.zig").Menu;
 const ClipboardConfirmationWindow = @import("ClipboardConfirmationWindow.zig");
 const ResizeOverlay = @import("ResizeOverlay.zig");
+const Pty = @import("../../pty.zig").Pty;
 const URLWidget = @import("URLWidget.zig");
 const CloseDialog = @import("CloseDialog.zig");
 const inspectorpkg = @import("inspector.zig");
@@ -2495,4 +2496,8 @@ fn gtkStreamEnded(media_file: *gtk.MediaFile, _: *gobject.ParamSpec, _: ?*anyopa
 /// Return the PID of the "root" process being served by this surface.
 pub fn getPid(self: *Surface) ?std.posix.pid_t {
     return self.core_surface.getPid();
+}
+
+pub fn getPtyFd(self: *Surface) ?Pty.Fd {
+    return self.core_surface.getPtyFd();
 }
