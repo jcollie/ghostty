@@ -13,45 +13,24 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const cli = @import("../cli.zig");
 const internal_os = @import("../os/main.zig");
 const formatterpkg = @import("formatter.zig");
+const Path = @import("path.zig").Path;
 
 const log = std.log.scoped(.config);
 
-const Path = union(enum) {
-    /// No error if the file does not exist.
-    optional: [:0]const u8,
-
-    /// The file is required to exist.
-    required: [:0]const u8,
-};
-
 value: std.ArrayListUnmanaged(Path) = .{},
 
-pub fn parseCLI(self: *RepeatablePath, alloc: Allocator, input: ?[]const u8) !void {
-    const value, const optional = if (input) |value| blk: {
-        if (value.len == 0) {
-            self.value.clearRetainingCapacity();
-            return;
-        }
+pub fn parseCLI(self: *RepeatablePath, alloc: Allocator, input: ?[]const u8) (error{ValueRequired} || Allocator.Error)!void {
+    const item = try Path.parse(alloc, input) orelse {
+        self.value.clearRetainingCapacity();
+        return;
+    };
 
-        break :blk if (value[0] == '?')
-            .{ value[1..], true }
-        else if (value.len >= 2 and value[0] == '"' and value[value.len - 1] == '"')
-            .{ value[1 .. value.len - 1], false }
-        else
-            .{ value, false };
-    } else return error.ValueRequired;
-
-    if (value.len == 0) {
+    if (item.len() == 0) {
         // This handles the case of zero length paths after removing any ?
         // prefixes or surrounding quotes. In this case, we don't reset the
         // list.
         return;
     }
-
-    const item: Path = if (optional)
-        .{ .optional = try alloc.dupeZ(u8, value) }
-    else
-        .{ .required = try alloc.dupeZ(u8, value) };
 
     try self.value.append(alloc, item);
 }
@@ -60,9 +39,7 @@ pub fn parseCLI(self: *RepeatablePath, alloc: Allocator, input: ?[]const u8) !vo
 pub fn clone(self: *const RepeatablePath, alloc: Allocator) Allocator.Error!RepeatablePath {
     const value = try self.value.clone(alloc);
     for (value.items) |*item| {
-        switch (item.*) {
-            .optional, .required => |*path| path.* = try alloc.dupeZ(u8, path.*),
-        }
+        item.* = try item.clone(alloc);
     }
 
     return .{
@@ -74,7 +51,7 @@ pub fn clone(self: *const RepeatablePath, alloc: Allocator) Allocator.Error!Repe
 pub fn equal(self: RepeatablePath, other: RepeatablePath) bool {
     if (self.value.items.len != other.value.items.len) return false;
     for (self.value.items, other.value.items) |a, b| {
-        if (!std.meta.eql(a, b)) return false;
+        if (!a.equal(b)) return false;
     }
 
     return true;
@@ -113,92 +90,8 @@ pub fn expand(
     base: []const u8,
     diags: *cli.DiagnosticList,
 ) !void {
-    assert(std.fs.path.isAbsolute(base));
-    var dir = try std.fs.cwd().openDir(base, .{});
-    defer dir.close();
-
-    for (0..self.value.items.len) |i| {
-        const path = switch (self.value.items[i]) {
-            .optional, .required => |path| path,
-        };
-
-        // If it is already absolute we can ignore it.
-        if (path.len == 0 or std.fs.path.isAbsolute(path)) continue;
-
-        // If it isn't absolute, we need to make it absolute relative
-        // to the base.
-        var buf: [std.fs.max_path_bytes]u8 = undefined;
-
-        // Check if the path starts with a tilde and expand it to the
-        // home directory on Linux/macOS. We explicitly look for "~/"
-        // because we don't support alternate users such as "~alice/"
-        if (std.mem.startsWith(u8, path, "~/")) expand: {
-            // Windows isn't supported yet
-            if (comptime builtin.os.tag == .windows) break :expand;
-
-            const expanded: []const u8 = internal_os.expandHome(
-                path,
-                &buf,
-            ) catch |err| {
-                try diags.append(alloc, .{
-                    .message = try std.fmt.allocPrintZ(
-                        alloc,
-                        "error expanding home directory for path {s}: {}",
-                        .{ path, err },
-                    ),
-                });
-
-                // Blank this path so that we don't attempt to resolve it
-                // again
-                self.value.items[i] = .{ .required = "" };
-
-                continue;
-            };
-
-            log.debug(
-                "expanding file path from home directory: path={s}",
-                .{expanded},
-            );
-
-            switch (self.value.items[i]) {
-                .optional, .required => |*p| p.* = try alloc.dupeZ(u8, expanded),
-            }
-
-            continue;
-        }
-
-        const abs = dir.realpath(path, &buf) catch |err| abs: {
-            if (err == error.FileNotFound) {
-                // The file doesn't exist. Try to resolve the relative path
-                // another way.
-                const resolved = try std.fs.path.resolve(alloc, &.{ base, path });
-                defer alloc.free(resolved);
-                @memcpy(buf[0..resolved.len], resolved);
-                break :abs buf[0..resolved.len];
-            }
-
-            try diags.append(alloc, .{
-                .message = try std.fmt.allocPrintZ(
-                    alloc,
-                    "error resolving file path {s}: {}",
-                    .{ path, err },
-                ),
-            });
-
-            // Blank this path so that we don't attempt to resolve it again
-            self.value.items[i] = .{ .required = "" };
-
-            continue;
-        };
-
-        log.debug(
-            "expanding file path relative={s} abs={s}",
-            .{ path, abs },
-        );
-
-        switch (self.value.items[i]) {
-            .optional, .required => |*p| p.* = try alloc.dupeZ(u8, abs),
-        }
+    for (self.value.items) |*path| {
+        try path.expand(alloc, base, diags);
     }
 }
 
