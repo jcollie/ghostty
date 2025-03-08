@@ -36,6 +36,7 @@ const MetricModifier = fontpkg.Metrics.Modifier;
 const help_strings = @import("help_strings");
 const RepeatableStringMap = @import("RepeatableStringMap.zig");
 pub const RepeatablePath = @import("RepeatablePath.zig");
+pub const NonRepeatablePath = @import("NonRepeatablePath.zig");
 
 const log = std.log.scoped(.config);
 
@@ -2828,12 +2829,15 @@ fn expandPaths(self: *Config, base: []const u8) !void {
 
     // Expand all of our paths
     inline for (@typeInfo(Config).Struct.fields) |field| {
-        if (field.type == RepeatablePath) {
-            try @field(self, field.name).expand(
-                arena_alloc,
-                base,
-                &self._diagnostics,
-            );
+        switch (field.type) {
+            RepeatablePath, NonRepeatablePath => {
+                try @field(self, field.name).expand(
+                    arena_alloc,
+                    base,
+                    &self._diagnostics,
+                );
+            },
+            inline else => {},
         }
     }
 }
