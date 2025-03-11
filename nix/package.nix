@@ -92,14 +92,18 @@ in
 
     GI_TYPELIB_PATH = gi_typelib_path;
 
-    zigBuildFlags = [
-      "--system"
-      "${finalAttrs.deps}"
-      "-Dversion-string=${finalAttrs.version}-${revision}-nix"
-      "-Dgtk-x11=${lib.boolToString enableX11}"
-      "-Dgtk-wayland=${lib.boolToString enableWayland}"
-      "-Dstrip=${lib.boolToString strip}"
-    ];
+    zigBuildFlags =
+      [
+        "--system"
+        "${finalAttrs.deps}"
+        "-Dversion-string=${finalAttrs.version}-${revision}-nix"
+        "-Dgtk-x11=${lib.boolToString enableX11}"
+        "-Dgtk-wayland=${lib.boolToString enableWayland}"
+        "-Dstrip=${lib.boolToString strip}"
+      ]
+      ++ lib.mapAttrsToList (name: package: "-fsys=${name} --search-prefix ${lib.getLib package}") {
+        inherit (pkgs) glslang gtk4-layer-shell;
+      };
 
     outputs = [
       "out"
