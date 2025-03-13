@@ -26,9 +26,8 @@ pub var state: GlobalState = undefined;
 /// be one of these at any given moment. This is extracted into a dedicated
 /// struct because it is reused by main and the static C lib.
 pub const GlobalState = struct {
-    const GPA = std.heap.GeneralPurposeAllocator(.{});
-
-    gpa: ?GPA,
+    debug_allocator: std.heap.DebugAllocator(.{}),
+    is_debug: bool,
     alloc: std.mem.Allocator,
     action: ?cli.ghostty.Action,
     logging: Logging,
@@ -58,7 +57,8 @@ pub const GlobalState = struct {
         // IMPORTANT: this MUST be initialized before any log output because
         // the log function uses the global state.
         self.* = .{
-            .gpa = null,
+            .debug_allocator = .init,
+            .is_debug = true,
             .alloc = undefined,
             .action = null,
             .logging = .{ .stderr = {} },
@@ -67,29 +67,19 @@ pub const GlobalState = struct {
         };
         errdefer self.deinit();
 
-        self.gpa = gpa: {
-            // Use the libc allocator if it is available because it is WAY
-            // faster than GPA. We only do this in release modes so that we
-            // can get easy memory leak detection in debug modes.
-            if (builtin.link_libc) {
-                if (switch (builtin.mode) {
-                    .ReleaseSafe, .ReleaseFast => true,
-
-                    // We also use it if we can detect we're running under
-                    // Valgrind since Valgrind only instruments the C allocator
-                    else => std.valgrind.runningOnValgrind() > 0,
-                }) break :gpa null;
+        self.alloc, self.is_debug = allocator: {
+            switch (builtin.mode) {
+                // In modes that have runtime safety checks use DebugAllocator
+                // for it's ability to detect memory shennanigans.
+                .Debug, .ReleaseSafe => {
+                    break :allocator .{ self.debug_allocator.allocator(), true };
+                },
+                // In all other modes use the global SmpAllocator for performance.
+                .ReleaseFast, .ReleaseSmall => {
+                    break :allocator .{ std.heap.smp_allocator, false };
+                },
             }
-
-            break :gpa GPA{};
         };
-
-        self.alloc = if (self.gpa) |*value|
-            value.allocator()
-        else if (builtin.link_libc)
-            std.heap.c_allocator
-        else
-            unreachable;
 
         // We first try to parse any action that we may be executing.
         self.action = try cli.action.detectArgs(
@@ -191,10 +181,11 @@ pub const GlobalState = struct {
         // Flush our crash logs
         crash.deinit();
 
-        if (self.gpa) |*value| {
-            // We want to ensure that we deinit the GPA because this is
-            // the point at which it will output if there were safety violations.
-            _ = value.deinit();
+        if (self.is_debug) {
+            // We want to ensure that we deinit the DebugAllocator because
+            // this is the point at which it will output if there were safety
+            // violations.
+            _ = self.debug_allocator.deinit();
         }
     }
 
