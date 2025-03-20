@@ -237,6 +237,7 @@ pub fn init(self: *Window, app: *App) !void {
             },
         };
 
+        btn.setCanFocus(0);
         btn.setFocusOnClick(0);
         self.headerbar.packEnd(btn);
     }
