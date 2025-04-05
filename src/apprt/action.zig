@@ -337,7 +337,7 @@ pub const Action = union(Key) {
         // For ABI compatibility, we expect that this is our union size.
         // At the time of writing, we don't promise ABI compatibility
         // so we can change this but I want to be aware of it.
-        assert(@sizeOf(CValue) == 16);
+        assert(@sizeOf(CValue) == 24);
     }
 
     /// Returns the value type for the given key.
