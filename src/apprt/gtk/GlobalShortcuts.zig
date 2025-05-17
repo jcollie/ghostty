@@ -83,7 +83,6 @@ pub fn refreshSession(self: *GlobalShortcuts, app: *App) !void {
     // Ensure we have a valid reference to the app
     // (it was left uninitialized in `init`)
     self.app = app;
-    self.deinit();
 
     // Update map
     var trigger_buf: [256]u8 = undefined;
@@ -102,7 +101,10 @@ pub fn refreshSession(self: *GlobalShortcuts, app: *App) !void {
         const trigger = try key.xdgShortcutFromTrigger(
             &trigger_buf,
             entry.key_ptr.*,
-        ) orelse continue;
+        ) orelse {
+            log.warn("unable to get xdg shortcut from trigger", .{});
+            continue;
+        };
 
         try self.map.put(
             self.arena.allocator(),
@@ -132,6 +134,8 @@ fn shortcutActivated(
     log.debug("activated={s}", .{shortcut_id});
 
     const action = self.map.get(std.mem.span(shortcut_id)) orelse return;
+
+    log.debug("action={}", .{action});
 
     self.app.core_app.performAllAction(self.app, action) catch |err| {
         log.err("failed to perform action={}", .{err});
