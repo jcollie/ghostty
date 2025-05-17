@@ -3,11 +3,11 @@
     "flake-compat": {
       "flake": false,
       "locked": {
-        "lastModified": 1733328505,
-        "narHash": "sha256-NeCCThCEP3eCl2l/+27kNNK7QrwZB1IJCrXfrbv5oqU=",
+        "lastModified": 1747046372,
+        "narHash": "sha256-CIVLLkVgvHYbgI2UpXvIIBJ12HWgX+fjA8Xf8PUmqCY=",
         "owner": "edolstra",
         "repo": "flake-compat",
-        "rev": "ff81ac966bb2cae68946d5ed5fc4994f96d0ffec",
+        "rev": "9100a0f413b0c601e0533d1d94ffd501ce2e7885",
         "type": "github"
       },
       "original": {
@@ -36,34 +36,28 @@
     },
     "nixpkgs-stable": {
       "locked": {
-        "lastModified": 1742341535,
-        "narHash": "sha256-0aNICno9B3wuNh9xQ8ehiq9zq05ggjSreh81y1i/G7o=",
-        "owner": "nixos",
-        "repo": "nixpkgs",
-        "rev": "91fc69118819bf6b5110c4f8d0800ac1f378c8d3",
-        "type": "github"
+        "lastModified": 1747458844,
+        "narHash": "sha256-0F13bs2Hrspx4ZKcVsOD9KmlkLRigFWpGdnLd9Ujtl8=",
+        "rev": "e06158e58f3adee28b139e9c2bcfcc41f8625b46",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/unstable/nixos-25.05pre801034.e06158e58f3a/nixexprs.tar.xz"
       },
       "original": {
-        "owner": "nixos",
-        "ref": "release-24.11",
-        "repo": "nixpkgs",
-        "type": "github"
+        "type": "tarball",
+        "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
       }
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1742237028,
-        "narHash": "sha256-xlpHmgBxUnvHo8FNnju0sgnEyasb4gC607b+keqjmX8=",
-        "owner": "nixos",
-        "repo": "nixpkgs",
-        "rev": "9bc8a90931262245919a26f995c1f24c6c70d3fe",
-        "type": "github"
+        "lastModified": 1747458844,
+        "narHash": "sha256-0F13bs2Hrspx4ZKcVsOD9KmlkLRigFWpGdnLd9Ujtl8=",
+        "rev": "e06158e58f3adee28b139e9c2bcfcc41f8625b46",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/unstable/nixos-25.05pre801034.e06158e58f3a/nixexprs.tar.xz"
       },
       "original": {
-        "owner": "nixos",
-        "ref": "nixpkgs-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
+        "type": "tarball",
+        "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
       }
     },
     "root": {
@@ -102,11 +96,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1742213554,
-        "narHash": "sha256-pG0q/oygY/Kprk4V4CYFLB8G3LGPNFtswPSBqmNX/h4=",
+        "lastModified": 1747483898,
+        "narHash": "sha256-fkE7ejeVi2Swn+f1yShQ8iNnBgFHe9nmruMuN8G0WLo=",
         "owner": "mitchellh",
         "repo": "zig-overlay",
-        "rev": "4460454c2f81e833dcce79378b02353403d6514b",
+        "rev": "0c23ddcad3ac322e5cd651652f7f12afe14cc083",
         "type": "github"
       },
       "original": {
