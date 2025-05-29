@@ -273,7 +273,12 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
     const single_instance = switch (config.@"gtk-single-instance") {
         .true => true,
         .false => false,
-        .desktop => internal_os.launchedFromDesktop() or internal_os.launchedByDBusActivation() or internal_os.launchedBySystemd(),
+        .desktop => desktop: {
+            if (internal_os.launchedFromDesktop()) break :desktop true;
+            if (internal_os.launchedByDBusActivation()) break :desktop true;
+            if (internal_os.launchedBySystemd()) break :desktop true;
+            break :desktop false;
+        },
     };
 
     // Setup the flags for our application.
@@ -402,8 +407,11 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
     // own `activate` or `new-window` signal later.
     //
     // https://gitlab.gnome.org/GNOME/glib/-/blob/bd2ccc2f69ecfd78ca3f34ab59e42e2b462bad65/gio/gapplication.c#L2302
-    if (config.@"initial-window" and !internal_os.launchedByDBusActivation() and !internal_os.launchedBySystemd())
+    if (config.@"initial-window") initial_window: {
+        if (internal_os.launchedByDBusActivation()) break :initial_window;
+        if (internal_os.launchedBySystemd()) break :initial_window;
         gio_app.activate();
+    }
 
     // Internally, GTK ensures that only one instance of this provider exists in the provider list
     // for the display.
