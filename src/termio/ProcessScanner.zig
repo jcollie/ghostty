@@ -103,16 +103,14 @@ fn timerCallback(
     _ = result catch unreachable;
     const self = self_ orelse unreachable;
 
-    const tc = struct {
-        extern fn tcgetpgrp(handle: std.posix.fd_t) std.posix.pid_t;
-    };
+    // const tc = struct {
+    //     extern fn tcgetpgrp(handle: std.posix.fd_t) std.posix.pid_t;
+    // };
 
-    const pid = tc.tcgetpgrp(self.fd);
-
-    if (pid < 1) {
-        log.info("error getting pgrp: {}", .{pid});
+    const pid = std.posix.tcgetpgrp(self.fd) catch |err| {
+        log.info("error getting pgrp: {}", .{err});
         return .rearm;
-    }
+    };
 
     const info = linuxproc.getProcessInfo(pid) catch |err| {
         log.warn("unable to get process info for {}: {}", .{ pid, err });

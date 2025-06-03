@@ -47,7 +47,6 @@ const key = @import("key.zig");
 const winprotopkg = @import("winproto.zig");
 const gtk_version = @import("gtk_version.zig");
 const adw_version = @import("adw_version.zig");
-const ProcessScanner = @import("ProcessScanner.zig");
 const linuxproc = @import("../../os/linuxproc.zig");
 
 pub const c = @cImport({
@@ -106,8 +105,6 @@ quit_timer: union(enum) {
     active: c_uint,
     expired: void,
 } = .{ .off = {} },
-
-process_scanner: ProcessScanner,
 
 pub fn init(core_app: *CoreApp, opts: Options) !App {
     _ = opts;
@@ -433,14 +430,12 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
         .running = gio_app.getIsRemote() == 0,
         .css_provider = css_provider,
         .global_shortcuts = .init(core_app.alloc, gio_app),
-        .process_scanner = undefined,
     };
 }
 
 // Terminate the application. The application will not be restarted after
 // this so all global state can be cleaned up.
 pub fn terminate(self: *App) void {
-    self.process_scanner.stop();
     gio.Settings.sync();
     while (glib.MainContext.iteration(self.ctx, 0) != 0) {}
     glib.MainContext.release(self.ctx);
@@ -1297,8 +1292,6 @@ pub fn run(self: *App) !void {
     // exit (GTK single instance mode). If we're not running, we're done
     // right away.
     if (!self.running) return;
-
-    self.process_scanner.init(self);
 
     // If we are running, then we proceed to setup our app.
 
