@@ -5,7 +5,6 @@ const TabView = @This();
 const std = @import("std");
 
 const gio = @import("gio");
-const glib = @import("glib");
 const gtk = @import("gtk");
 const adw = @import("adw");
 const gobject = @import("gobject");
