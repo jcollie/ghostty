@@ -20,6 +20,7 @@ const font = @import("font/main.zig");
 const internal_os = @import("os/main.zig");
 const macos = @import("macos");
 const objc = @import("objc");
+const Signals = @import("Signals.zig");
 
 const log = std.log.scoped(.app);
 
@@ -74,6 +75,9 @@ config_conditional_state: configpkg.ConditionalState,
 /// if they are the first surface.
 first: bool = true,
 
+/// Structure for managing POSIX signal handlers.
+signals: Signals = .init,
+
 pub const CreateError = Allocator.Error || font.SharedGridSet.InitError;
 
 /// Create a new app instance. This returns a stable pointer to the app
@@ -104,7 +108,11 @@ pub fn init(
         .mailbox = .{},
         .font_grid_set = font_grid_set,
         .config_conditional_state = .{},
+        .signals = .init,
     };
+
+    // Start handling POSIX signals (this is a no-op on non-POSIX systems).
+    self.signals.start(self);
 }
 
 pub fn deinit(self: *App) void {
@@ -257,6 +265,7 @@ fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
         log.debug("mailbox message={s}", .{@tagName(message)});
         switch (message) {
             .open_config => try self.performAction(rt_app, .open_config),
+            .reload_config => try self.performAction(rt_app, .reload_config),
             .new_window => |msg| try self.newWindow(rt_app, msg),
             .close => |surface| self.closeSurface(surface),
             .surface_message => |msg| try self.surfaceMessage(msg.surface, msg.message),
@@ -517,6 +526,9 @@ fn hasSurface(self: *const App, surface: *const Surface) bool {
 pub const Message = union(enum) {
     // Open the configuration file
     open_config: void,
+
+    // Reload the configuration file
+    reload_config: void,
 
     /// Create a new terminal window.
     new_window: NewWindow,
