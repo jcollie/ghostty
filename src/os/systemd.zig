@@ -63,3 +63,115 @@ pub fn launchedBySystemd() bool {
         else => false,
     };
 }
+
+/// systemd notifications. Used by Ghostty to inform systemd of the
+/// state of the process. Currently only used to notify systemd that
+/// we are ready and that configuration reloading has started.
+///
+/// See: https://www.freedesktop.org/software/systemd/man/latest/sd_notify.html
+pub const notify = struct {
+    /// Send the given message to the UNIX socket specified in the NOTIFY_SOCKET
+    /// environment variable. If there NOTIFY_SOCKET environment variable does
+    /// not exist then no message is sent.
+    fn send(message: []const u8) void {
+        // systemd is Linux-only so this is a no-op anywhere else
+        if (comptime builtin.os.tag != .linux) return;
+
+        // Get the socket address that should receive notifications.
+        const notify_socket = std.posix.getenv("NOTIFY_SOCKET") orelse return;
+
+        // If the socket address is an empty string return.
+        if (notify_socket.len == 0) return;
+
+        // The socket address must be a path or an abstract socket.
+        if (notify_socket[0] != '/' and notify_socket[0] != '@') {
+            log.err("Only AF_UNIX with path or abstract sockets are supported!", .{});
+            return;
+        }
+
+        var path: std.os.linux.sockaddr.un = undefined;
+
+        if (path.path.len < notify_socket.len) {
+            log.err("NOTIFY_SOCKET path is too long!", .{});
+            return;
+        }
+
+        path.family = std.os.linux.AF.UNIX;
+
+        @memcpy(path.path[0..notify_socket.len], notify_socket);
+        path.path[notify_socket.len] = 0;
+
+        const socket: std.os.linux.socket_t = socket: {
+            const rc = std.os.linux.socket(
+                std.os.linux.AF.UNIX,
+                std.os.linux.SOCK.DGRAM | std.os.linux.SOCK.CLOEXEC,
+                0,
+            );
+            switch (std.os.linux.E.init(rc)) {
+                .SUCCESS => break :socket @intCast(rc),
+                else => |e| {
+                    log.err("Creating socket failed: {s}", .{@tagName(e)});
+                    return;
+                },
+            }
+        };
+
+        defer _ = std.os.linux.close(socket);
+
+        connect: {
+            const rc = std.os.linux.connect(socket, &path, @offsetOf(std.os.linux.sockaddr.un, "path") + path.path.len);
+            switch (std.os.linux.E.init(rc)) {
+                .SUCCESS => break :connect,
+                else => |e| {
+                    log.warn("Unable to connect to notify socket: {s}", .{@tagName(e)});
+                    return;
+                },
+            }
+        }
+
+        write: {
+            const rc = std.os.linux.write(socket, message.ptr, message.len);
+            switch (std.os.linux.E.init(rc)) {
+                .SUCCESS => {
+                    const written = rc;
+                    if (written < message.len) {
+                        log.warn("Short write to notify socket: {d} < {d}", .{ rc, message.len });
+                        return;
+                    }
+                    break :write;
+                },
+                else => |e| {
+                    log.warn("Unable to write to notify socket: {s}", .{@tagName(e)});
+                    return;
+                },
+            }
+        }
+    }
+
+    /// Tell systemd that we are ready.
+    pub fn ready() void {
+        if (comptime builtin.os.tag != .linux) return;
+
+        send("READY=1");
+    }
+
+    /// Tell systemd that we have started reloading.
+    pub fn reloading() void {
+        if (comptime builtin.os.tag != .linux) return;
+
+        const ts = std.posix.clock_gettime(.MONOTONIC) catch |err| {
+            log.err("Unable to get MONOTONIC clock: {}", .{err});
+            return;
+        };
+
+        const now = ts.sec * std.time.us_per_s + @divFloor(ts.nsec, std.time.ns_per_us);
+
+        var buffer: [64]u8 = undefined;
+        const message = std.fmt.bufPrint(&buffer, "RELOADING=1\nMONOTONIC_USEC={d}", .{now}) catch |err| {
+            log.err("Unable to format reloading message: {}", .{err});
+            return;
+        };
+
+        send(message);
+    }
+};
