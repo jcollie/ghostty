@@ -4453,37 +4453,6 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             .{ .paste = {} },
         ),
 
-        .increase_font_size => |delta| {
-            // Max delta is somewhat arbitrary.
-            const clamped_delta = @max(0, @min(255, delta));
-
-            log.debug("increase font size={}", .{clamped_delta});
-
-            var size = self.font_size;
-            // Max point size is somewhat arbitrary.
-            size.points = @min(size.points + clamped_delta, 255);
-            try self.setFontSize(size);
-        },
-
-        .decrease_font_size => |delta| {
-            // Max delta is somewhat arbitrary.
-            const clamped_delta = @max(0, @min(255, delta));
-
-            log.debug("decrease font size={}", .{clamped_delta});
-
-            var size = self.font_size;
-            size.points = @max(1, size.points - clamped_delta);
-            try self.setFontSize(size);
-        },
-
-        .reset_font_size => {
-            log.debug("reset font size", .{});
-
-            var size = self.font_size;
-            size.points = self.config.original_font_size;
-            try self.setFontSize(size);
-        },
-
         .set_font_size => |set_font_size| {
             var size = self.font_size;
             switch (set_font_size) {

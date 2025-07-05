@@ -6542,7 +6542,7 @@ pub const RepeatableCommand = struct {
         try testing.expectEqualStrings("bobr", list.value.items[1].description);
 
         try testing.expectEqual(
-            inputpkg.Binding.Action{ .increase_font_size = 2.5 },
+            inputpkg.Binding.Action{ .set_font_size = .{ .delta = 2.5 } },
             list.value.items[2].action,
         );
         try testing.expectEqualStrings("Quux", list.value.items[2].title);

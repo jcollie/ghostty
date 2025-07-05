@@ -144,24 +144,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Paste the contents of the selection clipboard.",
         }},
 
-        .increase_font_size => comptime &.{.{
-            .action = .{ .increase_font_size = 1 },
-            .title = "Increase Font Size",
-            .description = "Increase the font size by 1 point.",
-        }},
-
-        .decrease_font_size => comptime &.{.{
-            .action = .{ .decrease_font_size = 1 },
-            .title = "Decrease Font Size",
-            .description = "Decrease the font size by 1 point.",
-        }},
-
-        .reset_font_size => comptime &.{.{
-            .action = .reset_font_size,
-            .title = "Reset Font Size",
-            .description = "Reset the font size to the default.",
-        }},
-
         .clear_screen => comptime &.{.{
             .action = .clear_screen,
             .title = "Clear Screen",

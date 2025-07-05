@@ -9,6 +9,8 @@ const ziglyph = @import("ziglyph");
 const key = @import("key.zig");
 const KeyEvent = key.KeyEvent;
 
+const log = std.log.scoped(.binding);
+
 /// The trigger that needs to be performed to execute the action.
 trigger: Trigger,
 
@@ -222,6 +224,67 @@ pub fn lessThan(_: void, lhs: Binding, rhs: Binding) bool {
     return lhs_key < rhs_key;
 }
 
+/// Actions that are deprecated. Deprecated actions will not trigger a
+/// configuration error, but will log a warning when encountered. When parsed,
+/// they will be translated into another appropriate action.
+pub const DeprecatedAction = enum {
+    /// Increase the font size by the specified amount in points (pt).
+    ///
+    /// For example, `increase_font_size:1.5` will increase the font size
+    /// by 1.5 points.
+    increase_font_size,
+
+    /// Decrease the font size by the specified amount in points (pt).
+    ///
+    /// For example, `decrease_font_size:1.5` will decrease the font size
+    /// by 1.5 points.
+    decrease_font_size,
+
+    /// Reset the font size to the original configured size.
+    reset_font_size,
+
+    pub const ParseParameterErrors = error{InvalidFormat};
+
+    fn parseParameter(action: DeprecatedAction, param_: ?[]const u8) ParseParameterErrors!Action {
+        log.warn("deprecated keybind action: {s}", .{@tagName(action)});
+
+        switch (action) {
+            .increase_font_size => {
+                const param = param_ orelse return error.InvalidFormat;
+                return .{
+                    .set_font_size = .{
+                        .delta = std.fmt.parseFloat(f32, param) catch return error.InvalidFormat,
+                    },
+                };
+            },
+            .decrease_font_size => {
+                const param = param_ orelse return error.InvalidFormat;
+                return .{
+                    .set_font_size = .{
+                        .delta = -(std.fmt.parseFloat(f32, param) catch return error.InvalidFormat),
+                    },
+                };
+            },
+            .reset_font_size => {
+                if (param_) |_| return error.InvalidFormat;
+                return .{ .set_font_size = .reset };
+            },
+        }
+    }
+
+    /// Parse the action and parameter. If it's a deprecated action, return the
+    /// new action that replaces the deprecated action. Otherwise return `null`.
+    pub fn parse(action: []const u8, param_: ?[]const u8) ParseParameterErrors!?Action {
+        const deprecatedActionInfo = @typeInfo(DeprecatedAction).@"enum";
+        inline for (deprecatedActionInfo.fields) |field| {
+            if (std.mem.eql(u8, action, field.name)) {
+                return try parseParameter(@enumFromInt(field.value), param_);
+            }
+        }
+        return null;
+    }
+};
+
 /// The set of actions that a keybinding can take.
 pub const Action = union(enum) {
     /// Ignore this key combination.
@@ -280,21 +343,6 @@ pub const Action = union(enum) {
 
     /// If there is a URL under the cursor, copy it to the default clipboard.
     copy_url_to_clipboard,
-
-    /// Increase the font size by the specified amount in points (pt).
-    ///
-    /// For example, `increase_font_size:1.5` will increase the font size
-    /// by 1.5 points.
-    increase_font_size: f32,
-
-    /// Decrease the font size by the specified amount in points (pt).
-    ///
-    /// For example, `decrease_font_size:1.5` will decrease the font size
-    /// by 1.5 points.
-    decrease_font_size: f32,
-
-    /// Reset the font size to the original configured size.
-    reset_font_size,
 
     /// Adjust the font size according to the supplied parameter.
     ///
@@ -1003,6 +1051,9 @@ pub const Action = union(enum) {
         // An action name is always required
         if (action.len == 0) return error.InvalidFormat;
 
+        // Check to see if it's a deprecated action.
+        if (try DeprecatedAction.parse(action, param_)) |new_action| return new_action;
+
         const actionInfo = @typeInfo(Action).@"union";
         inline for (actionInfo.fields) |field| {
             if (std.mem.eql(u8, action, field.name)) {
@@ -1099,9 +1150,6 @@ pub const Action = union(enum) {
             .copy_url_to_clipboard,
             .paste_from_clipboard,
             .paste_from_selection,
-            .increase_font_size,
-            .decrease_font_size,
-            .reset_font_size,
             .set_font_size,
             .prompt_surface_title,
             .clear_screen,
@@ -3208,6 +3256,36 @@ test "Action: clone" {
         var a: Action = .{ .text = "foo" };
         const b = try a.clone(alloc);
         try testing.expect(b == .text);
+    }
+}
+
+test "parse: increase_font_size" {
+    const testing = std.testing;
+
+    {
+        const binding = try parseSingle("a=increase_font_size:1");
+        try testing.expect(binding.action == .set_font_size);
+        try testing.expectEqual(Action.SetFontSize{ .delta = 1.0 }, binding.action.set_font_size);
+    }
+}
+
+test "parse: decrease_font_size" {
+    const testing = std.testing;
+
+    {
+        const binding = try parseSingle("a=decrease_font_size:1");
+        try testing.expect(binding.action == .set_font_size);
+        try testing.expectEqual(Action.SetFontSize{ .delta = -1.0 }, binding.action.set_font_size);
+    }
+}
+
+test "parse: reset_font_size" {
+    const testing = std.testing;
+
+    {
+        const binding = try parseSingle("a=reset_font_size");
+        try testing.expect(binding.action == .set_font_size);
+        try testing.expectEqual(Action.SetFontSize.reset, binding.action.set_font_size);
     }
 }
 
