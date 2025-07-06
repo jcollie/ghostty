@@ -14,11 +14,10 @@ import sys
 from collections import defaultdict
 from contextlib import suppress
 from types import SimpleNamespace
-from typing import Literal, TypedDict, cast
+from typing import Literal, TypedDict, cast, TypeAlias
 
-type PatchSetAttributes = dict[Literal["default"] | int, PatchSetAttributeEntry]
-type AttributeHash = tuple[str | None, str | None, str, float, float, float]
-type ResolvedSymbol = PatchSetAttributes | PatchSetScaleRules | int | None
+
+AttributeHash: TypeAlias = tuple[str | None, str | None, str, float, float, float]
 
 
 class PatchSetScaleRules(TypedDict):
@@ -32,6 +31,9 @@ class PatchSetAttributeEntry(TypedDict):
     stretch: str
     params: dict[str, float | bool]
 
+
+PatchSetAttributes: TypeAlias = dict[Literal["default"] | int, PatchSetAttributeEntry]
+ResolvedSymbol: TypeAlias = PatchSetAttributes | PatchSetScaleRules | int | None
 
 class PatchSet(TypedDict):
     SymStart: int
