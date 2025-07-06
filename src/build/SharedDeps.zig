@@ -502,6 +502,20 @@ pub fn add(
 
     // Fonts
     {
+        const generate_nerd_font_attributes = b.addSystemCommand(&.{
+            "python",
+        });
+        generate_nerd_font_attributes.addFileArg(b.path("src/font/nerd_font_codegen.py"));
+        generate_nerd_font_attributes.setStdIn(.{ .lazy_path = b.path("vendor/nerd-fonts/font-patcher.py") });
+        const nerd_font_attributes_source = generate_nerd_font_attributes.captureStdOut();
+        const nerd_font_attributes_module = b.addModule("nerd-font-attributes", .{
+            .root_source_file = nerd_font_attributes_source,
+            .target = target,
+            .optimize = optimize,
+        });
+
+        step.root_module.addImport("nerd-font-attributes", nerd_font_attributes_module);
+
         // JetBrains Mono
         const jb_mono = b.dependency("jetbrains_mono", .{});
         step.root_module.addAnonymousImport(

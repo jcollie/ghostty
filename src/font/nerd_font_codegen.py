@@ -244,10 +244,8 @@ if __name__ == "__main__":
 //! This file provides info extracted from the nerd fonts patcher script,
 //! specifying the scaling/positioning attributes of various glyphs.
 
-const Constraint = @import("face.zig").RenderOptions.Constraint;
-
 /// Get the a constraints for the provided codepoint.
-pub fn getConstraint(cp: u21) Constraint {
+pub fn getConstraint(comptime T: type, cp: u21) T {
     return switch (cp) {""")
     print(generate_zig_switch_arms(patch_set))
     print("        else => .none,\n    };\n}")

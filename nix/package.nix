@@ -12,6 +12,7 @@
   pkg-config,
   zig_0_14,
   pandoc,
+  python3,
   revision ? "dirty",
   optimize ? "Debug",
   enableX11 ? true,
@@ -79,6 +80,7 @@ in
         blueprint-compiler
         libxml2 # for xmllint
         gettext
+        python3 # for generating nerd font attributes
       ]
       ++ lib.optionals enableWayland [
         wayland-scanner

@@ -25,8 +25,9 @@ const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Terminal = terminal.Terminal;
 const Health = renderer.Health;
+const Constraint = @import("../font/face.zig").RenderOptions.Constraint;
 
-const getConstraint = @import("../font/nerd_font_attributes.zig").getConstraint;
+const getConstraint = @import("nerd-font-attributes").getConstraint;
 
 const FileType = @import("../file_type.zig").FileType;
 
@@ -3027,7 +3028,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .thicken = self.config.font_thicken,
                     .thicken_strength = self.config.font_thicken_strength,
                     .cell_width = cell.gridWidth(),
-                    .constraint = getConstraint(cp),
+                    .constraint = getConstraint(Constraint, cp),
                     .constraint_width = constraintWidth(cell_pin),
                 },
             );
