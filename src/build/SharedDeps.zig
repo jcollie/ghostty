@@ -503,7 +503,7 @@ pub fn add(
     // Fonts
     {
         const generate_nerd_font_attributes = b.addSystemCommand(&.{
-            "python",
+            "python3",
         });
         generate_nerd_font_attributes.addFileArg(b.path("src/font/nerd_font_codegen.py"));
         generate_nerd_font_attributes.setStdIn(.{ .lazy_path = b.path("vendor/nerd-fonts/font-patcher.py") });

@@ -14,6 +14,7 @@ RUN DEBIAN_FRONTEND="noninteractive" apt-get -qq update && \
     lsb-release \
     libxml2-utils \
     pandoc \
+    python3 \
     # Ghostty Dependencies
     libadwaita-1-dev \
     libgtk-4-dev && \

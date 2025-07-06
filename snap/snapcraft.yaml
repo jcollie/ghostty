@@ -76,6 +76,7 @@ parts:
       - git
       - patchelf
       - gettext
+      - python3
     # TODO: Remove -fno-sys=gtk4-layer-shell when we upgrade to a version that packages it Ubuntu 24.10+
     override-build: |
       craftctl set version=$(cat VERSION)
