@@ -1731,10 +1731,38 @@ fn gtkActionShowGTKInspector(
 
 fn gtkActionNewWindow(
     _: *gio.SimpleAction,
-    _: ?*glib.Variant,
+    parameters_: ?*glib.Variant,
     self: *App,
 ) callconv(.c) void {
     log.info("received new window action", .{});
+
+    parameters: {
+        const parameters = parameters_ orelse break :parameters;
+
+        const av = glib.VariantType.new("av");
+        defer av.free();
+
+        if (glib.Variant.isOfType(parameters, av) == 0) break :parameters;
+
+        var it: *glib.VariantIter = undefined;
+        glib.Variant.get(parameters, "av", &it);
+        defer it.free();
+
+        const s = glib.VariantType.new("s");
+        defer s.free();
+
+        var parameter: *glib.Variant = undefined;
+        while (it.loop("v", &parameter) != 0) {
+            // defer parameter.unref();
+
+            if (parameter.isOfType(s) == 0) continue;
+
+            var len: usize = undefined;
+            const buf = parameter.getString(&len);
+            const str = buf[0..len];
+            log.info("parameter: {s}", .{str});
+        }
+    }
     _ = self.core_app.mailbox.push(.{
         .new_window = .{},
     }, .{ .forever = {} });
@@ -1751,7 +1779,10 @@ fn initActions(self: *App) void {
     // For action names:
     // https://docs.gtk.org/gio/type_func.Action.name_is_valid.html
     const t = glib.ext.VariantType.newFor(u64);
-    defer glib.VariantType.free(t);
+    defer t.free();
+
+    const av = glib.VariantType.new("av");
+    defer av.free();
 
     const actions = .{
         .{ "quit", gtkActionQuit, null },
@@ -1759,7 +1790,7 @@ fn initActions(self: *App) void {
         .{ "reload-config", gtkActionReloadConfig, null },
         .{ "present-surface", gtkActionPresentSurface, t },
         .{ "show-gtk-inspector", gtkActionShowGTKInspector, null },
-        .{ "new-window", gtkActionNewWindow, null },
+        .{ "new-window", gtkActionNewWindow, av },
     };
 
     inline for (actions) |entry| {
