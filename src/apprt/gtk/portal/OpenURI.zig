@@ -4,6 +4,7 @@ const OpenURI = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 const gio = @import("gio");
 const glib = @import("glib");
@@ -139,6 +140,8 @@ pub fn start(self: *OpenURI, value: apprt.action.OpenUrl) (Allocator.Error || st
 /// Subscribe to the D-Bus signal that will contain the results of our method
 /// call to the portal. This must be called with the mutex locked.
 fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || std.fmt.BufPrintError || Errors)!void {
+    assert(!self.mutex.tryLock());
+
     const alloc = self.app.core_app.alloc;
 
     if (entry.subscription != null) return;
@@ -163,6 +166,8 @@ fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || std.fm
 // This will prevent a response from being processed multiple times. This must
 // be called when the mutex is locked.
 fn unsubscribeFromResponse(self: *OpenURI, entry: *Entry) void {
+    assert(!self.mutex.tryLock());
+
     // Unsubscribe from the response signal
     if (entry.subscription) |subscription| {
         self.dbus.signalUnsubscribe(subscription);
@@ -173,6 +178,8 @@ fn unsubscribeFromResponse(self: *OpenURI, entry: *Entry) void {
 /// Send the D-Bus method call to the portal. The mutex must be locked when this
 /// is called.
 fn sendRequest(self: *OpenURI, entry: *Entry) Allocator.Error!void {
+    assert(!self.mutex.tryLock());
+
     const alloc = self.app.core_app.alloc;
 
     const payload = payload: {
@@ -383,8 +390,11 @@ fn responseReceived(
 /// Wait this number of seconds and then clean up any orphaned entries.
 const cleanup_timeout = 30;
 
-// this must be called with the mutex locked
+/// If there is an active cleanup timer, cancel it. This must be called with the
+/// mutex locked
 fn stopCleanupTimer(self: *OpenURI) void {
+    assert(!self.mutex.tryLock());
+
     if (self.cleanup_timer) |timer| {
         if (glib.Source.remove(timer) == 0) {
             log.warn("unable to remove cleanup timer source={d}", .{timer});
@@ -393,8 +403,12 @@ fn stopCleanupTimer(self: *OpenURI) void {
     }
 }
 
-// this must be called with the mutex locked
+/// Start a timer to clean up any entries that have not received a timely
+/// response. If there is already a timer it will be stopped and replaced with a
+/// new one. This must be called with the mutex locked.
 fn startCleanupTimer(self: *OpenURI) void {
+    assert(!self.mutex.tryLock());
+
     self.stopCleanupTimer();
     self.cleanup_timer = glib.timeoutAddSeconds(cleanup_timeout + 1, cleanup, self);
 }
