@@ -162,9 +162,9 @@ fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || std.fm
     );
 }
 
-// Unsubscribe to the D-Bus signal that contains the result of the method call.
-// This will prevent a response from being processed multiple times. This must
-// be called when the mutex is locked.
+/// Unsubscribe to the D-Bus signal that contains the result of the method call.
+/// This will prevent a response from being processed multiple times. This must
+/// be called when the mutex is locked.
 fn unsubscribeFromResponse(self: *OpenURI, entry: *Entry) void {
     assert(!self.mutex.tryLock());
 
