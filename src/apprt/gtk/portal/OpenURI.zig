@@ -25,7 +25,7 @@ dbus: *gio.DBusConnection,
 mutex: std.Thread.Mutex = .{},
 
 /// Map to store data about any in-flight calls to the portal.
-entries: std.AutoHashMapUnmanaged(usize, Entry) = .empty,
+entries: std.AutoArrayHashMapUnmanaged(usize, *Entry) = .empty,
 
 /// Used to manage a timer to clean up any orphan entries in the map.
 cleanup_timer: ?c_uint = null,
@@ -34,31 +34,35 @@ cleanup_timer: ?c_uint = null,
 pub const Entry = struct {
     /// When the request started.
     start: std.time.Instant,
-    /// A token used by the portal to identify requests and responses. The actual
-    /// format of the token does not really matter as long as it can be used as
-    /// part of a D-Bus object path. `usize` was chosen since it's easy to hash and
-    /// to generate random tokens.
+    /// A token used by the portal to identify requests and responses. The
+    /// actual format of the token does not really matter as long as it can be
+    /// used as part of a D-Bus object path. `usize` was chosen since it's easy
+    /// to hash and to generate random tokens.
     token: usize,
-    /// The "kind" of URI. Unused here, but we may need to pass it on to the fallback
-    /// URL opener if the D-Bus method fails.
+    /// The "kind" of URI. Unused here, but we may need to pass it on to the
+    /// fallback URL opener if the D-Bus method fails.
     kind: apprt.action.OpenUrl.Kind,
-    /// A copy of the URI that we are opening. We need our own copy since the method
-    /// calls are asynchronous and the original may have been freed by the time we need
-    /// it.
+    /// A copy of the URI that we are opening. We need our own copy since the
+    /// method calls are asynchronous and the original may have been freed by
+    /// the time we need it.
     uri: [:0]const u8,
-    /// Used to manage a scription to a D-Bus signal, which is how the Portal
-    /// reports results of the method call.
+    /// Used to manage a scription to a D-Bus signal, which is how the XDG
+    /// Portal reports results of the method call.
     subscription: ?c_uint = null,
 
-    pub fn deinit(self: *Entry, alloc: Allocator) void {
+    pub fn deinit(self: *const Entry, alloc: Allocator) void {
         alloc.free(self.uri);
     }
 };
 
 pub const Errors = error{
+    /// Could not get a D-Bus connection
     DBusConnectionRequired,
+    /// The D-Bus connection did not have a unique name. This _should_ be
+    /// impossible, but is handled for safety's sake.
     NoDBusUniqueName,
-    PutFailed,
+    /// The system was unable to give us the time.
+    TimerUnavailable,
 };
 
 pub fn init(
@@ -76,9 +80,25 @@ pub fn init(
     };
 }
 
+pub fn deinit(self: *OpenURI) void {
+    const alloc = self.app.core_app.alloc;
+
+    self.mutex.lock();
+    defer self.mutex.unlock();
+
+    self.stopCleanupTimer();
+
+    for (self.entries.entries.items(.value)) |entry| {
+        entry.deinit(alloc);
+        alloc.destroy(entry);
+    }
+
+    self.entries.deinit(alloc);
+}
+
 /// Send the D-Bus method call to the XDG Desktop portal. The result of the
 /// method call will be reported asynchronously.
-pub fn start(self: *OpenURI, value: apprt.action.OpenUrl) (Allocator.Error || Errors)!void {
+pub fn start(self: *OpenURI, value: apprt.action.OpenUrl) (Allocator.Error || std.fmt.BufPrintError || Errors)!void {
     const alloc = self.app.core_app.alloc;
 
     const token = portal.generateToken();
@@ -86,37 +106,39 @@ pub fn start(self: *OpenURI, value: apprt.action.OpenUrl) (Allocator.Error || Er
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    try self.entries.putNoClobber(alloc, token, .{
-        .start = std.time.Instant.now() catch @panic("can't get the current time!"),
-        .token = token,
-        .kind = value.kind,
-        .uri = try alloc.dupeZ(u8, value.url),
-    });
-
-    const entry = self.entries.getPtr(token) orelse {
-        return error.PutFailed;
+    // Create an entry that is used to track the results of the D-Bus method
+    // call.
+    const entry = entry: {
+        const entry = try alloc.create(Entry);
+        errdefer alloc.destroy(entry);
+        entry.* = .{
+            .start = std.time.Instant.now() catch return error.TimerUnavailable,
+            .token = token,
+            .kind = value.kind,
+            .uri = try alloc.dupeZ(u8, value.url),
+        };
+        errdefer entry.deinit(alloc);
+        try self.entries.putNoClobber(alloc, token, entry);
+        break :entry entry;
     };
+
+    errdefer {
+        _ = self.entries.swapRemove(token);
+        entry.deinit(alloc);
+        alloc.destroy(entry);
+    }
 
     self.startCleanupTimer();
 
     try self.subscribeToResponse(entry);
+    errdefer self.unsubscribeFromResponse(entry);
+
     try self.sendRequest(entry);
-}
-
-pub fn deinit(self: *OpenURI) void {
-    const alloc = self.app.core_app.alloc;
-
-    var it = self.entries.valueIterator();
-    while (it.next()) |value| {
-        value.deinit(alloc);
-    }
-
-    self.entries.deinit(alloc);
 }
 
 /// Subscribe to the D-Bus signal that will contain the results of our method
 /// call to the portal. This must be called with the mutex locked.
-fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || Errors)!void {
+fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || std.fmt.BufPrintError || Errors)!void {
     const alloc = self.app.core_app.alloc;
 
     if (entry.subscription != null) return;
@@ -136,11 +158,11 @@ fn subscribeToResponse(self: *OpenURI, entry: *Entry) (Allocator.Error || Errors
         null,
     );
 }
+
 // Unsubscribe to the D-Bus signal that contains the result of the method call.
 // This will prevent a response from being processed multiple times. This must
 // be called when the mutex is locked.
 fn unsubscribeFromResponse(self: *OpenURI, entry: *Entry) void {
-
     // Unsubscribe from the response signal
     if (entry.subscription) |subscription| {
         self.dbus.signalUnsubscribe(subscription);
@@ -155,11 +177,12 @@ fn sendRequest(self: *OpenURI, entry: *Entry) Allocator.Error!void {
 
     const payload = payload: {
         const builder_type = glib.VariantType.new("(ssa{sv})");
-        defer glib.free(builder_type);
+        defer builder_type.free();
 
         // Initialize our builder to build up our parameters
         var builder: glib.VariantBuilder = undefined;
         builder.init(builder_type);
+        errdefer builder.clear();
 
         // parent window - empty string means we have no window
         builder.add("s", "");
@@ -221,7 +244,7 @@ fn sendRequest(self: *OpenURI, entry: *Entry) Allocator.Error!void {
 
     // We're expecting an object path back from the method call.
     const reply_type = glib.VariantType.new("(o)");
-    defer glib.free(reply_type);
+    defer reply_type.free();
 
     self.dbus.call(
         "org.freedesktop.portal.Desktop",
@@ -268,7 +291,7 @@ fn requestCallback(
     defer reply.unref();
 
     const reply_type = glib.VariantType.new("(o)");
-    defer glib.free(reply_type);
+    defer reply_type.free();
 
     if (reply.isOfType(reply_type) == 0) {
         log.warn("Reply from D-Bus method call does not contain an object path!", .{});
@@ -323,14 +346,17 @@ fn responseReceived(
     self.mutex.lock();
     defer self.mutex.unlock();
 
-    var entry = (self.entries.fetchRemove(token) orelse {
+    const entry = (self.entries.fetchSwapRemove(token) orelse {
         log.warn("no entry for token {x:0<16}", .{token});
         return;
     }).value;
-    log.warn("removed {x:0<16} from the map", .{entry.token});
-    defer entry.deinit(alloc);
 
-    self.unsubscribeFromResponse(&entry);
+    defer {
+        entry.deinit(alloc);
+        alloc.destroy(entry);
+    }
+
+    self.unsubscribeFromResponse(entry);
 
     var response: u32 = 0;
     var results: ?*glib.Variant = null;
@@ -381,19 +407,31 @@ fn cleanup(ud: ?*anyopaque) callconv(.c) c_int {
         return @intFromBool(glib.SOURCE_REMOVE);
     }));
 
+    const alloc = self.app.core_app.alloc;
+
     self.mutex.lock();
     defer self.mutex.unlock();
 
     self.cleanup_timer = null;
 
-    const now = std.time.Instant.now() catch @panic("unable to get time!");
+    const now = std.time.Instant.now() catch {
+        // `now()` should never fail, but if it does, don't crash, just return.
+        // This might cause a small memory leak in rare circumstances but it
+        // should get cleaned up the next time a URL is clicked.
+        return @intFromBool(glib.SOURCE_REMOVE);
+    };
 
-    var it = self.entries.valueIterator();
-    while (it.next()) |entry| {
-        if (now.since(entry.start) > cleanup_timeout * std.time.ns_per_s) {
-            self.unsubscribeFromResponse(entry);
-            _ = self.entries.remove(entry.token);
+    loop: while (true) {
+        for (self.entries.entries.items(.value)) |entry| {
+            if (now.since(entry.start) > cleanup_timeout * std.time.ns_per_s) {
+                self.unsubscribeFromResponse(entry);
+                _ = self.entries.swapRemove(entry.token);
+                entry.deinit(alloc);
+                alloc.destroy(entry);
+                continue :loop;
+            }
         }
+        break :loop;
     }
 
     return @intFromBool(glib.SOURCE_REMOVE);
