@@ -2,10 +2,29 @@ using Gtk 4.0;
 using Adw 1;
 
 template $GhosttyWindow: Adw.ApplicationWindow {
+  styles [
+    "window",
+  ]
+
   default-width: 800;
   default-height: 600;
 
-  content: $GhosttySurface surface {
-    close-request => $surface_close_request();
+  content: Gtk.Box {
+    orientation: vertical;
+    spacing: 0;
+
+    Adw.Banner warning_banner {
+      title: _("⚠️ You're running a debug build of Ghostty! Performance will be degraded.");
+      revealed: true;
+    }
+
+    Adw.ToastOverlay toast_overlay {
+      focusable: false;
+      focus-on-click: false;
+
+      $GhosttySurface surface {
+        close-request => $surface_close_request();
+      }
+    }
   };
 }
