@@ -21,6 +21,7 @@ const gtk_key = @import("../key.zig");
 const ApprtSurface = @import("../Surface.zig");
 const Common = @import("../class.zig").Common;
 const Application = @import("application.zig").Application;
+const Window = @import("window.zig").Window;
 const Config = @import("config.zig").Config;
 const ResizeOverlay = @import("resize_overlay.zig").ResizeOverlay;
 const ChildExited = @import("surface_child_exited.zig").SurfaceChildExited;
