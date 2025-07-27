@@ -548,12 +548,14 @@ pub const Application = extern struct {
             .size_limit => return Action.sizeLimit(target, value),
 
             .toggle_maximize => Action.toggleMaximize(target),
+
             .toggle_fullscreen => Action.toggleFullscreen(target),
             .toggle_tab_overview => return Action.toggleTabOverview(target),
 
+            .toggle_command_palette => Action.toggleCommandPalette(target),
+
             // Unimplemented but todo on gtk-ng branch
             .prompt_title,
-            .toggle_command_palette,
             .inspector,
             // TODO: splits
             .new_split,
@@ -1716,6 +1718,16 @@ const Action = struct {
 
                 window.toggleTabOverview();
                 return true;
+            },
+        }
+    }
+
+    pub fn toggleCommandPalette(target: apprt.Target) void {
+        switch (target) {
+            .app => {},
+            .surface => |v| {
+                _ = v;
+                log.warn("keybind for toggling command palette is not supported", .{});
             },
         }
     }

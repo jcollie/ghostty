@@ -22,6 +22,7 @@ const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseCo
 const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
+const CommandPalette = @import("command_palette.zig").CommandPalette;
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -226,6 +227,9 @@ pub const Window = extern struct {
         /// See tabOverviewOpen for why we have this.
         tab_overview_focus_timer: ?c_uint = null,
 
+        /// A weak reference to a command palette.
+        command_palette: gobject.WeakRef = std.mem.zeroes(gobject.WeakRef),
+
         // Template bindings
         tab_overview: *adw.TabOverview,
         tab_bar: *adw.TabBar,
@@ -292,6 +296,7 @@ pub const Window = extern struct {
             .{ "paste", actionPaste, null },
             .{ "reset", actionReset, null },
             .{ "clear", actionClear, null },
+            .{ "toggle-command-palette", actionToggleCommandPalette, null },
         };
 
         const action_map = self.as(gio.ActionMap);
@@ -508,7 +513,7 @@ pub const Window = extern struct {
     }
 
     /// Perform a binding action on the window's active surface.
-    fn performBindingAction(
+    pub fn performBindingAction(
         self: *Self,
         action: input.Binding.Action,
     ) void {
@@ -534,6 +539,15 @@ pub const Window = extern struct {
 
     //---------------------------------------------------------------
     // Properties
+
+    pub fn getConfig(self: *Self) *Config {
+        const priv = self.private();
+        if (priv.config) |config| {
+            return config.ref();
+        }
+        const app = Application.default();
+        return app.getConfig();
+    }
 
     /// Get the currently active surface. See the "active-surface" property.
     /// This does not ref the value.
@@ -709,8 +723,9 @@ pub const Window = extern struct {
     //---------------------------------------------------------------
     // Virtual methods
 
-    fn dispose(self: *Self) callconv(.C) void {
+    fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
+
         if (priv.config) |v| {
             v.unref();
             priv.config = null;
@@ -1331,6 +1346,18 @@ pub const Window = extern struct {
         self: *Window,
     ) callconv(.c) void {
         self.performBindingAction(.clear_screen);
+    }
+
+    fn actionToggleCommandPalette(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const command_palette = gobject.ext.cast(CommandPalette, priv.command_palette.get()) orelse CommandPalette.new(self);
+        defer command_palette.unref();
+        priv.command_palette.set(command_palette.as(gobject.Object));
+        command_palette.toggle();
     }
 
     const C = Common(Self, Private);
