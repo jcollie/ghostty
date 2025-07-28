@@ -82,24 +82,22 @@ label.resize-overlay {
  * Child Exited Overlay
  */
 .child-exited.normal revealer widget {
-  background-color: rgba(38, 162, 105, 0.5);
-  /* after GTK 4.16 is a requirement, switch to the following:
-  /* background-color: color-mix(in srgb, var(--success-bg-color), transparent 50%); */
+  background-color: color-mix(
+    in srgb,
+    var(--success-bg-color),
+    transparent 50%
+  );
 }
 
 .child-exited.abnormal revealer widget {
-  background-color: rgba(192, 28, 40, 0.5);
-  /* after GTK 4.16 is a requirement, switch to the following:
-  /* background-color: color-mix(in srgb, var(--error-bg-color), transparent 50%); */
+  background-color: color-mix(in srgb, var(--error-bg-color), transparent 50%);
 }
 
 /*
  * Surface
  */
 .surface progressbar.error trough progress {
-  background-color: rgb(192, 28, 40);
-  /* after GTK 4.16 is a requirement, switch to the following: */
-  /* background-color: color-mix(in srgb, var(--error-bg-color), transparent); */
+  background-color: color-mix(in srgb, var(--error-bg-color), transparent);
 }
 
 /*
