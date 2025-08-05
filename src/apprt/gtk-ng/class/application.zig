@@ -1075,9 +1075,13 @@ pub const Application = extern struct {
                 else
                     .prefer_dark;
             },
-            .system => .prefer_light,
+            .system => .default,
             .dark => .force_dark,
+            .@"prefer-dark" => .prefer_dark,
+            .@"force-dark" => .force_dark,
             .light => .force_light,
+            .@"prefer-light" => .prefer_light,
+            .@"force-light" => .force_light,
         });
 
         // Setup color change notifications

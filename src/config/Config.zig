@@ -1589,8 +1589,20 @@ keybind: Keybinds = .{},
 ///      has separate light and dark themes. In that case, the behavior
 ///      of "auto" is equivalent to "system".
 ///   * `system` - Use the system theme.
-///   * `light` - Use the light theme regardless of system theme.
-///   * `dark` - Use the dark theme regardless of system theme.
+///   * `dark` - Force the use of a dark theme regardless of system theme.
+///   * `prefer_dark` - Prefer a dark theme unless the system is using a light
+///      theme.
+///
+///      On macOS this is equivalent to `dark` and Ghostty will always use a
+///      light theme.
+///   * `force_dark` - Force the use of a dark theme regardless of system theme.
+///   * `light` - Force the use of a light theme regardless of system theme.
+///   * `prefer_light` - Prefer a light theme unless the system is using a dark
+///      theme.
+///
+///      On macOS this is equivalent to `light` and Ghostty will always use a
+///      light theme.
+///   * `force_light` - Force the use of a light theme regardless of system theme.
 ///   * `ghostty` - Use the background and foreground colors specified in the
 ///     Ghostty configuration. This is only supported on Linux builds.
 ///
@@ -6858,7 +6870,11 @@ pub const WindowTheme = enum {
     auto,
     system,
     light,
+    @"prefer-light",
+    @"force-light",
     dark,
+    @"prefer-dark",
+    @"force-dark",
     ghostty,
 };
 

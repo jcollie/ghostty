@@ -12,8 +12,16 @@ extension NSAppearance {
         switch (theme) {
         case "dark":
             self.init(named: .darkAqua)
+        case "prefer-dark":
+            self.init(named: .darkAqua)
+        case "force-dark":
+            self.init(named: .darkAqua)
 
         case "light":
+            self.init(named: .aqua)
+        case "prefer-light":
+            self.init(named: .aqua)
+        case "force-light":
             self.init(named: .aqua)
 
         case "auto":
