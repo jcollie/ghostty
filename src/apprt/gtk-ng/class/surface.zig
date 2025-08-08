@@ -213,7 +213,10 @@ pub const Surface = extern struct {
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = C.privateStringFieldAccessor("title"),
+                    .accessor = .{
+                        .getter = propGetTitle,
+                        .setter = propSetTitle,
+                    },
                 },
             );
         };
@@ -569,6 +572,14 @@ pub const Surface = extern struct {
         defer config.unref();
 
         const cfg = config.get();
+
+        if (cfg.@"bell-features".title) {
+            // Send a notification that the "title" property has changed because
+            // now we'll need to prepend a 🔔 to the title.
+            self.as(gobject.Object).notifyByPspec(
+                properties.title.impl.param_spec,
+            );
+        }
 
         if (cfg.@"bell-features".audio) audio: {
             // Play a user-specified audio file.
@@ -1396,6 +1407,51 @@ pub const Surface = extern struct {
 
     //---------------------------------------------------------------
     // Properties
+
+    /// Get the title, possibly with a 🔔 prepended. Because we may need to
+    /// do allocations we fully manage the value rather than relying on any
+    /// helpers.
+    fn propGetTitle(self: *Self, value: *gobject.Value) void {
+        const priv = self.private();
+
+        if (priv.title) |v| {
+            // If we're not prepending 🔔, just copy the title and return.
+            if (!priv.bell_ringing or !priv.bell_features.title) {
+                value.setString(v);
+                return;
+            }
+
+            // Prepend a 🔔 to the title.
+            const alloc = Application.default().allocator();
+            const title = std.fmt.allocPrintZ(alloc, "🔔 {s}", .{v}) catch {
+                value.setString("🔔");
+                return;
+            };
+            defer alloc.free(title);
+            value.setString(title);
+            return;
+        }
+
+        if (priv.bell_ringing and priv.bell_features.title) {
+            value.setString("🔔");
+            return;
+        }
+
+        value.setString(null);
+    }
+
+    /// Set the title. Since we may need to do allocations in the getter we
+    /// fully manage this property rather than relying on any helpers.
+    fn propSetTitle(self: *Self, value: *const gobject.Value) void {
+        const priv = self.private();
+        if (priv.title) |v| {
+            glib.free(@constCast(@ptrCast(v)));
+            priv.title = null;
+        }
+        assert(priv.title == null);
+        if (!g_value_holds(value, gobject.ext.types.string)) return;
+        priv.title = std.mem.span(value.dupString() orelse return);
+    }
 
     /// Returns the title property without a copy.
     pub fn getTitle(self: *Self) ?[:0]const u8 {
