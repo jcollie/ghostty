@@ -339,6 +339,7 @@ pub const Window = extern struct {
             .{ "paste", actionPaste, null },
             .{ "reset", actionReset, null },
             .{ "clear", actionClear, null },
+            // TODO: accept the surface that toggled the command palette
             .{ "toggle-command-palette", actionToggleCommandPalette, null },
         };
 
@@ -1667,6 +1668,8 @@ pub const Window = extern struct {
     }
 
     /// Toggle the command palette.
+    ///
+    /// TODO: accept the surface that toggled the command palette as a parameter
     fn toggleCommandPalette(self: *Window) void {
         const priv = self.private();
         // Get a reference to a command palette. First check the weak reference
@@ -1720,6 +1723,8 @@ pub const Window = extern struct {
         _: ?*glib.Variant,
         self: *Window,
     ) callconv(.c) void {
+        // TODO: accept the surface that toggled the command palette as a
+        // parameter
         self.toggleCommandPalette();
     }
 
