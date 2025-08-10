@@ -338,6 +338,7 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
+            .init("present-window", actionPresentWindow, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -687,13 +688,6 @@ pub const Window = extern struct {
         var it = tree.iterator();
         while (it.next()) |entry| {
             const surface = entry.view;
-            _ = Surface.signals.@"present-request".connect(
-                surface,
-                *Self,
-                surfacePresentRequest,
-                self,
-                .{},
-            );
             _ = Surface.signals.@"clipboard-write".connect(
                 surface,
                 *Self,
@@ -1490,50 +1484,6 @@ pub const Window = extern struct {
         self.syncActions();
     }
 
-    fn surfacePresentRequest(
-        surface: *Surface,
-        self: *Self,
-    ) callconv(.c) void {
-        // Verify that this surface is actually in this window.
-        {
-            const surface_window = ext.getAncestor(
-                Self,
-                surface.as(gtk.Widget),
-            ) orelse {
-                log.warn(
-                    "present request called for non-existent surface",
-                    .{},
-                );
-                return;
-            };
-            if (surface_window != self) {
-                log.warn(
-                    "present request called for surface in different window",
-                    .{},
-                );
-                return;
-            }
-        }
-
-        // Get the tab for this surface.
-        const tab = ext.getAncestor(
-            Tab,
-            surface.as(gtk.Widget),
-        ) orelse {
-            log.warn("present request surface not found", .{});
-            return;
-        };
-
-        // Get the page that contains this tab
-        const priv = self.private();
-        const tab_view = priv.tab_view;
-        const page = tab_view.getPage(tab.as(gtk.Widget));
-        tab_view.setSelectedPage(page);
-
-        // Grab focus
-        surface.grabFocus();
-    }
-
     fn surfaceToggleFullscreen(
         surface: *Surface,
         self: *Self,
@@ -1843,6 +1793,15 @@ pub const Window = extern struct {
         // TODO: accept the surface that toggled the command palette as a
         // parameter
         self.toggleInspector();
+    }
+
+    /// React to GTK action requesting that we present ourselves.
+    fn actionPresentWindow(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        self.as(gtk.Window).present();
     }
 
     const C = Common(Self, Private);

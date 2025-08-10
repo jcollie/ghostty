@@ -202,6 +202,7 @@ pub const Tab = extern struct {
         const actions = [_]ext.actions.Action(Self){
             .init("close", actionClose, null),
             .init("ring-bell", actionRingBell, null),
+            .init("present-page", actionPresentPage, null),
         };
 
         ext.actions.addAsGroup(Self, self, "tab", &actions);
@@ -235,12 +236,14 @@ pub const Tab = extern struct {
         return tree.getNeedsConfirmQuit();
     }
 
-    /// Get the tab page holding this tab, if any.
-    fn getTabPage(self: *Self) ?*adw.TabPage {
-        const tab_view = ext.getAncestor(
-            adw.TabView,
-            self.as(gtk.Widget),
-        ) orelse return null;
+    /// Get the tab view that we are associated with, or null.
+    fn getTabView(self: *Self) ?*adw.TabView {
+        return ext.getAncestor(adw.TabView, self.as(gtk.Widget));
+    }
+
+    /// Get the tab page that are are associated with, or null. `tab_view` must
+    /// be the tab view returned by a previous call to `getTabView`.
+    fn getTabPage(self: *Self, tab_view: *adw.TabView) ?*adw.TabPage {
         return tab_view.getPage(self.as(gtk.Widget));
     }
 
@@ -281,8 +284,26 @@ pub const Tab = extern struct {
             self.as(Parent),
         );
     }
+
     //---------------------------------------------------------------
     // Signal handlers
+
+    /// Ensure that we are the selected tab page.
+    fn actionPresentPage(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const tab_view = self.getTabView() orelse {
+            log.warn("unable to get tab view associated with this tab", .{});
+            return;
+        };
+        const tab_page = self.getTabPage(tab_view) orelse {
+            log.warn("unable to get tab page associated with this tab", .{});
+            return;
+        };
+        tab_view.setSelectedPage(tab_page);
+    }
 
     fn propSplitTree(
         _: *SplitTree,
@@ -340,7 +361,8 @@ pub const Tab = extern struct {
         // If the page is selected already we don't mark it as needing
         // attention. We only want to mark unfocused pages. This will then
         // clear when the page is selected.
-        const page = self.getTabPage() orelse return;
+        const view = self.getTabView() orelse return;
+        const page = self.getTabPage(view) orelse return;
         if (page.getSelected() != 0) return;
         page.setNeedsAttention(@intFromBool(true));
     }

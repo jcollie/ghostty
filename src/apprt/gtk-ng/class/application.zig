@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
+
 const adw = @import("adw");
 const gdk = @import("gdk");
 const gio = @import("gio");
@@ -1490,42 +1491,33 @@ pub const Application = extern struct {
         parameter_: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
-        const parameter = parameter_ orelse return;
+        // were we given a parameter?
+        const parameter = parameter_ orelse {
+            log.warn("present-surface: no parameter received", .{});
+            return;
+        };
 
-        const t = glib.ext.VariantType.newFor(u64);
-        defer glib.VariantType.free(t);
+        const t_variant_type = glib.ext.VariantType.newFor(u64);
+        defer t_variant_type.free();
 
-        // Make sure that we've receiived a u64 from the system.
-        if (glib.Variant.isOfType(parameter, t) == 0) {
+        // Make sure that we've received a u64 from the system.
+        if (glib.Variant.isOfType(parameter, t_variant_type) == 0) {
+            log.warn("present-surface: wrong parameter type {s}", .{parameter.getTypeString()});
             return;
         }
 
-        // Convert that u64 to pointer to a core surface. A value of zero
-        // means that there was no target surface for the notification so
-        // we don't focus any surface.
-        //
-        // This is admittedly SUPER SUS and we should instead do what we
-        // do on macOS which is generate a UUID per surface and then pass
-        // that around. But, we do validate the pointer below so at worst
-        // this may result in focusing the wrong surface if the pointer was
-        // reused for a surface.
-        const ptr_int = parameter.getUint64();
-        if (ptr_int == 0) return;
-        const surface: *CoreSurface = @ptrFromInt(ptr_int);
+        const id = parameter.getUint64();
 
-        // Send a message through the core app mailbox rather than presenting the
-        // surface directly so that it can validate that the surface pointer is
-        // valid. We could get an invalid pointer if a desktop notification outlives
-        // a Ghostty instance and a new one starts up, or there are multiple Ghostty
-        // instances running.
-        _ = self.core().mailbox.push(
-            .{
-                .surface_message = .{
-                    .surface = surface,
-                    .message = .present_surface,
-                },
-            },
-            .forever,
+        // Search for a surface that matches the UUID.
+        const surface = self.core().findSurfaceByID(id) orelse {
+            log.warn("present-surface: no surface matching {d}", .{id});
+            return;
+        };
+
+        _ = try self.performAction(
+            .{ .surface = surface },
+            .present_terminal,
+            {},
         );
     }
 
@@ -1635,17 +1627,18 @@ const Action = struct {
         defer notification.unref();
         notification.setBody(n.body);
 
-        const icon = gio.ThemedIcon.new("com.mitchellh.ghostty");
+        const icon = gio.ThemedIcon.new(build_config.bundle_id);
         defer icon.unref();
         notification.setIcon(icon.as(gio.Icon));
 
-        const pointer = glib.Variant.newUint64(switch (target) {
-            .app => 0,
-            .surface => |v| @intFromPtr(v),
-        });
+        const id = switch (target) {
+            .app => glib.Variant.newUint64(0),
+            .surface => |v| glib.Variant.newUint64(v.id),
+        };
+
         notification.setDefaultActionAndTargetValue(
             "app.present-surface",
-            pointer,
+            id,
         );
 
         // We set the notification ID to the body content. If the content is the
