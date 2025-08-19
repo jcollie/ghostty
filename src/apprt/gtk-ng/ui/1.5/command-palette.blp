@@ -41,18 +41,18 @@ Adw.Dialog dialog {
             incremental: true;
 
             filter: Gtk.AnyFilter {
-              Gtk.StringFilter {
+              $GhosttyZFSearchFilter {
                 expression: expr item as <$GhosttyCommand>.title;
                 search: bind search.text;
               }
 
-              Gtk.StringFilter {
+              $GhosttyZFSearchFilter {
                 expression: expr item as <$GhosttyCommand>.description;
                 search: bind search.text;
               }
 
-              Gtk.StringFilter {
-                expression: expr item as <$GhosttyCommand>.action-string;
+              $GhosttyZFSearchFilter {
+                expression: expr item as <$GhosttyCommand>.action-key;
                 search: bind search.text;
               }
             };

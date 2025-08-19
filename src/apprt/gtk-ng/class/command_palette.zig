@@ -17,6 +17,7 @@ const Window = @import("window.zig").Window;
 const Surface = @import("surface.zig").Surface;
 const ApprtSurface = @import("../Surface.zig");
 const Config = @import("config.zig").Config;
+const ZFSearchFilter = @import("zf_search_filter.zig").ZFSearchFilter;
 
 const log = std.log.scoped(.gtk_ghostty_command_palette);
 
@@ -340,6 +341,7 @@ pub const CommandPalette = extern struct {
 
         fn init(class: *Class) callconv(.c) void {
             gobject.ext.ensureType(Command);
+            gobject.ext.ensureType(ZFSearchFilter);
             gtk.Widget.Class.setTemplateFromResource(
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
