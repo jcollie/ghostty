@@ -494,9 +494,30 @@ const Command = extern struct {
     pub fn newFromCommand(
         config: *Config,
         command: input.Command,
-    ) Allocator.Error!*Self {
+    ) (Allocator.Error || error{NoSpaceLeft})!*Self {
+        const cfg = config.get();
+        const keybinds = cfg.keybind.set;
+
+        var action_string_buf: [256]u8 = undefined;
+        const action_string = try std.fmt.bufPrintZ(
+            &action_string_buf,
+            "{}",
+            .{command.action},
+        );
+
+        var action_keybind_buf: [256]u8 = undefined;
+        const action_keybind = action_keybind: {
+            const trigger = keybinds.getTrigger(command.action) orelse break :action_keybind null;
+            const accel = (key.accelFromTrigger(&action_keybind_buf, trigger) catch break :action_keybind null) orelse break :action_keybind null;
+            break :action_keybind accel;
+        };
+
         const self = gobject.ext.newInstance(Self, .{
             .config = config,
+            .title = command.title,
+            .description = command.description,
+            .@"action-string" = action_string,
+            .@"action-keybind" = action_keybind,
         });
         errdefer self.unref();
 
@@ -505,53 +526,32 @@ const Command = extern struct {
 
         priv.action = try command.action.clone(alloc);
 
-        priv.action_string = try std.fmt.allocPrintZ(
-            priv.arena.allocator(),
-            "{}",
-            .{command.action},
-        );
-
-        const cfg = config.get();
-        const keybinds = cfg.keybind.set;
-
-        priv.action_keybind = action: {
-            var buf: [64]u8 = undefined;
-            const trigger = keybinds.getTrigger(command.action) orelse break :action null;
-            const accel = (key.accelFromTrigger(&buf, trigger) catch break :action null) orelse break :action null;
-            break :action alloc.dupeZ(u8, accel) catch null;
-        };
-
-        priv.title = glib.ext.dupeZ(u8, command.title);
-
-        priv.description = glib.ext.dupeZ(u8, command.description);
-
         return self;
     }
 
     pub fn newFromSurface(
         config: *Config,
         surface: *ApprtSurface,
-    ) error{}!*Self {
-        const self = gobject.ext.newInstance(Self, .{
-            .config = config,
-        });
-        errdefer self.unref();
-
-        const priv = self.private();
-
+    ) error{NoSpaceLeft}!*Self {
         const action: input.Binding.Action = .{
             .present_surface = surface.core().id,
         };
 
-        priv.action = action;
-
-        priv.action_string = std.fmt.allocPrintZ(
-            priv.arena.allocator(),
+        var action_string_buf: [256]u8 = undefined;
+        const action_string = try std.fmt.bufPrintZ(
+            &action_string_buf,
             "{}",
             .{action},
-        ) catch null;
+        );
 
-        priv.action_keybind = null;
+        const self = gobject.ext.newInstance(Self, .{
+            .config = config,
+            .@"action-string" = action_string,
+        });
+        errdefer self.unref();
+
+        const priv = self.private();
+        priv.action = action;
 
         _ = gobject.Object.bindProperty(
             surface.gobj().as(gobject.Object),
