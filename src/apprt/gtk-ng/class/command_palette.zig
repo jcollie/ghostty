@@ -4,6 +4,7 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const adw = @import("adw");
 const gio = @import("gio");
+const glib = @import("glib");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
@@ -13,6 +14,8 @@ const key = @import("../key.zig");
 const Common = @import("../class.zig").Common;
 const Application = @import("application.zig").Application;
 const Window = @import("window.zig").Window;
+const Surface = @import("surface.zig").Surface;
+const ApprtSurface = @import("../Surface.zig");
 const Config = @import("config.zig").Config;
 
 const log = std.log.scoped(.gtk_ghostty_command_palette);
@@ -80,6 +83,9 @@ pub const CommandPalette = extern struct {
         /// This is where all command data is ultimately stored.
         source: *gio.ListStore,
 
+        /// The idle handler.
+        idler: ?c_uint = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -112,10 +118,38 @@ pub const CommandPalette = extern struct {
                 .detail = "config",
             },
         );
+
+        // Listen for when additions/removals from the list of active surfaces
+        // happen.
+        _ = Application.signals.@"surfaces-changed".connect(
+            Application.default(),
+            *Self,
+            signalSurfacesChanged,
+            self,
+            .{},
+        );
     }
 
     fn dispose(self: *Self) callconv(.c) void {
+        const app = Application.default();
+        _ = gobject.signalHandlersDisconnectMatched(
+            app.as(gobject.Object),
+            .{ .data = true },
+            0,
+            0,
+            null,
+            null,
+            self,
+        );
+
         const priv = self.private();
+
+        if (priv.idler) |idler| {
+            if (glib.Source.remove(idler) == 0) {
+                log.warn("unable to remove command palette updater", .{});
+            }
+            priv.idler = null;
+        }
 
         priv.source.removeAll();
 
@@ -138,12 +172,32 @@ pub const CommandPalette = extern struct {
     //---------------------------------------------------------------
     // Signal Handlers
 
+    /// Update the commands when the config changes.
     fn propConfig(self: *CommandPalette, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.c) void {
+        self.scheduleUpdateList();
+    }
+
+    /// Update the commands when the list of active surfaces changes.
+    fn signalSurfacesChanged(_: *Application, self: *CommandPalette) callconv(.c) void {
+        self.scheduleUpdateList();
+    }
+
+    fn scheduleUpdateList(self: *CommandPalette) void {
         const priv = self.private();
+        if (priv.idler) |_| return;
+        priv.idler = glib.idleAdd(updateList, self);
+    }
+
+    fn updateList(ud: ?*anyopaque) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return @intFromBool(glib.SOURCE_REMOVE)));
+
+        const priv = self.private();
+
+        priv.idler = null;
 
         const config = priv.config orelse {
             log.warn("command palette does not have a config!", .{});
-            return;
+            return @intFromBool(glib.SOURCE_REMOVE);
         };
 
         const cfg = config.get();
@@ -167,11 +221,20 @@ pub const CommandPalette = extern struct {
                 else => {},
             }
 
-            const cmd = Command.new(config, command);
-            const cmd_ref = cmd.as(gobject.Object);
-            priv.source.append(cmd_ref);
-            cmd_ref.unref();
+            const cmd = Command.newFromCommand(config, command) catch continue;
+            priv.source.append(cmd.as(gobject.Object));
+            cmd.unref();
         }
+
+        const app = Application.default();
+
+        for (app.core().surfaces.items) |surface| {
+            const cmd = Command.newFromSurface(config, surface) catch continue;
+            priv.source.append(cmd.as(gobject.Object));
+            cmd.unref();
+        }
+
+        return @intFromBool(glib.SOURCE_REMOVE);
     }
 
     fn close(self: *CommandPalette) void {
@@ -196,6 +259,23 @@ pub const CommandPalette = extern struct {
 
     fn rowActivated(_: *gtk.ListView, pos: c_uint, self: *CommandPalette) callconv(.c) void {
         self.activated(pos);
+    }
+
+    fn getSubtitle(_: *CommandPalette, action_string_: ?[*:0]const u8, description_: ?[*:0]const u8) callconv(.c) ?[*:0]const u8 {
+        const action_string = action_string_ orelse return null;
+        if (std.mem.startsWith(u8, std.mem.span(action_string), "present_surface:")) {
+            const description = description_ orelse return null;
+            return glib.ext.dupeZ(u8, std.mem.span(description));
+        }
+        return glib.ext.dupeZ(u8, std.mem.span(action_string));
+    }
+
+    fn getIconName(_: *CommandPalette, action_string_: ?[*:0]const u8) callconv(.c) ?[*:0]const u8 {
+        const action_string = action_string_ orelse return null;
+        if (std.mem.startsWith(u8, std.mem.span(action_string), "present_surface:")) {
+            return glib.ext.dupeZ(u8, "utilities-terminal-symbolic");
+        }
+        return glib.ext.dupeZ(u8, "system-run-symbolic");
     }
 
     //---------------------------------------------------------------
@@ -282,6 +362,8 @@ pub const CommandPalette = extern struct {
             class.bindTemplateCallback("search_stopped", &searchStopped);
             class.bindTemplateCallback("search_activated", &searchActivated);
             class.bindTemplateCallback("row_activated", &rowActivated);
+            class.bindTemplateCallback("get_subtitle", &getSubtitle);
+            class.bindTemplateCallback("get_icon_name", &getIconName);
 
             // Properties
             gobject.ext.registerProperties(class, &.{
@@ -331,42 +413,28 @@ const Command = extern struct {
             );
         };
 
-        pub const action_key = struct {
-            pub const name = "action-key";
+        pub const @"action-keybind" = struct {
+            pub const name = "action-keybind";
             const impl = gobject.ext.defineProperty(
                 name,
                 Self,
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = gobject.ext.typedAccessor(
-                        Self,
-                        ?[:0]const u8,
-                        .{
-                            .getter = propGetActionKey,
-                            .getter_transfer = .none,
-                        },
-                    ),
+                    .accessor = C.privateStringFieldAccessor("action_keybind"),
                 },
             );
         };
 
-        pub const action = struct {
-            pub const name = "action";
+        pub const @"action-string" = struct {
+            pub const name = "action-string";
             const impl = gobject.ext.defineProperty(
                 name,
                 Self,
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = gobject.ext.typedAccessor(
-                        Self,
-                        ?[:0]const u8,
-                        .{
-                            .getter = propGetAction,
-                            .getter_transfer = .none,
-                        },
-                    ),
+                    .accessor = C.privateStringFieldAccessor("action_string"),
                 },
             );
         };
@@ -379,14 +447,7 @@ const Command = extern struct {
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = gobject.ext.typedAccessor(
-                        Self,
-                        ?[:0]const u8,
-                        .{
-                            .getter = propGetTitle,
-                            .getter_transfer = .none,
-                        },
-                    ),
+                    .accessor = C.privateStringFieldAccessor("title"),
                 },
             );
         };
@@ -399,14 +460,7 @@ const Command = extern struct {
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = gobject.ext.typedAccessor(
-                        Self,
-                        ?[:0]const u8,
-                        .{
-                            .getter = propGetDescription,
-                            .getter_transfer = .none,
-                        },
-                    ),
+                    .accessor = C.privateStringFieldAccessor("description"),
                 },
             );
         };
@@ -419,27 +473,116 @@ const Command = extern struct {
         /// Arena used to manage our allocations.
         arena: ArenaAllocator,
 
-        /// The command.
-        command: ?input.Command = null,
+        /// The action.
+        action: ?input.Binding.Action = null,
 
-        /// Cache the formatted action.
-        action: ?[:0]const u8 = null,
+        /// Title for the action.
+        title: ?[:0]const u8 = null,
 
-        /// Cache the formatted action_key.
-        action_key: ?[:0]const u8 = null,
+        /// Description for the action.
+        description: ?[:0]const u8 = null,
+
+        /// The formatted action.
+        action_string: ?[:0]const u8 = null,
+
+        /// The formatted keybind.
+        action_keybind: ?[:0]const u8 = null,
 
         pub var offset: c_int = 0;
     };
 
-    pub fn new(config: *Config, command: input.Command) *Self {
+    pub fn newFromCommand(
+        config: *Config,
+        command: input.Command,
+    ) Allocator.Error!*Self {
         const self = gobject.ext.newInstance(Self, .{
             .config = config,
         });
+        errdefer self.unref();
 
         const priv = self.private();
-        priv.command = command.clone(priv.arena.allocator()) catch null;
+        const alloc = priv.arena.allocator();
+
+        priv.action = try command.action.clone(alloc);
+
+        priv.action_string = try std.fmt.allocPrintZ(
+            priv.arena.allocator(),
+            "{}",
+            .{command.action},
+        );
+
+        const cfg = config.get();
+        const keybinds = cfg.keybind.set;
+
+        priv.action_keybind = action: {
+            var buf: [64]u8 = undefined;
+            const trigger = keybinds.getTrigger(command.action) orelse break :action null;
+            const accel = (key.accelFromTrigger(&buf, trigger) catch break :action null) orelse break :action null;
+            break :action alloc.dupeZ(u8, accel) catch null;
+        };
+
+        priv.title = glib.ext.dupeZ(u8, command.title);
+
+        priv.description = glib.ext.dupeZ(u8, command.description);
 
         return self;
+    }
+
+    pub fn newFromSurface(
+        config: *Config,
+        surface: *ApprtSurface,
+    ) error{}!*Self {
+        const self = gobject.ext.newInstance(Self, .{
+            .config = config,
+        });
+        errdefer self.unref();
+
+        const priv = self.private();
+
+        const action: input.Binding.Action = .{
+            .present_surface = surface.core().id,
+        };
+
+        priv.action = action;
+
+        priv.action_string = std.fmt.allocPrintZ(
+            priv.arena.allocator(),
+            "{}",
+            .{action},
+        ) catch null;
+
+        priv.action_keybind = null;
+
+        _ = gobject.Object.bindProperty(
+            surface.gobj().as(gobject.Object),
+            "title",
+            self.as(gobject.Object),
+            "title",
+            .{ .sync_create = true },
+        );
+
+        _ = gobject.Object.bindProperty(
+            surface.gobj().as(gobject.Object),
+            "pwd",
+            self.as(gobject.Object),
+            "description",
+            .{ .sync_create = true },
+        );
+
+        return self;
+    }
+
+    pub fn getSubtitle(self: *Command) ?[*:0]const u8 {
+        const priv = self.private();
+        const action = priv.action orelse return null;
+        switch (action) {
+            .present_surface => {
+                return glib.ext.dupeZ(u8, priv.description orelse return null);
+            },
+            else => {
+                return glib.ext.dupeZ(u8, priv.action_string orelse return null);
+            },
+        }
     }
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
@@ -478,65 +621,12 @@ const Command = extern struct {
 
     //---------------------------------------------------------------
 
-    fn propGetActionKey(self: *Self) ?[:0]const u8 {
-        const priv = self.private();
-
-        if (priv.action_key) |action_key| return action_key;
-
-        const command = priv.command orelse return null;
-
-        priv.action_key = std.fmt.allocPrintZ(
-            priv.arena.allocator(),
-            "{}",
-            .{command.action},
-        ) catch null;
-
-        return priv.action_key;
-    }
-
-    fn propGetAction(self: *Self) ?[:0]const u8 {
-        const priv = self.private();
-
-        if (priv.action) |action| return action;
-
-        const command = priv.command orelse return null;
-
-        const cfg = if (priv.config) |config| config.get() else return null;
-        const keybinds = cfg.keybind.set;
-
-        const alloc = priv.arena.allocator();
-
-        priv.action = action: {
-            var buf: [64]u8 = undefined;
-            const trigger = keybinds.getTrigger(command.action) orelse break :action null;
-            const accel = (key.accelFromTrigger(&buf, trigger) catch break :action null) orelse break :action null;
-            break :action alloc.dupeZ(u8, accel) catch return null;
-        };
-
-        return priv.action;
-    }
-
-    fn propGetTitle(self: *Self) ?[:0]const u8 {
-        const priv = self.private();
-        const command = priv.command orelse return null;
-        return command.title;
-    }
-
-    fn propGetDescription(self: *Self) ?[:0]const u8 {
-        const priv = self.private();
-        const command = priv.command orelse return null;
-        return command.description;
-    }
-
-    //---------------------------------------------------------------
-
     /// Return a copy of the action. Callers must ensure that they do not use
     /// the action beyond the lifetime of this object because it has internally
     /// allocated data that will be freed when this object is.
     pub fn getAction(self: *Self) ?input.Binding.Action {
         const priv = self.private();
-        const command = priv.command orelse return null;
-        return command.action;
+        return priv.action;
     }
 
     //---------------------------------------------------------------
@@ -555,8 +645,8 @@ const Command = extern struct {
         fn init(class: *Class) callconv(.c) void {
             gobject.ext.registerProperties(class, &.{
                 properties.config.impl,
-                properties.action_key.impl,
-                properties.action.impl,
+                properties.@"action-keybind".impl,
+                properties.@"action-string".impl,
                 properties.title.impl,
                 properties.description.impl,
             });

@@ -845,13 +845,20 @@ typedef struct {
   const char **arguments;
 } ghostty_ipc_action_new_window_s;
 
+// apprt.ipc.Action.PresentSurface
+typedef struct {
+  uint64_t id;
+} ghostty_ipc_action_present_surface_s;
+
 typedef union {
   ghostty_ipc_action_new_window_s new_window;
+  ghostty_ipc_action_present_surface_s present_surface;
 } ghostty_ipc_action_u;
 
 // apprt.ipc.Action.Key
 typedef enum {
   GHOSTTY_IPC_ACTION_NEW_WINDOW,
+  GHOSTTY_IPC_ACTION_PRESENT_SURFACE,
 } ghostty_ipc_action_tag_e;
 
 //-------------------------------------------------------------------

@@ -712,6 +712,8 @@ pub const Action = union(enum) {
     /// Quit Ghostty.
     quit,
 
+    present_surface: u64,
+
     /// Crash Ghostty in the desired thread for the focused surface.
     ///
     /// WARNING: This is a hard crash (panic) and data can be lost.
@@ -863,7 +865,7 @@ pub const Action = union(enum) {
     }
 
     fn parseInt(comptime T: type, value: []const u8) !T {
-        return std.fmt.parseInt(T, value, 10) catch return Error.InvalidFormat;
+        return std.fmt.parseInt(T, value, 0) catch return Error.InvalidFormat;
     }
 
     fn parseFloat(comptime T: type, value: []const u8) !T {
@@ -1012,6 +1014,11 @@ pub const Action = union(enum) {
             .toggle_visibility,
             .check_for_updates,
             .show_gtk_inspector,
+            => .app,
+
+            // This is a weird one because it _seems_ like it should be a surface, but it's
+            // app because the surface that generates the action may not be the target.
+            .present_surface,
             => .app,
 
             // These are app but can be special-cased in a surface context.

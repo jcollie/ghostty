@@ -454,8 +454,18 @@ pub fn performAction(
         .check_for_updates => _ = try rt_app.performAction(.app, .check_for_updates, {}),
         .show_gtk_inspector => _ = try rt_app.performAction(.app, .show_gtk_inspector, {}),
         .undo => _ = try rt_app.performAction(.app, .undo, {}),
-
         .redo => _ = try rt_app.performAction(.app, .redo, {}),
+        .present_surface => |id| {
+            const surface = self.findSurfaceByID(id) orelse {
+                log.warn("surface with id 0x{x:0>16} not found", .{id});
+                return;
+            };
+            _ = try rt_app.performAction(
+                .{ .surface = surface },
+                .present_terminal,
+                {},
+            );
+        },
     }
 }
 

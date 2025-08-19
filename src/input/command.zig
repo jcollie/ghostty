@@ -492,6 +492,7 @@ fn actionCommands(action: Action.Key) []const Command {
         .previous_tab,
         .next_tab,
         .last_tab,
+        .present_surface,
         => comptime &.{},
 
         // No commands for obvious reasons

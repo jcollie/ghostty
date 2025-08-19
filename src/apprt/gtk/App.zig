@@ -565,6 +565,7 @@ pub fn performIpc(
 ) (Allocator.Error || std.posix.WriteError || apprt.ipc.Errors)!bool {
     switch (action) {
         .new_window => return try ipc.openNewWindow(alloc, target, value),
+        .present_surface => return false,
     }
 }
 
@@ -880,6 +881,13 @@ fn handleProgressReport(_: *App, target: apprt.Target, value: terminal.osc.Comma
     switch (target) {
         .app => return false,
         .surface => |surface| return try surface.rt_surface.progress_bar.handleProgressReport(value),
+    }
+}
+
+fn surfacesChanged(self: *App, target: apprt.Target) error{}!void {
+    switch (target) {
+        .app => return self.app.surfacesChanged(),
+        .surface => return false,
     }
 }
 

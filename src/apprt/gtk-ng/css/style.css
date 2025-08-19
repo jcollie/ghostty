@@ -111,14 +111,23 @@ label.resize-overlay {
 /*
  * Command Palette
  */
-.command-palette-search > image:first-child {
+.command-palette .search > image:first-child {
   margin-left: 8px;
   margin-right: 4px;
 }
 
-.command-palette-search > image:last-child {
+.command-palette .search > image:last-child {
   margin-left: 4px;
   margin-right: 8px;
+}
+
+.command-palette .subtitle {
+  font-size: 9pt;
+}
+
+.command-palette .icon {
+  padding-left: 0px;
+  padding-right: 0px;
 }
 
 /*

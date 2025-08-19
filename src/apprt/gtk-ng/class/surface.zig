@@ -1318,10 +1318,11 @@ pub const Surface = extern struct {
     fn finalize(self: *Self) callconv(.c) void {
         const priv = self.private();
         if (priv.core_surface) |v| {
+            const app = Application.default();
             // Remove ourselves from the list of known surfaces in the app.
             // We do this before deinit in case a callback triggers
             // searching for this surface.
-            Application.default().core().deleteSurface(self.rt());
+            app.core().deleteSurface(self.rt());
 
             // NOTE: We must deinit the surface in the finalize call and NOT
             // the dispose call because the inspector widget relies on this
@@ -1333,6 +1334,14 @@ pub const Surface = extern struct {
             alloc.destroy(v);
 
             priv.core_surface = null;
+
+            _ = app.performAction(
+                .app,
+                .surfaces_changed,
+                {},
+            ) catch |err| {
+                log.warn("error signaling that the surfaces changed err={}", .{err});
+            };
         }
         if (priv.mouse_hover_url) |v| {
             glib.free(@constCast(@ptrCast(v)));
@@ -2478,6 +2487,14 @@ pub const Surface = extern struct {
             .{},
             null,
         );
+
+        _ = app.rt().performAction(
+            .app,
+            .surfaces_changed,
+            {},
+        ) catch |err| {
+            log.warn("error signaling that the surfaces changed err={}", .{err});
+        };
     }
 
     fn resizeOverlaySchedule(self: *Self) void {

@@ -68,6 +68,9 @@ pub const Action = union(enum) {
     /// The arguments to pass to Ghostty as the command.
     new_window: NewWindow,
 
+    /// Present a specific surface to the user.
+    present_surface: PresentSurface,
+
     pub const NewWindow = struct {
         /// A list of command arguments to launch in the new window. If this is
         /// `null` the command configured in the config or the user's default
@@ -76,6 +79,7 @@ pub const Action = union(enum) {
         /// It is an error for this to be non-`null`, but zero length.
         arguments: ?[][:0]const u8,
 
+        /// sync with ghostty_ipc_action_new_window_s
         pub const C = extern struct {
             /// null terminated list of arguments
             /// it will be null itself if there are no arguments
@@ -105,9 +109,15 @@ pub const Action = union(enum) {
         }
     };
 
+    /// sync with ghostty_ipc_action_present_surface_s
+    pub const PresentSurface = extern struct {
+        id: u64,
+    };
+
     /// Sync with: ghostty_ipc_action_tag_e
     pub const Key = enum(c_uint) {
         new_window,
+        present_surface,
     };
 
     /// Sync with: ghostty_ipc_action_u

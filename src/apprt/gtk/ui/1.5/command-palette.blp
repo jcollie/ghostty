@@ -39,6 +39,11 @@ Adw.Dialog command-palette {
               }
 
               StringFilter {
+                expression: expr item as <$GhosttyCommand>.description;
+                search: bind search.text;
+              }
+
+              StringFilter {
                 expression: expr item as <$GhosttyCommand>.action-key;
                 search: bind search.text;
               }

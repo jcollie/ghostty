@@ -294,6 +294,9 @@ pub const Action = union(Key) {
     /// Show the on-screen keyboard.
     show_on_screen_keyboard,
 
+    /// The list of active surfaces has changed.
+    surfaces_changed,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -349,6 +352,7 @@ pub const Action = union(Key) {
         show_child_exited,
         progress_report,
         show_on_screen_keyboard,
+        surfaces_changed,
     };
 
     /// Sync with: ghostty_action_u

@@ -44,6 +44,10 @@ pub fn getTitle(self: *Self) ?[:0]const u8 {
     return self.surface.getTitle();
 }
 
+pub fn getPwd(self: *Self) ?[:0]const u8 {
+    return self.surface.getPwd();
+}
+
 pub fn getContentScale(self: *const Self) !apprt.ContentScale {
     return self.surface.getContentScale();
 }

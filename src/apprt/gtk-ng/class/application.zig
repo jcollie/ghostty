@@ -94,6 +94,20 @@ pub const Application = extern struct {
         };
     };
 
+    pub const signals = struct {
+        /// Emitted whenever the list of active surfaces has changed.
+        pub const @"surfaces-changed" = struct {
+            pub const name = "surfaces-changed";
+            pub const connect = impl.connect;
+            const impl = gobject.ext.defineSignal(
+                name,
+                Self,
+                &.{},
+                void,
+            );
+        };
+    };
+
     const Private = struct {
         /// The apprt App. This is annoying that we need this it'd be
         /// nicer to just make THIS the apprt app but the current libghostty
@@ -622,6 +636,7 @@ pub const Application = extern struct {
             .toggle_command_palette => return Action.toggleCommandPalette(target),
             .toggle_split_zoom => return Action.toggleSplitZoom(target),
             .show_on_screen_keyboard => return Action.showOnScreenKeyboard(target),
+            .surfaces_changed => return Action.surfacesChanged(self),
 
             // Unimplemented
             .secure_input,
@@ -1557,6 +1572,9 @@ pub const Application = extern struct {
                 properties.config.impl,
             });
 
+            // Signals
+            signals.@"surfaces-changed".impl.register(.{});
+
             // Virtual methods
             gio.Application.virtual_methods.activate.implement(class, &activate);
             gio.Application.virtual_methods.startup.implement(class, &startup);
@@ -2235,6 +2253,16 @@ const Action = struct {
                 return surface.rt_surface.gobj().controlInspector(value);
             },
         }
+    }
+
+    pub fn surfacesChanged(self: *Application) bool {
+        Application.signals.@"surfaces-changed".impl.emit(
+            self,
+            null,
+            .{},
+            null,
+        );
+        return true;
     }
 };
 

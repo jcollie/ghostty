@@ -6,6 +6,10 @@ Adw.Dialog dialog {
   content-width: 700;
   closed => $closed();
 
+  styles [
+    "command-palette",
+  ]
+
   Adw.ToolbarView {
     top-bar-style: flat;
 
@@ -19,7 +23,7 @@ Adw.Dialog dialog {
         activate => $search_activated();
 
         styles [
-          "command-palette-search",
+          "search",
         ]
       }
     }
@@ -43,7 +47,12 @@ Adw.Dialog dialog {
               }
 
               Gtk.StringFilter {
-                expression: expr item as <$GhosttyCommand>.action-key;
+                expression: expr item as <$GhosttyCommand>.description;
+                search: bind search.text;
+              }
+
+              Gtk.StringFilter {
+                expression: expr item as <$GhosttyCommand>.action-string;
                 search: bind search.text;
               }
             };
@@ -62,8 +71,19 @@ Adw.Dialog dialog {
           template Gtk.ListItem {
             child: Gtk.Box {
               orientation: horizontal;
-              spacing: 10;
+              spacing: 0;
               tooltip-text: bind template.item as <$GhosttyCommand>.description;
+
+              Gtk.Button {
+                icon-name: bind $get_icon_name(template.item as <$GhosttyCommand>.action-string) as <string>;
+                can-shrink: true;
+                can-target: false;
+
+                styles [
+                  "flat",
+                  "icon",
+                ]
+              }
 
               Gtk.Box {
                 orientation: vertical;
@@ -93,12 +113,12 @@ Adw.Dialog dialog {
                     "monospace",
                   ]
 
-                  label: bind template.item as <$GhosttyCommand>.action-key;
+                  label: bind $get_subtitle(template.item as <$GhosttyCommand>.action-string, template.item as <$GhosttyCommand>.description) as <string>;
                 }
               }
 
               Gtk.ShortcutLabel {
-                accelerator: bind template.item as <$GhosttyCommand>.action;
+                accelerator: bind template.item as <$GhosttyCommand>.action-keybind;
                 valign: center;
               }
             };

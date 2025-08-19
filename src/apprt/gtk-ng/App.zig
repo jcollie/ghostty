@@ -18,6 +18,7 @@ const Surface = @import("Surface.zig");
 const gtk_version = @import("gtk_version.zig");
 const adw_version = @import("adw_version.zig");
 const ipcNewWindow = @import("ipc/new_window.zig").newWindow;
+const ipcPresentSurface = @import("ipc/present_surface.zig").presentSurface;
 
 const log = std.log.scoped(.gtk);
 
@@ -95,6 +96,7 @@ pub fn performIpc(
 ) !bool {
     switch (action) {
         .new_window => return try ipcNewWindow(alloc, target, value),
+        .present_surface => return try ipcPresentSurface(alloc, target, value),
     }
 }
 
