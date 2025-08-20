@@ -23,13 +23,13 @@ const Config = @import("config.zig").Config;
 
 const log = std.log.scoped(.gtk_ghostty_zf_search_filter);
 
-pub const ZFSearchFilter = extern struct {
+pub const ZfFilter = extern struct {
     pub const Self = @This();
     pub const Parent = gtk.Filter;
     parent: Parent,
 
     pub const getGObjectType = gobject.ext.defineClass(Self, .{
-        .name = "GhosttyZFSearchFilter",
+        .name = "GhosttyZfFilter",
         .instanceInit = &init,
         .classInit = Class.init,
         .parent_class = &Class.parent,
@@ -39,14 +39,43 @@ pub const ZFSearchFilter = extern struct {
     const properties = struct {
         pub const expression = struct {
             pub const name = "expression";
-            const impl = gobject.ext.defineProperty(
-                name,
-                Self,
-                ?*gtk.Expression,
-                .{
-                    .accessor = C.privateObjFieldAccessor("expression"),
-                },
-            );
+
+            const impl = struct {
+                pub var param_spec: *gobject.ParamSpec = undefined;
+
+                fn newParamSpec() *gobject.ParamSpec {
+                    return gtk.paramSpecExpression(
+                        name,
+                        "",
+                        "",
+                        .{
+                            .readable = true,
+                            .writable = true,
+                            .construct = true,
+                            .construct_only = false,
+                            .lax_validation = false,
+                            .explicit_notify = true,
+                            .deprecated = false,
+                            .static_name = true,
+                            .static_nick = true,
+                            .static_blurb = true,
+                        },
+                    );
+                }
+
+                pub fn register(class: *Self.Class, id: c_uint) void {
+                    param_spec = newParamSpec();
+                    gobject.Object.Class.installProperty(gobject.ext.as(gobject.Object.Class, class), id, param_spec);
+                }
+
+                pub fn get(object: *Self, value: *gobject.Value) void {
+                    object.getExpression(value);
+                }
+
+                pub fn set(object: *Self, value: *const gobject.Value) void {
+                    object.setExpression(value);
+                }
+            };
         };
 
         pub const search = struct {
@@ -135,13 +164,32 @@ pub const ZFSearchFilter = extern struct {
 
     //---------------------------------------------------------------
 
-    fn propExpression(_: *Self, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.c) void {
-        // gtk.Filter.signals.changed.connect(
-        //     self,
-        //     null,
-        //     .{},
-        //     null,
-        // );
+    fn getExpression(self: *Self, value: *gobject.Value) void {
+        const priv = self.private();
+        const expression = priv.expression orelse {
+            value.setObject(null);
+            return;
+        };
+        gtk.valueSetExpression(value, expression);
+    }
+
+    fn setExpression(self: *Self, value: *const gobject.Value) void {
+        const priv = self.private();
+        if (priv.expression) |v| {
+            v.unref();
+            priv.expression = null;
+        }
+        const expression = gtk.valueGetExpression(value) orelse {
+            log.warn("unable to get  expression", .{});
+            return;
+        };
+        if (expression.getValueType() != gobject.ext.types.string) return;
+        priv.expression = expression.ref();
+        self.emitChanged();
+    }
+
+    fn emitChanged(self: *Self) void {
+        gobject.signalEmitByName(self.as(gobject.Object), "changed");
     }
 
     fn propSearch(self: *Self, _: *gobject.ParamSpec, _: ?*anyopaque) callconv(.c) void {
@@ -161,12 +209,7 @@ pub const ZFSearchFilter = extern struct {
             }
         }
 
-        // gtk.Filter.signals.changed.impl.emit(
-        //     self,
-        //     null,
-        //     .{},
-        //     null,
-        // );
+        self.emitChanged();
     }
 
     //---------------------------------------------------------------
@@ -175,10 +218,13 @@ pub const ZFSearchFilter = extern struct {
         log.warn("match start", .{});
         const item = item_ orelse return @intFromBool(false);
         const priv = self.private();
-        const expression = priv.expression orelse return @intFromBool(false);
-        if (priv.search == null) return @intFromBool(false);
+        const expression = priv.expression orelse {
+            log.warn("match: no expression", .{});
+            return @intFromBool(false);
+        };
+        if (priv.tokens.items.len == 0) return @intFromBool(true);
 
-        var value = std.mem.zeroes(gobject.Value);
+        var value = gobject.ext.Value.zero;
         defer value.unset();
         _ = value.init(gobject.ext.types.string);
 
@@ -187,8 +233,15 @@ pub const ZFSearchFilter = extern struct {
 
         const string = std.mem.span(value.getString() orelse return @intFromBool(false));
 
-        log.warn("match: {s}", .{string});
-        _ = zf.rank(string, priv.tokens.items, .{ .to_lower = true }) orelse return @intFromBool(false);
+        const rank = zf.rank(string, priv.tokens.items, .{
+            .to_lower = true,
+            .plain = true,
+        }) orelse {
+            log.warn("match: {s} null", .{string});
+            return @intFromBool(false);
+        };
+
+        log.warn("match: {s} {d}", .{ string, rank });
 
         return @intFromBool(true);
     }

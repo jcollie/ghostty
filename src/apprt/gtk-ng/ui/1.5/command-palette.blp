@@ -41,18 +41,18 @@ Adw.Dialog dialog {
             incremental: true;
 
             filter: Gtk.AnyFilter {
-              $GhosttyZFSearchFilter {
+              $GhosttyZfFilter {
                 expression: expr item as <$GhosttyCommand>.title;
                 search: bind search.text;
               }
 
-              $GhosttyZFSearchFilter {
+              $GhosttyZfFilter {
                 expression: expr item as <$GhosttyCommand>.description;
                 search: bind search.text;
               }
 
-              $GhosttyZFSearchFilter {
-                expression: expr item as <$GhosttyCommand>.action-key;
+              $GhosttyZfFilter {
+                expression: expr item as <$GhosttyCommand>.action-string;
                 search: bind search.text;
               }
             };
@@ -118,7 +118,7 @@ Adw.Dialog dialog {
               }
 
               Gtk.ShortcutLabel {
-                accelerator: bind template.item as <$GhosttyCommand>.action-keybind;
+                accelerator: bind template.item as <$GhosttyCommand>.action-accelerator;
                 valign: center;
               }
             };

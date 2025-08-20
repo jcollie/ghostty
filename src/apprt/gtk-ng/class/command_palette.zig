@@ -17,7 +17,7 @@ const Window = @import("window.zig").Window;
 const Surface = @import("surface.zig").Surface;
 const ApprtSurface = @import("../Surface.zig");
 const Config = @import("config.zig").Config;
-const ZFSearchFilter = @import("zf_search_filter.zig").ZFSearchFilter;
+const ZfFilter = @import("zf_filter.zig").ZfFilter;
 
 const log = std.log.scoped(.gtk_ghostty_command_palette);
 
@@ -341,7 +341,7 @@ pub const CommandPalette = extern struct {
 
         fn init(class: *Class) callconv(.c) void {
             gobject.ext.ensureType(Command);
-            gobject.ext.ensureType(ZFSearchFilter);
+            gobject.ext.ensureType(ZfFilter);
             gtk.Widget.Class.setTemplateFromResource(
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
@@ -415,15 +415,15 @@ const Command = extern struct {
             );
         };
 
-        pub const @"action-keybind" = struct {
-            pub const name = "action-keybind";
+        pub const @"action-accelerator" = struct {
+            pub const name = "action-accelerator";
             const impl = gobject.ext.defineProperty(
                 name,
                 Self,
                 ?[:0]const u8,
                 .{
                     .default = null,
-                    .accessor = C.privateStringFieldAccessor("action_keybind"),
+                    .accessor = C.privateStringFieldAccessor("action_accelerator"),
                 },
             );
         };
@@ -488,7 +488,7 @@ const Command = extern struct {
         action_string: ?[:0]const u8 = null,
 
         /// The formatted keybind.
-        action_keybind: ?[:0]const u8 = null,
+        action_accelerator: ?[:0]const u8 = null,
 
         pub var offset: c_int = 0;
     };
@@ -507,11 +507,11 @@ const Command = extern struct {
             .{command.action},
         );
 
-        var action_keybind_buf: [256]u8 = undefined;
-        const action_keybind = action_keybind: {
-            const trigger = keybinds.getTrigger(command.action) orelse break :action_keybind null;
-            const accel = (key.accelFromTrigger(&action_keybind_buf, trigger) catch break :action_keybind null) orelse break :action_keybind null;
-            break :action_keybind accel;
+        var action_accelerator_buf: [256]u8 = undefined;
+        const action_accelerator = action_accelerator: {
+            const trigger = keybinds.getTrigger(command.action) orelse break :action_accelerator null;
+            const accel = (key.accelFromTrigger(&action_accelerator_buf, trigger) catch break :action_accelerator null) orelse break :action_accelerator null;
+            break :action_accelerator accel;
         };
 
         const self = gobject.ext.newInstance(Self, .{
@@ -519,7 +519,7 @@ const Command = extern struct {
             .title = command.title,
             .description = command.description,
             .@"action-string" = action_string,
-            .@"action-keybind" = action_keybind,
+            .@"action-accelerator" = action_accelerator,
         });
         errdefer self.unref();
 
@@ -647,7 +647,7 @@ const Command = extern struct {
         fn init(class: *Class) callconv(.c) void {
             gobject.ext.registerProperties(class, &.{
                 properties.config.impl,
-                properties.@"action-keybind".impl,
+                properties.@"action-accelerator".impl,
                 properties.@"action-string".impl,
                 properties.title.impl,
                 properties.description.impl,
