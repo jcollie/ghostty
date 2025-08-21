@@ -30,6 +30,13 @@
         flake-utils.follows = "flake-utils";
       };
     };
+
+    home-manager = {
+      url = "github:nix-community/home-manager?ref=release-25.05";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
   };
 
   outputs = {
@@ -37,6 +44,7 @@
     nixpkgs,
     zig,
     zon2nix,
+    home-manager,
     ...
   }:
     builtins.foldl' nixpkgs.lib.recursiveUpdate {} (
@@ -67,6 +75,10 @@
           };
 
           formatter.${system} = pkgs.alejandra;
+
+          checks.${system} = import ./nix/tests.nix {
+            inherit home-manager nixpkgs self system;
+          };
 
           apps.${system} = let
             runVM = (
