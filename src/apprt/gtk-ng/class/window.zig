@@ -987,6 +987,22 @@ pub const Window = extern struct {
         };
     }
 
+    fn propIsActive(
+        _: *gtk.Window,
+        _: *gobject.ParamSpec,
+        self: *Self,
+    ) callconv(.c) void {
+        // Don't change urgency if we're not the active window.
+        if (self.as(gtk.Window).isActive() == 0) return;
+
+        self.winproto().setUrgent(false) catch |err| {
+            log.warn(
+                "winproto unable to reset urgecy{}",
+                .{err},
+            );
+        };
+    }
+
     fn propGdkSurfaceWidth(
         _: *gdk.Surface,
         _: *gobject.ParamSpec,
@@ -1151,6 +1167,14 @@ pub const Window = extern struct {
             log.warn("failed to initialize window protocol error={}", .{err});
             return;
         }
+
+        _ = gobject.Object.signals.notify.connect(
+            self.as(gtk.Window),
+            *Self,
+            propIsActive,
+            self,
+            .{ .detail = "is-active" },
+        );
 
         // We need to setup resize notifications on our surface,
         // which is only available after the window had been realized.
@@ -1765,10 +1789,13 @@ pub const Window = extern struct {
             native.beep();
         }
 
-        if (config.@"bell-features".attention) {
+        if (config.@"bell-features".attention) attention: {
+            // Dont set urgency if the window is already active.
+            if (self.as(gtk.Window).isActive() != 0) break :attention;
+
             // Request user attention
             self.winproto().setUrgent(true) catch |err| {
-                log.warn("failed to request user attention={}", .{err});
+                log.warn("winproto failed to set urgency={}", .{err});
             };
         }
     }
