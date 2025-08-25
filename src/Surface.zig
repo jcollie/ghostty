@@ -4729,10 +4729,13 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             {},
         ),
 
-        .close_tab => return try self.rt_app.performAction(
+        .close_tab => |v| return try self.rt_app.performAction(
             .{ .surface = self },
             .close_tab,
-            {},
+            switch (v) {
+                .this => .this,
+                .other => .other,
+            },
         ),
 
         inline .previous_tab,
@@ -4865,12 +4868,6 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
         .show_on_screen_keyboard => return try self.rt_app.performAction(
             .{ .surface = self },
             .show_on_screen_keyboard,
-            {},
-        ),
-
-        .close_other_tabs => return try self.rt_app.performAction(
-            .{ .surface = self },
-            .close_other_tabs,
             {},
         ),
 
