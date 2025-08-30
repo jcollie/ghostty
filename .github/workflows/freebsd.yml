@@ -1,0 +1,31 @@
+on:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
+
+name: Test
+
+jobs:
+  freebsd:
+    if: github.repository == 'jcollie/ghostty'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test in FreeBSD
+        id: test
+        uses: vmactions/freebsd-vm@v1
+        with:
+          prepare: |
+            pkg install -y curl lang/zig
+
+          run: |
+            pwd
+            ls -lah
+            whoami
+            env
+            freebsd-version
+            sysctl hw.model
+            sysctl hw.ncpu
+            sysctl hw.physmem
+            sysctl hw.usermem
+            zig env
