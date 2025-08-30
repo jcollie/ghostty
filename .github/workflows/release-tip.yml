@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   tag:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos]
     steps:
@@ -28,6 +29,7 @@ jobs:
           git push --force origin tip
 
   sentry-dsym-debug-slow:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos-debug-slow]
     steps:
@@ -49,6 +51,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   sentry-dsym-debug-fast:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos-debug-fast]
     steps:
@@ -70,6 +73,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   sentry-dsym:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos]
     steps:

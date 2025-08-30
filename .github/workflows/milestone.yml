@@ -11,6 +11,7 @@ on:
 
 jobs:
   update-milestone:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     name: Milestone Update
     steps:

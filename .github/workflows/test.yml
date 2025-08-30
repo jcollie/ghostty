@@ -7,6 +7,7 @@ name: Test
 
 jobs:
   required:
+    if: github.repository == 'ghostty-org/ghostty'
     name: "Required Checks: Test"
     runs-on: namespace-profile-ghostty-xsm
     needs:
@@ -59,6 +60,7 @@ jobs:
 
   build-bench:
     # We build benchmarks on large because it uses ReleaseFast
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-lg
     needs: test
     env:
@@ -88,6 +90,7 @@ jobs:
         run: nix develop -c zig build -Demit-bench
 
   build-flatpak:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
     runs-on: namespace-profile-ghostty-sm
@@ -122,6 +125,7 @@ jobs:
             -Dflatpak=true
 
   build-linux:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -155,6 +159,7 @@ jobs:
         run: nix develop -c zig build
 
   build-linux-libghostty:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-md
     needs: test
     env:
@@ -184,6 +189,7 @@ jobs:
         run: nix develop -c zig build -Dapp-runtime=none
 
   build-nix:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -232,6 +238,7 @@ jobs:
         run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q 'main_ghostty.main'
 
   build-dist:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-md
     needs: test
     env:
@@ -271,6 +278,7 @@ jobs:
             ghostty-source.tar.gz
 
   build-macos:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-macos-tahoe
     needs: test
     steps:
@@ -314,6 +322,7 @@ jobs:
           xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
 
   build-macos-matrix:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-macos-tahoe
     needs: test
     steps:
@@ -356,6 +365,7 @@ jobs:
           nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Demit-macos-app=false -Drenderer=metal -Dfont-backend=coretext_noshape
 
   build-snap:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -394,6 +404,7 @@ jobs:
           path: dist
 
   build-windows:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: windows-2022
     # this will not stop other jobs from running
     continue-on-error: true
@@ -502,6 +513,7 @@ jobs:
         run: nix develop -c zig build --system ${ZIG_GLOBAL_CACHE_DIR}/p
 
   test-gtk:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -551,6 +563,7 @@ jobs:
             -Dgtk-wayland=${{ matrix.wayland }}
 
   test-gtk-ng:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -600,6 +613,7 @@ jobs:
             -Dgtk-wayland=${{ matrix.wayland }}
 
   test-sentry-linux:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -635,6 +649,7 @@ jobs:
           nix develop -c zig build -Dsentry=${{ matrix.sentry }}
 
   test-macos:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-macos-tahoe
     needs: test
     steps:
@@ -691,8 +706,8 @@ jobs:
         run: nix develop -c zig fmt --check .
 
   pinact:
-    name: "GitHub Actions Pins"
     if: github.repository == 'ghostty-org/ghostty'
+    name: "GitHub Actions Pins"
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -890,6 +905,7 @@ jobs:
         run: git diff --exit-code
 
   test-pkg-linux:
+    if: github.repository == 'ghostty-org/ghostty'
     strategy:
       fail-fast: false
       matrix:
@@ -925,6 +941,7 @@ jobs:
           nix develop -c sh -c "cd pkg/${{ matrix.pkg }} ; zig build test"
 
   test-debian-13:
+    if: github.repository == 'ghostty-org/ghostty'
     name: Test build on Debian 13
     runs-on: namespace-profile-ghostty-sm
     needs: [test, build-dist]

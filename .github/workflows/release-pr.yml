@@ -5,6 +5,7 @@ name: Release PR
 
 jobs:
   sentry-dsym-debug:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos-debug]
     steps:
@@ -26,6 +27,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   sentry-dsym:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     needs: [build-macos]
     steps:
@@ -47,6 +49,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   build-macos:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-macos-tahoe
     timeout-minutes: 90
     steps:
@@ -202,6 +205,7 @@ jobs:
           destination-dir: ./
 
   build-macos-debug:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-macos-tahoe
     timeout-minutes: 90
     steps:
