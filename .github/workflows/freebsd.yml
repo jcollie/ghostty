@@ -48,11 +48,11 @@ jobs:
         shell: freebsd {0}
         continue-on-error: true
         run: |
-          pwd
-          ls -lah
+          cd $GITHUB_WORKSPACE
           zig build test
 
       - name: Build GTK-NG app runtime
         shell: freebsd {0}
         run: |
+          cd $GITHUB_WORKSPACE
           zig build -Dapp-runtime=gtk-ng
