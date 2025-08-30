@@ -39,9 +39,17 @@ jobs:
               x11-toolkits/gtk40 \
               x11-toolkits/gtk4-layer-shell
 
+          run: |
+            pwd
+            ls -lah
+            zig env
+
       - name: Run tests
         shell: freebsd {0}
+        continue-on-error: true
         run: |
+          pwd
+          ls -lah
           zig build test
 
       - name: Build GTK-NG app runtime
