@@ -11,17 +11,19 @@ jobs:
       matrix:
         release:
           - "14.3"
-          # - "15.0"
+          # - "15.0" # disable until fixed: https://github.com/vmactions/freebsd-vm/issues/108
     if: github.repository == 'jcollie/ghostty'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-      - name: Test in FreeBSD
-        id: test
+      - name: Checkout Ghostty
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Set up FreeBSD VM
         uses: vmactions/freebsd-vm@05856381fab64eeee9b038a0818f6cec649ca17a # v1.2.3
         with:
           release: ${{ matrix.release }}
           copyback: false
+          usesh: true
           prepare: |
             pkg install -y \
               devel/blueprint-compiler \
@@ -37,6 +39,12 @@ jobs:
               x11-toolkits/gtk40 \
               x11-toolkits/gtk4-layer-shell
 
-          run: |
-            zig build test
-            zig build -Dapp-runtime=gtk-ng
+      - name: Run tests
+        shell: freebsd {0}
+        run: |
+          zig build test
+
+      - name: Build GTK-NG app runtime
+        shell: freebsd {0}
+        run: |
+          zig build -Dapp-runtime=gtk-ng
