@@ -7,6 +7,11 @@ name: Test
 
 jobs:
   freebsd:
+    strategy:
+      matrix:
+        release:
+          - "14.3"
+          - "15.0"
     if: github.repository == 'jcollie/ghostty'
     runs-on: ubuntu-latest
     steps:
@@ -15,8 +20,16 @@ jobs:
         id: test
         uses: vmactions/freebsd-vm@05856381fab64eeee9b038a0818f6cec649ca17a # v1.2.3
         with:
+          release: ${{ matrix.release }}
           prepare: |
-            pkg install -y curl lang/zig
+            pkg install -y \
+              zig \
+              blueprint-compiler \
+              gtk40 \
+              gtk4-layer-shell \
+              pandoc \
+              pkg-config \
+              wayland
 
           run: |
             pwd
@@ -29,3 +42,5 @@ jobs:
             sysctl hw.physmem
             sysctl hw.usermem
             zig env
+            zig build test
+            zig build
