@@ -40,19 +40,18 @@ jobs:
               x11-toolkits/gtk4-layer-shell
 
           run: |
-            pwd
-            ls -lah
             zig env
 
       - name: Run tests
         shell: freebsd {0}
         continue-on-error: true
         run: |
-          cd $GITHUB_WORKSPACE
+          cd $GITHUB_WORKSPACE;
           zig build test
 
       - name: Build GTK-NG app runtime
         shell: freebsd {0}
         run: |
-          cd $GITHUB_WORKSPACE
-          zig build -Dapp-runtime=gtk-ng
+          cd $GITHUB_WORKSPACE;
+          zig build
+          ./zig-out/bin/ghostty +version
