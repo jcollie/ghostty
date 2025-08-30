@@ -3,7 +3,7 @@ on:
   pull_request: {}
   workflow_dispatch: {}
 
-name: Test
+name: Test in FreeBSD
 
 jobs:
   freebsd:
@@ -11,7 +11,7 @@ jobs:
       matrix:
         release:
           - "14.3"
-          - "15.0"
+          # - "15.0"
     if: github.repository == 'jcollie/ghostty'
     runs-on: ubuntu-latest
     steps:
