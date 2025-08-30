@@ -10,10 +10,10 @@ jobs:
     if: github.repository == 'jcollie/ghostty'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Test in FreeBSD
         id: test
-        uses: vmactions/freebsd-vm@v1
+        uses: vmactions/freebsd-vm@05856381fab64eeee9b038a0818f6cec649ca17a # v1.2.3
         with:
           prepare: |
             pkg install -y curl lang/zig
