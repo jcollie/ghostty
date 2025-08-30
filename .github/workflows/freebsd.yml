@@ -23,13 +23,14 @@ jobs:
           release: ${{ matrix.release }}
           prepare: |
             pkg install -y \
-              lang/zig \
               blueprint-compiler \
-              x11-toolkits/gtk40 \
-              x11-toolkits/gtk4-layer-shell \
-              textproc/hs-pandoc \
               devel/pkgconf \
-              wayland
+              graphics/wayland \
+              lang/zig \
+              security/ca_root_nss \
+              textproc/hs-pandoc \
+              x11-toolkits/gtk40 \
+              x11-toolkits/gtk4-layer-shell
 
           run: |
             pwd
