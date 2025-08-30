@@ -24,24 +24,17 @@ jobs:
           prepare: |
             pkg install -y \
               blueprint-compiler \
+              devel/git \
               devel/pkgconf \
               graphics/wayland \
               lang/zig \
               security/ca_root_nss \
               textproc/hs-pandoc \
+              x11-fonts/jetbrains-mono \
               x11-toolkits/gtk40 \
               x11-toolkits/gtk4-layer-shell
 
           run: |
-            pwd
-            ls -lah
-            whoami
-            env
-            freebsd-version
-            sysctl hw.model
-            sysctl hw.ncpu
-            sysctl hw.physmem
-            sysctl hw.usermem
             zig env
             zig build test
-            zig build
+            zig build -Dapp-runtime=gtk-ng
