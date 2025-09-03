@@ -42,6 +42,43 @@ const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 
 const log = std.log.scoped(.gtk_ghostty_application);
 
+fn glibLogFunction(
+    log_domain_: ?[*:0]const u8,
+    log_level: glib.LogLevelFlags,
+    message_: [*:0]const u8,
+    _: ?*anyopaque,
+) callconv(.c) void {
+    const glib_log = std.log.scoped(.glib);
+
+    const log_domain = std.mem.trim(u8, std.mem.span(log_domain_) orelse "«unknown»", &std.ascii.whitespace);
+    const message = std.mem.trim(u8, std.mem.span(message_), &std.ascii.whitespace);
+
+    if (log_level.level_debug) {
+        glib_log.debug("DEBUG: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+    if (log_level.level_info) {
+        glib_log.info("INFO: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+    if (log_level.level_message) {
+        glib_log.info("MESSAGE: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+    if (log_level.level_warning) {
+        glib_log.warn("WARNING: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+    if (log_level.level_critical) {
+        glib_log.err("CRITICAL: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+    if (log_level.level_error) {
+        glib_log.err("ERROR: {s}: {s}", .{ log_domain, message });
+        return;
+    }
+}
+
 /// The primary entrypoint for the Ghostty GTK application.
 ///
 /// This requires a `ghostty.App` and `ghostty.Config` and takes
@@ -176,6 +213,8 @@ pub const Application = extern struct {
         core_app: *CoreApp,
     ) Allocator.Error!*Self {
         const alloc = core_app.alloc;
+
+        _ = glib.logSetHandler(null, .flags_level_mask, glibLogFunction, null);
 
         // Log our GTK versions
         gtk_version.logVersion();
