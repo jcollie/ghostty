@@ -116,5 +116,9 @@
             .hash = "N-V-__8AALEfAwCyd2u6A3yOkdQx0rzl5druY97Lyl0bbTsv",
             .lazy = true,
         },
+        .journalz = .{
+            .url = "git+https://codeberg.org/jcollie/journalz.git#863b272b31e263369de9a8801da7e96751dc7391",
+            .hash = "journalz-0.0.0--2OgYG88AABjLmIklCPfHDuzP5iadEEXkyZJwokHf8fc",
+        },
     },
 }

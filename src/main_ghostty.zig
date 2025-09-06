@@ -9,6 +9,7 @@ const build_config = @import("build_config.zig");
 const options = @import("build_options");
 const glslang = @import("glslang");
 const macos = @import("macos");
+const journalz = @import("journalz");
 const oni = @import("oniguruma");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
@@ -121,10 +122,6 @@ fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    // Stuff we can do before the lock
-    const level_txt = comptime level.asText();
-    const prefix = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-
     // Lock so we are thread-safe
     std.debug.lockStdErr();
     defer std.debug.unlockStdErr();
@@ -134,6 +131,8 @@ fn logFn(
     //   sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'
     //
     if (builtin.target.os.tag.isDarwin()) {
+        const prefix = if (scope == .default) "" else @tagName(scope) ++ ": ";
+
         // Convert our levels to Mac levels
         const mac_level: macos.os.LogType = switch (level) {
             .debug => .debug,
@@ -146,7 +145,21 @@ fn logFn(
         // but we shouldn't be logging too much.
         const logger = macos.os.Log.create(build_config.bundle_id, @tagName(scope));
         defer logger.release();
-        logger.log(std.heap.c_allocator, mac_level, format, args);
+        logger.log(std.heap.c_allocator, mac_level, prefix ++ format, args);
+    }
+
+    // On Linux log directly to the systemd journal.
+    //
+    //
+    if (builtin.os.tag == .linux) journal: {
+        const logger = state.journald orelse break :journal;
+        const prefix = if (scope == .default) "" else @tagName(scope) ++ ": ";
+        switch (level) {
+            .debug => logger.debug(prefix ++ format, args),
+            .info => logger.info(prefix ++ format, args),
+            .warn => logger.warn(prefix ++ format, args),
+            .err => logger.err(prefix ++ format, args),
+        }
     }
 
     switch (state.logging) {
@@ -154,6 +167,8 @@ fn logFn(
 
         .stderr => {
             // Always try default to send to stderr
+            const level_txt = comptime level.asText();
+            const prefix = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
             const stderr = std.io.getStdErr().writer();
             nosuspend stderr.print(level_txt ++ prefix ++ format ++ "\n", args) catch return;
         },

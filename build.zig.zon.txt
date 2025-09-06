@@ -1,4 +1,5 @@
 git+https://codeberg.org/atman/zg#4a002763419a34d61dcbb1f415821b83b9bf8ddc
+git+https://codeberg.org/jcollie/journalz.git#863b272b31e263369de9a8801da7e96751dc7391
 git+https://github.com/TUSF/zigimg#31268548fe3276c0e95f318a6c0d2ab10565b58d
 git+https://github.com/rockorager/libvaxis#1f41c121e8fc153d9ce8c6eb64b2bbab68ad7d23
 https://codeberg.org/ifreund/zig-wayland/archive/f3c5d503e540ada8cbcb056420de240af0c094f7.tar.gz
