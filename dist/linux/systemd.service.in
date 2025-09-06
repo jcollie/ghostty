@@ -8,6 +8,7 @@ Requires=dbus.socket
 Type=notify-reload
 ReloadSignal=SIGUSR2
 BusName=@APPID@
+Environment=GHOSTTY_LOG=0
 ExecStart=@GHOSTTY@ --gtk-single-instance=true --initial-window=false
 
 [Install]

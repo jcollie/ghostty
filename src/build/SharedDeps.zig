@@ -398,6 +398,12 @@ pub fn add(
     })) |dep| {
         step.root_module.addImport("wuffs", dep.module("wuffs"));
     }
+    if (b.lazyDependency("journalz", .{
+        .target = target,
+        .optimize = optimize,
+    })) |dep| {
+        step.root_module.addImport("journalz", dep.module("journalz"));
+    }
     if (b.lazyDependency("libxev", .{
         .target = target,
         .optimize = optimize,
