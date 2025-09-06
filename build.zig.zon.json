@@ -59,6 +59,11 @@
     "url": "https://deps.files.ghostty.org/JetBrainsMono-2.304.tar.gz",
     "hash": "sha256-xXppHouCrQmLWWPzlZAy5AOPORCHr3cViFulkEYQXMQ="
   },
+  "journalz-0.0.0--2OgYKImAABEgf9Jb064aBAooZMjzp3AJRUPdSoCDORA": {
+    "name": "journalz",
+    "url": "git+https://codeberg.org/jcollie/journalz.git#12d1fe1365554baa1b61aea71eab7032993bd21d",
+    "hash": "sha256-YRGOkolZQJuVZur7AtByeh36/UnEE8bnMxjNgrz3uWw="
+  },
   "N-V-__8AAJrvXQCqAT8Mg9o_tk6m0yf5Fz-gCNEOKLyTSerD": {
     "name": "libpng",
     "url": "https://deps.files.ghostty.org/libpng-1220aa013f0c83da3fb64ea6d327f9173fa008d10e28bc9349eac3463457723b1c66.tar.gz",

@@ -72,6 +72,12 @@
     "sha256": "c57a691e8b82ad098b5963f3959032e4038f391087af7715885ba59046105cc4"
   },
   {
+    "type": "git",
+    "url": "https://codeberg.org/jcollie/journalz.git",
+    "commit": "12d1fe1365554baa1b61aea71eab7032993bd21d",
+    "dest": "vendor/p/journalz-0.0.0--2OgYKImAABEgf9Jb064aBAooZMjzp3AJRUPdSoCDORA"
+  },
+  {
     "type": "archive",
     "url": "https://deps.files.ghostty.org/libpng-1220aa013f0c83da3fb64ea6d327f9173fa008d10e28bc9349eac3463457723b1c66.tar.gz",
     "dest": "vendor/p/N-V-__8AAJrvXQCqAT8Mg9o_tk6m0yf5Fz-gCNEOKLyTSerD",

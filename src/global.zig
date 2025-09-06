@@ -10,6 +10,7 @@ const oni = @import("oniguruma");
 const crash = @import("crash/main.zig");
 const renderer = @import("renderer.zig");
 const apprt = @import("apprt.zig");
+const journalz = @import("journalz");
 
 /// We export the xev backend we want to use so that the rest of
 /// Ghostty can import this once and have access to the proper
@@ -31,6 +32,7 @@ pub const GlobalState = struct {
     alloc: std.mem.Allocator,
     action: ?cli.ghostty.Action,
     logging: Logging,
+    journald: if (builtin.os.tag == .linux) ?*journalz else void,
     rlimits: ResourceLimits = .{},
 
     /// The app resources directory, equivalent to zig-out/share when we build
@@ -61,7 +63,8 @@ pub const GlobalState = struct {
             .is_debug = true,
             .alloc = undefined,
             .action = null,
-            .logging = .{ .stderr = {} },
+            .logging = .stderr,
+            .journald = if (builtin.os.tag == .linux) null else {},
             .rlimits = .{},
             .resources_dir = .{},
         };
@@ -81,6 +84,8 @@ pub const GlobalState = struct {
             }
         };
 
+        if (builtin.os.tag == .linux) self.journald = journalz.init(self.alloc, "ghostty") catch null;
+
         // We first try to parse any action that we may be executing.
         self.action = try cli.action.detectArgs(
             cli.ghostty.Action,
@@ -90,11 +95,11 @@ pub const GlobalState = struct {
         // If we have an action executing, we disable logging by default
         // since we write to stderr we don't want logs messing up our
         // output.
-        if (self.action != null) self.logging = .{ .disabled = {} };
+        if (self.action != null) self.logging = .disabled;
 
         // For lib mode we always disable stderr logging by default.
         if (comptime build_config.app_runtime == .none) {
-            self.logging = .{ .disabled = {} };
+            self.logging = .disabled;
         }
 
         // I don't love the env var name but I don't have it in my heart
@@ -104,9 +109,7 @@ pub const GlobalState = struct {
         // easy to set.
         if ((try internal_os.getenv(self.alloc, "GHOSTTY_LOG"))) |v| {
             defer v.deinit(self.alloc);
-            if (v.value.len > 0) {
-                self.logging = .{ .stderr = {} };
-            }
+            self.logging = if (std.mem.eql(u8, v.value, "0")) .disabled else .stderr;
         }
 
         // Setup our signal handlers before logging
@@ -177,6 +180,10 @@ pub const GlobalState = struct {
     /// doing so in dev modes will check for memory leaks.
     pub fn deinit(self: *GlobalState) void {
         self.resources_dir.deinit(self.alloc);
+
+        if (builtin.os.tag == .linux) {
+            if (self.journald) |journald| journald.deinit(self.alloc);
+        }
 
         // Flush our crash logs
         crash.deinit();

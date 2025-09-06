@@ -9,6 +9,7 @@ const build_config = @import("build_config.zig");
 const options = @import("build_options");
 const glslang = @import("glslang");
 const macos = @import("macos");
+const journalz = @import("journalz");
 const oni = @import("oniguruma");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
@@ -147,6 +148,27 @@ fn logFn(
         const logger = macos.os.Log.create(build_config.bundle_id, @tagName(scope));
         defer logger.release();
         logger.log(std.heap.c_allocator, mac_level, format, args);
+    }
+
+    // On Linux log directly to the systemd journal.
+    //
+    //
+    if (builtin.os.tag == .linux) journal: {
+        {
+            const logger = state.journald orelse break :journal;
+            const msg = logger.message(switch (level) {
+                .debug => .DEBUG,
+                .info => .INFO,
+                .warn => .WARNING,
+                .err => .ERROR,
+            }) catch break :journal;
+            errdefer msg.cancel();
+
+            const message = std.fmt.allocPrint(state.alloc, prefix ++ format, args) catch break :journal;
+            defer state.alloc.free(message);
+            msg.string("MESSAGE", message) catch break :journal;
+            msg.send() catch break :journal;
+        }
     }
 
     switch (state.logging) {

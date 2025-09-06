@@ -179,6 +179,14 @@ in
       };
     }
     {
+      name = "journalz-0.0.0--2OgYKImAABEgf9Jb064aBAooZMjzp3AJRUPdSoCDORA";
+      path = fetchZigArtifact {
+        name = "journalz";
+        url = "git+https://codeberg.org/jcollie/journalz.git#12d1fe1365554baa1b61aea71eab7032993bd21d";
+        hash = "sha256-YRGOkolZQJuVZur7AtByeh36/UnEE8bnMxjNgrz3uWw=";
+      };
+    }
+    {
       name = "N-V-__8AAJrvXQCqAT8Mg9o_tk6m0yf5Fz-gCNEOKLyTSerD";
       path = fetchZigArtifact {
         name = "libpng";
