@@ -1328,6 +1328,29 @@ pub const StreamHandler = struct {
                     }
                 },
 
+                .reset_all => |kind| {
+                    switch (kind) {
+                        .palette => {
+                            const mask = &self.terminal.color_palette.mask;
+                            var mask_iterator = mask.iterator(.{});
+                            while (mask_iterator.next()) |i| {
+                                self.terminal.flags.dirty.palette = true;
+                                self.terminal.color_palette.colors[i] = self.terminal.default_palette[i];
+                                self.surfaceMessageWriter(.{
+                                    .color_change = .{
+                                        .kind = .{ .palette = @intCast(i) },
+                                        .color = self.terminal.color_palette.colors[i],
+                                    },
+                                });
+                            }
+                            mask.* = .initEmpty();
+                        },
+                        .dynamic_color => {
+                            log.warn("resetting all dynamic colors is not supported", .{});
+                        },
+                    }
+                },
+
                 .report => |kind| report: {
                     if (self.osc_color_report_format == .none) break :report;
 

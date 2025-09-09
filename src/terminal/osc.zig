@@ -220,11 +220,17 @@ pub const Command = union(enum) {
             dynamic_color: DynamicColor,
         };
 
+        pub const ResetKind = enum {
+            palette,
+            dynamic_color,
+        };
+
         set: struct {
             kind: Kind,
             color: RGB,
         },
         reset: Kind,
+        reset_all: ResetKind,
         report: Kind,
     };
 
@@ -1815,6 +1821,19 @@ pub const Parser = struct {
         const index_str = self.buf[self.buf_start .. self.buf_idx - (1 - @intFromBool(final))];
         self.buf_start = 0;
         self.buf_idx = 0;
+
+        if (final and index_str.len == 0) {
+            if (self.command.color_operation.operations.len == 0) {
+                const op = self.command.color_operation.operations.addOne(alloc) catch |err| {
+                    log.warn("unable to append color operation: {}", .{err});
+                    return;
+                };
+                op.* = .{
+                    .reset_all = .palette,
+                };
+            }
+            return;
+        }
 
         const index = std.fmt.parseUnsigned(u8, index_str, 10) catch |err| switch (err) {
             error.Overflow, error.InvalidCharacter => {
@@ -3721,6 +3740,30 @@ test "OSC: OSC104: empty palette index" {
         try testing.expectEqual(
             Command.ColorOperation.Kind{ .palette = 111 },
             op.reset,
+        );
+    }
+    try std.testing.expect(it.next() == null);
+}
+
+test "OSC: OSC104: no parameters" {
+    const testing = std.testing;
+
+    var p: Parser = .initAlloc(testing.allocator);
+    defer p.deinit();
+
+    const input = "104;";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?;
+    try testing.expect(cmd == .color_operation);
+    try testing.expect(cmd.color_operation.operations.count() == 1);
+    var it = cmd.color_operation.operations.constIterator(0);
+    {
+        const op = it.next().?;
+        try testing.expect(op.* == .reset_all);
+        try testing.expectEqual(
+            .palette,
+            op.reset_all,
         );
     }
     try std.testing.expect(it.next() == null);
