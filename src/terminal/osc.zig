@@ -655,7 +655,19 @@ pub const Parser = struct {
                     self.buf_start = self.buf_idx;
                     self.complete = true;
                 },
-                '4' => self.state = .@"104",
+                '4' => osc_104: {
+                    if (self.alloc == null) {
+                        log.warn("OSC 104 requires an allocator, but none was provided", .{});
+                        self.state = .invalid;
+                        break :osc_104;
+                    }
+                    self.command = .{
+                        .color_operation = .{},
+                    };
+                    self.state = .@"104";
+                    self.buf_start = self.buf_idx;
+                    self.complete = true;
+                },
                 else => self.state = .invalid,
             },
 
@@ -675,18 +687,9 @@ pub const Parser = struct {
             },
 
             .@"104" => switch (c) {
-                ';' => osc_104: {
-                    if (self.alloc == null) {
-                        log.warn("OSC 104 requires an allocator, but none was provided", .{});
-                        self.state = .invalid;
-                        break :osc_104;
-                    }
-                    self.command = .{
-                        .color_operation = .{},
-                    };
+                ';' => {
                     self.state = .osc_104;
                     self.buf_start = self.buf_idx;
-                    self.complete = true;
                 },
                 else => self.state = .invalid,
             },
@@ -1813,7 +1816,7 @@ pub const Parser = struct {
 
     /// Parse OSC 104
     fn parseResetPalette(self: *Parser, final: bool) void {
-        assert(self.state == .osc_104);
+        assert(self.state == .osc_104 or self.state == .@"104");
         assert(self.command == .color_operation);
 
         const alloc = self.alloc orelse return;
@@ -1855,7 +1858,7 @@ pub const Parser = struct {
     /// is the final character in the OSC sequence. This is used to determine
     /// the response terminator.
     pub fn end(self: *Parser, terminator_ch: ?u8) ?Command {
-        if (!self.complete) {
+        if (!self.complete or self.state == .invalid) {
             if (comptime !builtin.is_test) log.warn(
                 "invalid OSC command: {s}",
                 .{self.buf[0..self.buf_idx]},
@@ -1905,7 +1908,9 @@ pub const Parser = struct {
             .osc_18,
             .osc_19,
             => self.parseGetSetDynamicColor(true),
-            .osc_104 => self.parseResetPalette(true),
+            .@"104",
+            .osc_104,
+            => self.parseResetPalette(true),
             else => {},
         }
 
@@ -3767,6 +3772,42 @@ test "OSC: OSC104: no parameters" {
         );
     }
     try std.testing.expect(it.next() == null);
+}
+
+test "OSC: OSC104: no parameters and missing semicolon" {
+    const testing = std.testing;
+
+    var p: Parser = .initAlloc(testing.allocator);
+    defer p.deinit();
+
+    const input = "104";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?;
+    try testing.expect(cmd == .color_operation);
+    try testing.expect(cmd.color_operation.operations.count() == 1);
+    var it = cmd.color_operation.operations.constIterator(0);
+    {
+        const op = it.next().?;
+        try testing.expect(op.* == .reset_all);
+        try testing.expectEqual(
+            .palette,
+            op.reset_all,
+        );
+    }
+    try std.testing.expect(it.next() == null);
+}
+
+test "OSC: OSC104: followed by something other than a semicolon" {
+    const testing = std.testing;
+
+    var p: Parser = .initAlloc(testing.allocator);
+    defer p.deinit();
+
+    const input = "104x";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end('\x1b') == null);
 }
 
 test "OSC: OSC 9;1 ConEmu sleep" {
