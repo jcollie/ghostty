@@ -566,6 +566,9 @@ pub fn init(
         };
         errdefer env.deinit();
 
+        // don't leak GHOSTTY_LOG to any subprocesses
+        env.remove("GHOSTTY_LOG");
+
         var buf: [18]u8 = undefined;
         try env.put(
             "GHOSTTY_SURFACE",
