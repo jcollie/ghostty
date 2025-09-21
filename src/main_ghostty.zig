@@ -72,7 +72,11 @@ pub fn main() !MainReturn {
     }
 
     if (comptime build_config.app_runtime == .none) {
-        const stdout = std.io.getStdOut().writer();
+        const stdout_file = std.fs.File.stdout();
+        const stdout_buf: [64]u8 = undefined;
+        var stdout_writer = stdout_file.writer(&stdout_buf);
+        const stdout = &stdout_writer.interface;
+
         try stdout.print("Usage: ghostty +<action> [flags]\n\n", .{});
         try stdout.print(
             \\This is the Ghostty helper CLI that accompanies the graphical Ghostty app.
@@ -89,6 +93,7 @@ pub fn main() !MainReturn {
         ,
             .{},
         );
+        stdout.flush();
 
         posix.exit(0);
     }
@@ -118,19 +123,17 @@ fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    // Stuff we can do before the lock
-    const level_txt = comptime level.asText();
-    const prefix = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-
-    // Lock so we are thread-safe
-    std.debug.lockStdErr();
-    defer std.debug.unlockStdErr();
-
     // On Mac, we use unified logging. To view this:
     //
     //   sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'
     //
-    if (builtin.target.os.tag.isDarwin()) {
+    // macOS logging is thread safe so no need for locks/mutexes
+    macos: {
+        if (comptime !builtin.target.os.tag.isDarwin()) break :macos;
+        if (!state.logging.macos) break :macos;
+
+        const prefix = if (scope == .default) "" else @tagName(scope) ++ ": ";
+
         // Convert our levels to Mac levels
         const mac_level: macos.os.LogType = switch (level) {
             .debug => .debug,
@@ -143,31 +146,30 @@ fn logFn(
         // but we shouldn't be logging too much.
         const logger = macos.os.Log.create(build_config.bundle_id, @tagName(scope));
         defer logger.release();
-        logger.log(std.heap.c_allocator, mac_level, format, args);
+        logger.log(std.heap.c_allocator, mac_level, prefix ++ format, args);
     }
 
-    switch (state.logging) {
-        .disabled => {},
+    stderr: {
+        // don't log debug messages to stderr unless we are a debug build
+        if (comptime builtin.mode != .Debug and level == .debug) break :stderr;
 
-        .stderr => {
-            // Always try default to send to stderr
-            var buffer: [1024]u8 = undefined;
-            var stderr = std.fs.File.stderr().writer(&buffer);
-            const writer = &stderr.interface;
-            nosuspend writer.print(level_txt ++ prefix ++ format ++ "\n", args) catch return;
-            // TODO: Do we want to use flushless stderr in the future?
-            writer.flush() catch {};
-        },
+        // skip if we are not logging to stderr
+        if (!state.logging.stderr) break :stderr;
+
+        // Lock so we are thread-safe
+        var stderr_buf: [64]u8 = undefined;
+        const stderr = std.debug.lockStderrWriter(&stderr_buf);
+        defer std.debug.unlockStderrWriter();
+
+        const level_txt = comptime level.asText();
+        const prefix = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+        nosuspend stderr.print(level_txt ++ prefix ++ format ++ "\n", args) catch break :stderr;
+        nosuspend stderr.flush() catch break :stderr;
     }
 }
 
 pub const std_options: std.Options = .{
-    // Our log level is always at least info in every build mode.
-    .log_level = switch (builtin.mode) {
-        .Debug => .debug,
-        else => .info,
-    },
-
+    .log_level = .info,
     .logFn = logFn,
 };
 
