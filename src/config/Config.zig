@@ -35,11 +35,13 @@ const help_strings = @import("help_strings");
 pub const Command = @import("command.zig").Command;
 const RepeatableReadableIO = @import("io.zig").RepeatableReadableIO;
 const RepeatableStringMap = @import("RepeatableStringMap.zig");
+pub const RepeatableColorMap = @import("RepeatableColorMap.zig");
 pub const Path = @import("path.zig").Path;
 pub const RepeatablePath = @import("path.zig").RepeatablePath;
 const ClipboardCodepointMap = @import("ClipboardCodepointMap.zig");
 const KeyRemapSet = @import("../input/key_mods.zig").RemapSet;
 const string = @import("string.zig");
+pub const Color = @import("Color.zig");
 
 // We do this instead of importing all of terminal/main.zig to
 // limit the dependency graph. This is important because some things
@@ -3753,6 +3755,11 @@ term: []const u8 = "xterm-ghostty",
 /// This only works on macOS since only macOS has an auto-update feature.
 @"auto-update-channel": ?build_config.ReleaseChannel = null,
 
+@"process-overlay": ProcessOverlay = .default,
+@"process-overlay-privileged-color": Color = .{ .r = 143, .g = 20, .b = 2 },
+@"process-overlay-process-color-map": RepeatableColorMap = .empty,
+@"process-overlay-opacity": f32 = 0.5,
+
 /// This is set by the CLI parser for deinit.
 _arena: ?ArenaAllocator = null,
 
@@ -3816,6 +3823,8 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
 
     // Add our default keybindings
     try result.keybind.init(alloc);
+
+    try result.initializeProcessOverlayProcessColorMap(alloc);
 
     // Add our default command palette entries
     try result.@"command-palette-entry".init(alloc);
@@ -5217,144 +5226,6 @@ pub const LinkPreviews = enum {
     false,
     true,
     osc8,
-};
-
-/// Color represents a color using RGB.
-///
-/// This is a packed struct so that the C API to read color values just
-/// works by setting it to a C integer.
-pub const Color = struct {
-    r: u8,
-    g: u8,
-    b: u8,
-
-    /// ghostty_config_color_s
-    pub const C = extern struct {
-        r: u8,
-        g: u8,
-        b: u8,
-    };
-
-    pub fn cval(self: Color) Color.C {
-        return .{ .r = self.r, .g = self.g, .b = self.b };
-    }
-
-    /// Convert this to the terminal RGB struct
-    pub fn toTerminalRGB(self: Color) terminal.color.RGB {
-        return .{ .r = self.r, .g = self.g, .b = self.b };
-    }
-
-    pub fn parseCLI(input_: ?[]const u8) !Color {
-        const input = input_ orelse return error.ValueRequired;
-        // Trim any whitespace before processing
-        const trimmed = std.mem.trim(u8, input, " \t");
-
-        if (terminal.x11_color.map.get(trimmed)) |rgb| return .{
-            .r = rgb.r,
-            .g = rgb.g,
-            .b = rgb.b,
-        };
-
-        return fromHex(trimmed);
-    }
-
-    /// Deep copy of the struct. Required by Config.
-    pub fn clone(self: Color, _: Allocator) error{}!Color {
-        return self;
-    }
-
-    /// Compare if two of our value are requal. Required by Config.
-    pub fn equal(self: Color, other: Color) bool {
-        return std.meta.eql(self, other);
-    }
-
-    /// Used by Formatter
-    pub fn formatEntry(self: Color, formatter: formatterpkg.EntryFormatter) !void {
-        var buf: [128]u8 = undefined;
-        try formatter.formatEntry(
-            []const u8,
-            try self.formatBuf(&buf),
-        );
-    }
-
-    /// Format the color as a string.
-    pub fn formatBuf(self: Color, buf: []u8) Allocator.Error![]const u8 {
-        return std.fmt.bufPrint(
-            buf,
-            "#{x:0>2}{x:0>2}{x:0>2}",
-            .{ self.r, self.g, self.b },
-        ) catch error.OutOfMemory;
-    }
-
-    /// fromHex parses a color from a hex value such as #RRGGBB. The "#"
-    /// is optional.
-    pub fn fromHex(input: []const u8) !Color {
-        // Trim the beginning '#' if it exists
-        const trimmed = if (input.len != 0 and input[0] == '#') input[1..] else input;
-        if (trimmed.len != 6 and trimmed.len != 3) return error.InvalidValue;
-
-        // Expand short hex values to full hex values
-        const rgb: []const u8 = if (trimmed.len == 3) &.{
-            trimmed[0], trimmed[0],
-            trimmed[1], trimmed[1],
-            trimmed[2], trimmed[2],
-        } else trimmed;
-
-        // Parse the colors two at a time.
-        var result: Color = undefined;
-        comptime var i: usize = 0;
-        inline while (i < 6) : (i += 2) {
-            const v: u8 =
-                ((try std.fmt.charToDigit(rgb[i], 16)) * 16) +
-                try std.fmt.charToDigit(rgb[i + 1], 16);
-
-            @field(result, switch (i) {
-                0 => "r",
-                2 => "g",
-                4 => "b",
-                else => unreachable,
-            }) = v;
-        }
-
-        return result;
-    }
-
-    test "fromHex" {
-        const testing = std.testing;
-
-        try testing.expectEqual(Color{ .r = 0, .g = 0, .b = 0 }, try Color.fromHex("#000000"));
-        try testing.expectEqual(Color{ .r = 10, .g = 11, .b = 12 }, try Color.fromHex("#0A0B0C"));
-        try testing.expectEqual(Color{ .r = 10, .g = 11, .b = 12 }, try Color.fromHex("0A0B0C"));
-        try testing.expectEqual(Color{ .r = 255, .g = 255, .b = 255 }, try Color.fromHex("FFFFFF"));
-        try testing.expectEqual(Color{ .r = 255, .g = 255, .b = 255 }, try Color.fromHex("FFF"));
-        try testing.expectEqual(Color{ .r = 51, .g = 68, .b = 85 }, try Color.fromHex("#345"));
-    }
-
-    test "parseCLI from name" {
-        try std.testing.expectEqual(Color{ .r = 0, .g = 0, .b = 0 }, try Color.parseCLI("black"));
-    }
-
-    test "formatConfig" {
-        const testing = std.testing;
-        var buf: std.Io.Writer.Allocating = .init(testing.allocator);
-        defer buf.deinit();
-
-        var color: Color = .{ .r = 10, .g = 11, .b = 12 };
-        try color.formatEntry(formatterpkg.entryFormatter("a", &buf.writer));
-        try std.testing.expectEqualSlices(u8, "a = #0a0b0c\n", buf.written());
-    }
-
-    test "parseCLI with whitespace" {
-        const testing = std.testing;
-        try testing.expectEqual(
-            Color{ .r = 0xAA, .g = 0xBB, .b = 0xCC },
-            try Color.parseCLI(" #AABBCC   "),
-        );
-        try testing.expectEqual(
-            Color{ .r = 0, .g = 0, .b = 0 },
-            try Color.parseCLI("  black "),
-        );
-    }
 };
 
 /// Represents color values that can also reference special color
@@ -9994,6 +9865,43 @@ pub const NotifyOnCommandFinishAction = packed struct {
     bell: bool = true,
     notify: bool = false,
 };
+
+/// See process-overlay
+pub const ProcessOverlay = packed struct {
+    privileged: bool = true,
+    processes: bool = true,
+
+    pub const default: ProcessOverlay = .{};
+    pub fn empty(self: ProcessOverlay) bool {
+        const fields = @typeInfo(ProcessOverlay).@"struct".fields;
+        inline for (fields) |field| {
+            if (@field(self, field.name)) return false;
+        }
+        return true;
+    }
+};
+
+pub fn initializeProcessOverlayProcessColorMap(self: *Config, alloc: Allocator) !void {
+    inline for (&.{
+        .{ "docker", Color{ .r = 242, .g = 140, .b = 40 } },
+        .{ "flatpak", Color{ .r = 242, .g = 140, .b = 40 } },
+        .{ "mosh-client", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "mosh", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "podman", Color{ .r = 242, .g = 140, .b = 40 } },
+        .{ "rlogin", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "scp", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "sftp", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "slogin", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "ssh", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "telnet", Color{ .r = 112, .g = 41, .b = 99 } },
+        .{ "toolbox", Color{ .r = 242, .g = 140, .b = 40 } },
+    }) |entry| {
+        const key = try alloc.dupeZ(u8, entry[0]);
+        const e = try self.@"process-overlay-process-color-map".map.getOrPut(alloc, key);
+        e.value_ptr.* = entry[1];
+        if (e.found_existing) alloc.free(key);
+    }
+}
 
 test "parse duration" {
     inline for (Duration.units) |unit| {
