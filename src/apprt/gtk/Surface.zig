@@ -107,3 +107,7 @@ pub fn redrawInspector(self: *Self) void {
 pub fn renderDeviceOptions(self: *Self) !renderer.Device.Options {
     return self.surface.renderDeviceOptions();
 }
+
+pub fn addRuntimeCss(self: *Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    try self.surface.addRuntimeCss(writer);
+}
