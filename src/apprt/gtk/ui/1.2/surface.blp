@@ -108,6 +108,22 @@ Overlay terminal_page {
   }
 
   [overlay]
+  Revealer {
+    reveal-child: bind $should_process_overlay_be_shown(template.config, template.show-process-overlay) as <bool>;
+    transition-type: crossfade;
+    transition-duration: 500;
+
+    Box process_overlay {
+      styles [
+        "process-overlay",
+      ]
+
+      halign: fill;
+      valign: fill;
+    }
+  }
+
+  [overlay]
   $GhosttySurfaceChildExited child_exited_overlay {
     visible: bind template.child-exited;
     close-request => $child_exited_close();
