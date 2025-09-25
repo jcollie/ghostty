@@ -83,6 +83,26 @@ Overlay terminal_page {
   }
 
   [overlay]
+  Revealer {
+    reveal-child: bind $should_process_overlay_be_shown(template.config, template.show-process-overlay) as <bool>;
+    transition-type: crossfade;
+    transition-duration: 500;
+    // Revealers take up the full size, we need this to not capture events.
+    can-focus: false;
+    can-target: false;
+    focusable: false;
+
+    Box process_overlay {
+      styles [
+        "process-overlay",
+      ]
+
+      halign: fill;
+      valign: fill;
+    }
+  }
+
+  [overlay]
   // The "border" bell feature is implemented here as an overlay rather than
   // just adding a border to the GLArea or other widget for two reasons.
   // First, adding a border to an existing widget causes a resize of the
