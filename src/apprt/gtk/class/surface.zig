@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const adw = @import("adw");
@@ -293,6 +294,42 @@ pub const Surface = extern struct {
                 },
             );
         };
+
+        pub const @"is-privileged" = struct {
+            pub const name = "is-privileged";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                bool,
+                .{
+                    .default = false,
+                    .accessor = gobject.ext.privateFieldAccessor(
+                        Self,
+                        Private,
+                        &Private.offset,
+                        "is_privileged",
+                    ),
+                },
+            );
+        };
+
+        pub const @"process-type" = struct {
+            pub const name = "process-type";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                ProcessType,
+                .{
+                    .default = .local,
+                    .accessor = gobject.ext.privateFieldAccessor(
+                        Self,
+                        Private,
+                        &Private.offset,
+                        "process_type",
+                    ),
+                },
+            );
+        };
     };
 
     pub const signals = struct {
@@ -518,6 +555,21 @@ pub const Surface = extern struct {
         /// The source that handles setting our child property.
         idle_rechild: ?c_uint = null,
 
+        /// The source that handles scanning the subprocesses for interesting
+        /// properties.
+        scanner_source: ?c_uint = null,
+
+        /// The last process group that was scanned for its properties.
+        last_pgrp: i32 = 0,
+
+        /// Is the current process privileged (euid == 0)
+        is_privileged: bool = false,
+
+        /// Is the process "local", "remote" (connected over the network to
+        /// another system), or "container" (connected to some container (docker
+        /// or podman))?
+        process_type: ProcessType = .local,
+
         /// A weak reference to an inspector window.
         inspector: ?*InspectorWindow = null,
 
@@ -631,6 +683,29 @@ pub const Surface = extern struct {
         is_split: c_int,
     ) callconv(.c) c_int {
         return @intFromBool(focused == 0 and is_split != 0);
+    }
+
+    fn closureShouldPrivilegedOverlayBeShown(
+        _: *Self,
+        is_privileged: c_int,
+    ) callconv(.c) c_int {
+        return @intFromBool(is_privileged != 0);
+    }
+
+    fn closureShouldRemoteOverlayBeShown(
+        _: *Self,
+        process_type_: c_int,
+    ) callconv(.c) c_int {
+        const process_type = std.meta.intToEnum(ProcessType, process_type_) catch return @intFromBool(false);
+        return @intFromBool(process_type == .remote);
+    }
+
+    fn closureShouldContainerOverlayBeShown(
+        _: *Self,
+        process_type_: c_int,
+    ) callconv(.c) c_int {
+        const process_type = std.meta.intToEnum(ProcessType, process_type_) catch return @intFromBool(false);
+        return @intFromBool(process_type == .container);
     }
 
     pub fn toggleFullscreen(self: *Self) void {
@@ -1467,6 +1542,13 @@ pub const Surface = extern struct {
                 log.warn("unable to remove idle source", .{});
             }
             priv.idle_rechild = null;
+        }
+
+        if (priv.scanner_source) |v| {
+            if (glib.Source.remove(v) == 0) {
+                log.warn("unable to remove idle source", .{});
+            }
+            priv.scanner_source = null;
         }
 
         // This works around a GTK double-free bug where if you bind
@@ -2700,6 +2782,124 @@ pub const Surface = extern struct {
             .{},
             null,
         );
+
+        priv.scanner_source = switch (comptime builtin.os.tag) {
+            .linux => glib.timeoutAdd(250, processScannerLinux, self),
+            else => null,
+        };
+    }
+
+    const ProcessType = enum(c_int) {
+        local,
+        remote,
+        container,
+
+        pub const getGObjectType = gobject.ext.defineEnum(ProcessType, .{
+            .name = "GhosttyProcessType",
+        });
+    };
+
+    const process_type_map: std.StaticStringMap(ProcessType) = .initComptime(&.{
+        .{ "docker", .container },
+        .{ "flatpak", .container },
+        .{ "mosh-client", .remote },
+        .{ "mosh", .remote },
+        .{ "podman", .container },
+        .{ "rlogin", .remote },
+        .{ "scp", .remote },
+        .{ "sftp", .remote },
+        .{ "slogin", .remote },
+        .{ "ssh", .remote },
+        .{ "telnet", .remote },
+        .{ "toolbox", .container },
+    });
+
+    /// Runs periodically and gets some properties of the process that
+    /// controls the terminal.
+    fn processScannerLinux(ud: ?*anyopaque) callconv(.c) c_int {
+        const CONTINUE = @intFromBool(glib.SOURCE_CONTINUE);
+
+        const self: *Surface = @ptrCast(@alignCast(ud orelse return CONTINUE));
+
+        const priv: *Private = self.private();
+        const surface = priv.core_surface orelse return CONTINUE;
+
+        if (surface.io.backend != .exec) return CONTINUE;
+        const exec = surface.io.backend.exec;
+        const pty = exec.subprocess.pty orelse return CONTINUE;
+
+        const pgrp: i32 = pgrp: {
+            var pgrp: i32 = undefined;
+            const rc = std.os.linux.tcgetpgrp(pty.master, &pgrp);
+            switch (std.os.linux.E.init(rc)) {
+                .SUCCESS => break :pgrp pgrp,
+                else => return CONTINUE,
+            }
+        };
+
+        // if the pgrp has not changed, don't go any further.
+        if (pgrp == priv.last_pgrp) return CONTINUE;
+        priv.last_pgrp = pgrp;
+
+        euid: {
+            var path_buf: [128]u8 = undefined;
+            const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/status", .{pgrp}) catch break :euid;
+
+            const file = std.fs.openFileAbsolute(path, .{}) catch break :euid;
+            defer file.close();
+
+            var data_buf: [2048]u8 = undefined;
+            const data_len = file.readAll(&data_buf) catch break :euid;
+            const data = data_buf[0..data_len];
+
+            const is_privileged = parseStatusForIsPrivileged(data);
+
+            if (is_privileged == priv.is_privileged) break :euid;
+
+            priv.is_privileged = is_privileged;
+            self.as(gobject.Object).notifyByPspec(properties.@"is-privileged".impl.param_spec);
+        }
+
+        command: {
+            var path_buf: [128]u8 = undefined;
+            const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{pgrp}) catch break :command;
+
+            const file = std.fs.openFileAbsolute(path, .{}) catch break :command;
+            defer file.close();
+
+            var data_buf: [2048]u8 = undefined;
+            const data_len = file.readAll(&data_buf) catch break :command;
+            const data = data_buf[0..data_len];
+
+            const process_type = parseCommandLineForProcessType(data);
+
+            if (process_type == priv.process_type) break :command;
+
+            priv.process_type = process_type;
+            self.as(gobject.Object).notifyByPspec(properties.@"process-type".impl.param_spec);
+        }
+
+        return CONTINUE;
+    }
+
+    fn parseStatusForIsPrivileged(value: []const u8) bool {
+        var lines = std.mem.splitScalar(u8, value, '\n');
+        while (lines.next()) |line| {
+            if (!std.mem.startsWith(u8, line, "Uid:")) continue;
+            var fields = std.mem.tokenizeScalar(u8, line[5..], std.ascii.control_code.ht);
+            _ = fields.next() orelse return false;
+            const raw = fields.next() orelse return false;
+            const euid = std.fmt.parseUnsigned(std.os.linux.pid_t, raw, 10) catch return false;
+            return euid == 0;
+        }
+        return false;
+    }
+
+    fn parseCommandLineForProcessType(value: []const u8) ProcessType {
+        var argv = std.mem.splitScalar(u8, value, 0);
+        const argv0 = argv.next() orelse return .local;
+        const basename = std.fs.path.basename(argv0);
+        return process_type_map.get(basename) orelse .local;
     }
 
     fn resizeOverlaySchedule(self: *Self) void {
@@ -2862,6 +3062,9 @@ pub const Surface = extern struct {
             class.bindTemplateCallback("notify_bell_ringing", &propBellRinging);
             class.bindTemplateCallback("should_border_be_shown", &closureShouldBorderBeShown);
             class.bindTemplateCallback("should_unfocused_split_be_shown", &closureShouldUnfocusedSplitBeShown);
+            class.bindTemplateCallback("should_privileged_overlay_be_shown", &closureShouldPrivilegedOverlayBeShown);
+            class.bindTemplateCallback("should_remote_overlay_be_shown", &closureShouldRemoteOverlayBeShown);
+            class.bindTemplateCallback("should_container_overlay_be_shown", &closureShouldContainerOverlayBeShown);
 
             // Properties
             gobject.ext.registerProperties(class, &.{
@@ -2881,6 +3084,8 @@ pub const Surface = extern struct {
                 properties.@"title-override".impl,
                 properties.zoom.impl,
                 properties.@"is-split".impl,
+                properties.@"is-privileged".impl,
+                properties.@"process-type".impl,
             });
 
             // Signals
