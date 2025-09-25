@@ -126,6 +126,10 @@ label.resize-overlay {
   /* background-color: color-mix(in srgb, var(--error-bg-color), transparent 50%); */
 }
 
+.surface progressbar.pause trough progress {
+  background-color: rgba(255, 191, 0, 0.5);
+}
+
 .surface .bell-overlay {
   border-color: rgba(58, 148, 74, 0.5);
   /* after GTK 4.16 is a requirement, switch to the following: */
@@ -180,4 +184,9 @@ label.resize-overlay {
    */
   margin: 0;
   padding: 0;
+}
+
+.surface .process-overlay {
+  border-width: 3px;
+  border-style: solid;
 }
