@@ -147,3 +147,21 @@ label.resize-overlay {
   margin: 0;
   padding: 0;
 }
+
+.surface .privileged-overlay {
+  border-color: rgba(143, 20, 2, 0.5);
+  border-width: 3px;
+  border-style: solid;
+}
+
+.surface .remote-overlay {
+  border-color: rgba(112, 41, 99, 0.5);
+  border-width: 3px;
+  border-style: solid;
+}
+
+.surface .container-overlay {
+  border-color: rgba(242, 140, 40, 0.5);
+  border-width: 3px;
+  border-style: solid;
+}

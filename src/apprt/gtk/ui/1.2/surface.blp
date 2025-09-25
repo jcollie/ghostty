@@ -76,6 +76,54 @@ Overlay terminal_page {
   }
 
   [overlay]
+  Revealer {
+    reveal-child: bind $should_privileged_overlay_be_shown(template.is-privileged) as <bool>;
+    transition-type: crossfade;
+    transition-duration: 500;
+
+    Box privileged_overlay {
+      styles [
+        "privileged-overlay",
+      ]
+
+      halign: fill;
+      valign: fill;
+    }
+  }
+
+  [overlay]
+  Revealer {
+    reveal-child: bind $should_remote_overlay_be_shown(template.process-type) as <bool>;
+    transition-type: crossfade;
+    transition-duration: 500;
+
+    Box remote_overlay {
+      styles [
+        "remote-overlay",
+      ]
+
+      halign: fill;
+      valign: fill;
+    }
+  }
+
+  [overlay]
+  Revealer {
+    reveal-child: bind $should_container_overlay_be_shown(template.process-type) as <bool>;
+    transition-type: crossfade;
+    transition-duration: 500;
+
+    Box container_overlay {
+      styles [
+        "container-overlay",
+      ]
+
+      halign: fill;
+      valign: fill;
+    }
+  }
+
+  [overlay]
   $GhosttySurfaceChildExited child_exited_overlay {
     visible: bind template.child-exited;
     close-request => $child_exited_close();
