@@ -131,6 +131,24 @@ pub const Tab = extern struct {
                 },
             );
         };
+
+        pub const @"is-privileged" = struct {
+            pub const name = "is-privileged";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                bool,
+                .{
+                    .default = false,
+                    .accessor = gobject.ext.privateFieldAccessor(
+                        Self,
+                        Private,
+                        &Private.offset,
+                        "title",
+                    ),
+                },
+            );
+        };
     };
 
     pub const signals = struct {
@@ -160,6 +178,11 @@ pub const Tab = extern struct {
         // Template bindings
         split_tree: *SplitTree,
 
+        /// Binding group for our active surface.
+        surface_bindings: *gobject.BindingGroup,
+
+        is_privileged: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -185,6 +208,9 @@ pub const Tab = extern struct {
             const app = Application.default();
             priv.config = app.getConfig();
         }
+
+        priv.surface_bindings = gobject.BindingGroup.new();
+        priv.surface_bindings.bind("is-privileged", self.as(gobject.Object), "is-privileged", .{});
 
         // Create our initial surface in the split tree.
         priv.split_tree.newSplit(.right, null) catch |err| switch (err) {
@@ -256,6 +282,8 @@ pub const Tab = extern struct {
             priv.config = null;
         }
 
+        priv.surface_bindings.setSource(null);
+
         gtk.Widget.disposeTemplate(
             self.as(gtk.Widget),
             getGObjectType(),
@@ -277,6 +305,7 @@ pub const Tab = extern struct {
             glib.free(@constCast(@ptrCast(v)));
             priv.title = null;
         }
+        priv.surface_bindings.unref();
 
         gobject.Object.virtual_methods.finalize.call(
             Class.parent,
@@ -311,6 +340,13 @@ pub const Tab = extern struct {
         _: *gobject.ParamSpec,
         self: *Self,
     ) callconv(.c) void {
+        log.warn("XXXXXXXXXXXX active surface", .{});
+        const priv: *Private = self.private();
+        const surface = surface: {
+            const surface = self.getActiveSurface() orelse break :surface null;
+            break :surface surface.as(gobject.Object);
+        };
+        priv.surface_bindings.setSource(surface);
         self.as(gobject.Object).notifyByPspec(properties.@"active-surface".impl.param_spec);
     }
 
@@ -454,6 +490,7 @@ pub const Tab = extern struct {
                 properties.@"surface-tree".impl,
                 properties.title.impl,
                 properties.tooltip.impl,
+                properties.@"is-privileged".impl,
             });
 
             // Bindings
