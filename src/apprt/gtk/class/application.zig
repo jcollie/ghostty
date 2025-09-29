@@ -509,6 +509,8 @@ pub const Application = extern struct {
         // Tell systemd that we are ready.
         systemd.notify.ready();
 
+        startSilence();
+
         log.debug("entering runloop", .{});
         defer log.debug("exiting runloop", .{});
         priv.running = true;
@@ -2574,4 +2576,38 @@ fn findActiveWindow(data: ?*const anyopaque, _: ?*const anyopaque) callconv(.c) 
 fn loadCssProviderFromData(provider: *gtk.CssProvider, data: [:0]const u8) void {
     assert(gtk_version.runtimeAtLeast(4, 12, 0));
     provider.loadFromString(data);
+}
+
+fn startSilence() void {
+    log.warn("XXXXXXXXXXXXXXXXXXX starting", .{});
+    const media_file = gtk.MediaFile.newForResource("silent.wav");
+
+    // Watch for the "ended" signal so that we can clean up after
+    // ourselves.
+    _ = gobject.Object.signals.notify.connect(
+        media_file,
+        ?*anyopaque,
+        silenceEnded,
+        null,
+        .{ .detail = "ended" },
+    );
+
+    log.warn("XXXXXXXXXXXXXXXXXXX connected", .{});
+    const media_stream = media_file.as(gtk.MediaStream);
+    log.warn("XXXXXXXXXXXXXXXXXXX convert", .{});
+    media_stream.setLoop(@intFromBool(true));
+    log.warn("XXXXXXXXXXXXXXXXXXX set loop", .{});
+    // media_stream.setVolume(0.0);
+    media_stream.play();
+    log.warn("XXXXXXXXXXXXXXXXXXX playing", .{});
+    // media_stream.unprepared()
+}
+
+fn silenceEnded(
+    media_file: *gtk.MediaFile,
+    _: *gobject.ParamSpec,
+    _: ?*anyopaque,
+) callconv(.c) void {
+    log.warn("XXXXXXXXXXXXXXXX ended", .{});
+    media_file.unref();
 }

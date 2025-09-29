@@ -61,6 +61,11 @@ pub const css = [_][]const u8{
     "style-hc-dark.css",
 };
 
+/// other files to include
+pub const other = [_][]const u8{
+    "silent.wav",
+};
+
 pub const Blueprint = struct {
     major: u16,
     minor: u16,
@@ -224,7 +229,18 @@ fn genRoot(writer: anytype) !void {
             .{ name, source },
         );
     }
-
+    inline for (other) |name| {
+        const source = std.fmt.comptimePrint(
+            "{s}/{s}",
+            .{ "src/apprt/gtk", name },
+        );
+        try writer.print(
+            \\    <file compressed="false" alias="{s}">{s}</file>
+            \\
+        ,
+            .{ name, source },
+        );
+    }
     try writer.writeAll(
         \\  </gresource>
         \\
