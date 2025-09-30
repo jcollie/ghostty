@@ -33,6 +33,7 @@ const font = @import("font/main.zig");
 const Command = @import("Command.zig");
 const terminal = @import("terminal/main.zig");
 const configpkg = @import("config.zig");
+const Duration = configpkg.Config.Duration;
 const input = @import("input.zig");
 const App = @import("App.zig");
 const internal_os = @import("os/main.zig");
@@ -146,6 +147,13 @@ focused: bool = true,
 
 /// Used to determine whether to continuously scroll.
 selection_scroll_active: bool = false,
+
+/// Used to send notifications that long running commands have finished.
+/// Requires that shell integration be active. Should represent a nanosecond
+/// precision timestamp. It does not necessarily need to correspond to the
+/// actual time, but we must be able to compare two subsequent timestamps to get
+/// the wall clock time that has elapsed between timestamps.
+command_timer: ?i128 = null,
 
 /// The effect of an input event. This can be used by callers to take
 /// the appropriate action after an input event. For example, key
@@ -280,6 +288,9 @@ const DerivedConfig = struct {
     links: []Link,
     link_previews: configpkg.LinkPreviews,
     scroll_to_bottom: configpkg.Config.ScrollToBottom,
+    notify_on_command_finish: configpkg.Config.NotifyOnCommandFinish,
+    notify_on_command_finish_action: configpkg.Config.NotifyOnCommandFinishAction,
+    notify_on_command_finish_after: Duration,
 
     const Link = struct {
         regex: oni.Regex,
@@ -350,6 +361,9 @@ const DerivedConfig = struct {
             .links = links,
             .link_previews = config.@"link-previews",
             .scroll_to_bottom = config.@"scroll-to-bottom",
+            .notify_on_command_finish = config.@"notify-on-command-finish",
+            .notify_on_command_finish_action = config.@"notify-on-command-finish-action",
+            .notify_on_command_finish_after = config.@"notify-on-command-finish-after",
 
             // Assignments happen sequentially so we have to do this last
             // so that the memory is captured from allocs above.
@@ -960,15 +974,7 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
 
         .password_input => |v| try self.passwordInput(v),
 
-        .ring_bell => {
-            _ = self.rt_app.performAction(
-                .{ .surface = self },
-                .ring_bell,
-                {},
-            ) catch |err| {
-                log.warn("apprt failed to ring bell={}", .{err});
-            };
-        },
+        .ring_bell => self.ringBell(),
 
         .progress_report => |v| {
             _ = self.rt_app.performAction(
@@ -983,6 +989,53 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .selection_scroll_tick => |active| {
             self.selection_scroll_active = active;
             try self.selectionScrollTick();
+        },
+
+        .start_command_timer => {
+            self.command_timer = std.time.nanoTimestamp();
+        },
+
+        .stop_command_timer => |v| timer: {
+            const end = std.time.nanoTimestamp();
+            const start = self.command_timer orelse break :timer;
+            self.command_timer = null;
+
+            const difference = end - start;
+
+            // skip obviously silly results
+            if (difference < 0) break :timer;
+            if (difference > std.math.maxInt(u64)) break :timer;
+
+            const duration: Duration = .{ .duration = @intCast(difference) };
+            log.warn("Command took {}", .{duration});
+
+            if (self.config.notify_on_command_finish == .never) break :timer;
+            if (self.config.notify_on_command_finish == .unfocused and self.focused) break :timer;
+            if (difference <= self.config.notify_on_command_finish_after.duration) break :timer;
+
+            if (self.config.notify_on_command_finish_action.bell) self.ringBell();
+
+            if (self.config.notify_on_command_finish_action.notify) {
+                const title = title: {
+                    const exit_code = v orelse break :title "Command Finished";
+                    if (exit_code == 0) break :title "Command Succeeded";
+                    break :title "Command Failed";
+                };
+                const body = body: {
+                    const exit_code = v orelse break :body try std.fmt.allocPrintZ(
+                        self.alloc,
+                        "Command took {}",
+                        .{duration.round(std.time.ns_per_ms)},
+                    );
+                    break :body try std.fmt.allocPrintZ(
+                        self.alloc,
+                        "Command took {} and exited with code {d}",
+                        .{ duration.round(std.time.ns_per_ms), exit_code },
+                    );
+                };
+                defer self.alloc.free(body);
+                try self.showDesktopNotification(title, body);
+            }
         },
     }
 }
@@ -5432,6 +5485,16 @@ fn presentSurface(self: *Surface) !void {
         .present_terminal,
         {},
     );
+}
+
+fn ringBell(self: *Surface) void {
+    _ = self.rt_app.performAction(
+        .{ .surface = self },
+        .ring_bell,
+        {},
+    ) catch |err| {
+        log.warn("apprt failed to ring bell={}", .{err});
+    };
 }
 
 /// Utility function for the unit tests for mouse selection logic.
