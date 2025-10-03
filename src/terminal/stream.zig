@@ -1623,6 +1623,7 @@ pub fn Stream(comptime Handler: type) type {
                 .conemu_change_tab_title,
                 .conemu_wait_input,
                 .conemu_guimacro,
+                .conemu_comment,
                 => {
                     log.warn("unimplemented OSC callback: {}", .{cmd});
                 },
