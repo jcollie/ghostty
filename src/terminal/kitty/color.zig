@@ -16,6 +16,10 @@ pub const OSC = struct {
     /// We must reply with the same string terminator (ST) as used in the
     /// request.
     terminator: Terminator = .st,
+
+    pub fn deinit(self: *OSC, alloc: std.mem.Allocator) void {
+        self.list.deinit(alloc);
+    }
 };
 
 pub const Special = enum {

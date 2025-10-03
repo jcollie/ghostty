@@ -265,3 +265,14 @@ test "percent 7" {
     @memcpy(&src, s);
     try std.testing.expectError(error.DecodeError, urlPercentDecode(&src));
 }
+
+fn isValidChar(c: u8) bool {
+    return switch (c) {
+        ' ', ';', '=' => false,
+        else => return std.ascii.isPrint(c),
+    };
+}
+
+pub fn urlPercentEncode(w: *std.Io.Writer, raw: []const u8) std.Io.Writer.Error!void {
+    try std.Uri.Component.percentEncode(w, raw, isValidChar);
+}
