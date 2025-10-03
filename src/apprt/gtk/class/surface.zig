@@ -925,16 +925,14 @@ pub const Surface = extern struct {
             };
             const title = std.mem.span(title_);
             const body = body: {
-                const exit_code = value.exit_code orelse break :body std.fmt.allocPrintZ(
-                    alloc,
-                    "Command took {}.",
-                    .{value.duration.round(std.time.ns_per_ms)},
-                ) catch break :notify;
-                break :body std.fmt.allocPrintZ(
-                    alloc,
-                    "Command took {} and exited with code {d}.",
-                    .{ value.duration.round(std.time.ns_per_ms), exit_code },
-                ) catch break :notify;
+                var buf: std.Io.Writer.Allocating = .init(alloc);
+                errdefer buf.deinit();
+                buf.writer.print("Command took {f}", .{value.duration.round(std.time.ns_per_ms)}) catch break :notify;
+                if (value.exit_code) |exit_code| {
+                    buf.writer.print(" and exited with code {d}", .{exit_code}) catch break :notify;
+                }
+                buf.writer.writeByte('.') catch break :notify;
+                break :body buf.toOwnedSliceSentinel(0) catch break :notify;
             };
             defer alloc.free(body);
 
