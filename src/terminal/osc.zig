@@ -90,7 +90,7 @@ pub const Command = union(Key) {
     end_of_input: struct {
         /// The command line that the user entered.
         /// See: https://sw.kovidgoyal.net/kitty/shell-integration/#notes-for-shell-developers
-        cmdline: ?[:0]const u8 = null,
+        command_line: ?[]const u8 = null,
     },
 
     /// End of current command.
@@ -1375,9 +1375,9 @@ pub const Parser = struct {
                 };
                 while (it.next()) |kv| {
                     if (std.mem.eql(u8, kv.key, "cmdline")) {
-                        self.command.end_of_input.cmdline = string_encoding.printfQDecode(kv.value) catch null;
+                        self.command.end_of_input.command_line = string_encoding.printfQDecode(kv.value) catch null;
                     } else if (std.mem.eql(u8, kv.key, "cmdline_url")) {
-                        self.command.end_of_input.cmdline = string_encoding.urlPercentDecode(kv.value) catch null;
+                        self.command.end_of_input.command_line = string_encoding.urlPercentDecode(kv.value) catch null;
                     } else {
                         log.info("OSC 133 C: unknown semantic prompt option: {s}", .{kv.key});
                     }
@@ -2815,8 +2815,8 @@ test "OSC 133: end_of_input with cmdline 1" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline 2" {
@@ -2829,8 +2829,8 @@ test "OSC 133: end_of_input with cmdline 2" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline 3" {
@@ -2843,8 +2843,8 @@ test "OSC 133: end_of_input with cmdline 3" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr\nkurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr\nkurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline 4" {
@@ -2857,8 +2857,8 @@ test "OSC 133: end_of_input with cmdline 4" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline 5" {
@@ -2871,8 +2871,8 @@ test "OSC 133: end_of_input with cmdline 5" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline 6" {
@@ -2885,7 +2885,7 @@ test "OSC 133: end_of_input with cmdline 6" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline 7" {
@@ -2898,7 +2898,7 @@ test "OSC 133: end_of_input with cmdline 7" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline 8" {
@@ -2911,7 +2911,7 @@ test "OSC 133: end_of_input with cmdline 8" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline 9" {
@@ -2924,7 +2924,7 @@ test "OSC 133: end_of_input with cmdline 9" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline 10" {
@@ -2937,8 +2937,8 @@ test "OSC 133: end_of_input with cmdline 10" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline_url 1" {
@@ -2951,8 +2951,8 @@ test "OSC 133: end_of_input with cmdline_url 1" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline_url 2" {
@@ -2965,8 +2965,8 @@ test "OSC 133: end_of_input with cmdline_url 2" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline_url 3" {
@@ -2979,8 +2979,8 @@ test "OSC 133: end_of_input with cmdline_url 3" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr;kurwa", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr;kurwa", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline_url 4" {
@@ -2993,7 +2993,7 @@ test "OSC 133: end_of_input with cmdline_url 4" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline_url 5" {
@@ -3006,7 +3006,7 @@ test "OSC 133: end_of_input with cmdline_url 5" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline_url 6" {
@@ -3019,7 +3019,7 @@ test "OSC 133: end_of_input with cmdline_url 6" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline_url 7" {
@@ -3032,8 +3032,8 @@ test "OSC 133: end_of_input with cmdline_url 7" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline != null);
-    try testing.expectEqualStrings("echo bobr kurwa ", cmd.end_of_input.cmdline.?);
+    try testing.expect(cmd.end_of_input.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa ", cmd.end_of_input.command_line.?);
 }
 
 test "OSC 133: end_of_input with cmdline_url 8" {
@@ -3046,7 +3046,7 @@ test "OSC 133: end_of_input with cmdline_url 8" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC 133: end_of_input with cmdline_url 9" {
@@ -3059,7 +3059,7 @@ test "OSC 133: end_of_input with cmdline_url 9" {
 
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
-    try testing.expect(cmd.end_of_input.cmdline == null);
+    try testing.expect(cmd.end_of_input.command_line == null);
 }
 
 test "OSC: OSC 777 show desktop notification with title" {
