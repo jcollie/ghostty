@@ -577,6 +577,7 @@ fn addGtkNg(
             .{ "glib", "glib2" },
             .{ "gobject", "gobject2" },
             .{ "gtk", "gtk4" },
+            .{ "nautilus", "nautilus4" },
             .{ "xlib", "xlib2" },
         };
         inline for (gobject_imports) |import| {
@@ -587,6 +588,7 @@ fn addGtkNg(
 
     step.linkSystemLibrary2("gtk4", dynamic_link_opts);
     step.linkSystemLibrary2("libadwaita-1", dynamic_link_opts);
+    step.linkSystemLibrary2("libnautilus-extension-4", dynamic_link_opts);
 
     if (self.config.x11) {
         step.linkSystemLibrary2("X11", dynamic_link_opts);
