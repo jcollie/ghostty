@@ -26,7 +26,7 @@ https://deps.files.ghostty.org/zig_js-04db83c617da1956ac5adc1cb9ba1e434c1cb6fd.t
 https://deps.files.ghostty.org/zig_objc-f356ed02833f0f1b8e84d50bed9e807bf7cdc0ae.tar.gz
 https://deps.files.ghostty.org/zig_wayland-1b5c038ec10da20ed3a15b0b2a6db1c21383e8ea.tar.gz
 https://deps.files.ghostty.org/zlib-1220fed0c74e1019b3ee29edae2051788b080cd96e90d56836eea857b0b966742efb.tar.gz
-https://github.com/ghostty-org/zig-gobject/releases/download/0.6.0-2025-10-16-21-1/ghostty-gobject-0.6.0-2025-10-16-21-1.tar.zst
+https://github.com/ghostty-org/zig-gobject/releases/download/0.6.0-2025-10-17-22-1/ghostty-gobject-0.6.0-2025-10-17-22-1.tar.zst
 https://github.com/ivanstepanovftw/zigimg/archive/d7b7ab0ba0899643831ef042bd73289510b39906.tar.gz
 https://github.com/jacobsandlund/uucode/archive/31655fba3c638229989cc524363ef5e3c7b580c1.tar.gz
 https://github.com/mbadolato/iTerm2-Color-Schemes/releases/download/release-20251110-150531-d5f3d53/ghostty-themes.tgz
