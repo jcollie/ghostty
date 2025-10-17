@@ -70,6 +70,7 @@
   wayland-scanner,
   wayland-protocols,
   zon2nix,
+  nautilus,
   system,
   pkgs,
   # needed by GTK for loading SVG icons while running from within the
@@ -179,6 +180,7 @@ in
         gtk4-layer-shell
         glib
         gobject-introspection
+        nautilus
         wayland
         wayland-scanner
         wayland-protocols

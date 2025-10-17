@@ -33,6 +33,7 @@
   pkgs.gst_all_1.gstreamer
   pkgs.gtk4
   pkgs.libadwaita
+  pkgs.nautilus
 ]
 ++ lib.optionals (stdenv.hostPlatform.isLinux && enableX11) [
   pkgs.xorg.libX11
