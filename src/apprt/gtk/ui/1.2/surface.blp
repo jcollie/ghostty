@@ -112,6 +112,10 @@ Overlay terminal_page {
     reveal-child: bind $should_process_overlay_be_shown(template.config, template.show-process-overlay) as <bool>;
     transition-type: crossfade;
     transition-duration: 500;
+    // Revealers take up the full size, we need this to not capture events.
+    can-focus: false;
+    can-target: false;
+    focusable: false;
 
     Box process_overlay {
       styles [
