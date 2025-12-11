@@ -7,7 +7,8 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Benchmark = @import("Benchmark.zig");
 const options = @import("options.zig");
-const Parser = @import("../terminal/osc.zig").Parser;
+const ParserOld = @import("../terminal/osc-old.zig").Parser;
+const ParserNew = @import("../terminal/osc.zig").Parser;
 const log = std.log.scoped(.@"osc-parser-bench");
 
 opts: Options,
@@ -15,7 +16,8 @@ opts: Options,
 /// The file, opened in the setup function.
 data_f: ?std.fs.File = null,
 
-parser: Parser,
+parser_old: ParserOld,
+parser_new: ParserNew,
 
 pub const Options = struct {
     /// The data to read as a filepath. If this is "-" then
@@ -24,6 +26,11 @@ pub const Options = struct {
     /// use stdin by default but I find that a hanging CLI command
     /// with no interaction is a bit annoying.
     data: ?[]const u8 = null,
+
+    parser: enum {
+        old,
+        new,
+    } = .old,
 };
 
 /// Create a new terminal stream handler for the given arguments.
@@ -36,13 +43,15 @@ pub fn create(
     ptr.* = .{
         .opts = opts,
         .data_f = null,
-        .parser = .init(alloc),
+        .parser_old = .initAlloc(alloc),
+        .parser_new = .init(alloc),
     };
     return ptr;
 }
 
 pub fn destroy(self: *OscParser, alloc: Allocator) void {
-    self.parser.deinit();
+    self.parser_old.deinit();
+    self.parser_new.deinit();
     alloc.destroy(self);
 }
 
@@ -64,7 +73,8 @@ fn setup(ptr: *anyopaque) Benchmark.Error!void {
         log.warn("error opening data file err={}", .{err});
         return error.BenchmarkFailed;
     };
-    self.parser.reset();
+    self.parser_old.reset();
+    self.parser_new.reset();
 }
 
 fn teardown(ptr: *anyopaque) void {
@@ -100,9 +110,18 @@ fn step(ptr: *anyopaque) Benchmark.Error!void {
             error.ReadFailed => return error.BenchmarkFailed,
         };
 
-        for (osc_buf[0..len]) |c| self.parser.next(c);
-        _ = self.parser.end(std.ascii.control_code.bel);
-        self.parser.reset();
+        switch (self.opts.parser) {
+            .old => {
+                for (osc_buf[0..len]) |c| self.parser_old.next(c);
+                _ = self.parser_old.end(std.ascii.control_code.bel);
+                self.parser_old.reset();
+            },
+            .new => {
+                for (osc_buf[0..len]) |c| self.parser_new.next(c);
+                _ = self.parser_new.end(std.ascii.control_code.bel);
+                self.parser_new.reset();
+            },
+        }
     }
 }
 

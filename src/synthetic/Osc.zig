@@ -293,6 +293,10 @@ fn bytes(self: *const Osc) Bytes {
     };
 }
 
+// fn kvBytes(self: *const Osc) Bytes {
+//     return Bytes.init(self.rand).alphabet(.kv).atMost(16);
+// }
+
 /// Choose whether to generate a valid or invalid OSC request based
 /// on the validity probability.
 fn chooseValidity(self: *const Osc) Validity {
