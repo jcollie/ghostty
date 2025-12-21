@@ -673,9 +673,6 @@ pub const Surface = extern struct {
 
         border_overlay_color: ?Color = null,
 
-        /// CSS Provider for any styles based on Ghostty configuration values.
-        // css_provider: ?*gtk.CssProvider = null,
-
         /// A weak reference to an inspector window.
         inspector: ?*InspectorWindow = null,
 
