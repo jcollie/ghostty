@@ -888,7 +888,7 @@ pub const Application = extern struct {
             defer map.deinit(alloc);
 
             privileged: {
-                const color = config.@"process-overlay-privileged-color";
+                const color = config.@"border-overlay-privileged-color";
                 const k = color.int();
                 const v = map.get(k) orelse false;
                 if (v) break :privileged;
@@ -901,12 +901,12 @@ pub const Application = extern struct {
                 ,
                     .{
                         color.short(),
-                        color.rgba(config.@"process-overlay-opacity"),
+                        color.rgba(config.@"border-overlay-opacity"),
                     },
                 );
             }
 
-            var it = config.@"process-overlay-process-color-map".iterator();
+            var it = config.@"border-overlay-process-color-map".iterator();
             while (it.next()) |entry| {
                 const color = entry.value_ptr.*;
                 const k = color.int();
@@ -921,7 +921,7 @@ pub const Application = extern struct {
                 ,
                     .{
                         color.short(),
-                        color.rgba(config.@"process-overlay-opacity"),
+                        color.rgba(config.@"border-overlay-opacity"),
                     },
                 );
             }

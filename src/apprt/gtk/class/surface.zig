@@ -312,8 +312,8 @@ pub const Surface = extern struct {
             );
         };
 
-        pub const @"show-process-overlay" = struct {
-            pub const name = "show-process-overlay";
+        pub const @"show-border-overlay" = struct {
+            pub const name = "show-border-overlay";
             const impl = gobject.ext.defineProperty(
                 name,
                 Self,
@@ -321,7 +321,7 @@ pub const Surface = extern struct {
                 .{
                     .default = false,
                     .accessor = .{
-                        .getter = propShowProcessOverlay,
+                        .getter = propShowBorderOverlay,
                     },
                 },
             );
@@ -671,7 +671,7 @@ pub const Surface = extern struct {
         /// The last process group that was scanned for its properties.
         last_pgrp: i32 = 0,
 
-        process_overlay_color: ?Color = null,
+        border_overlay_color: ?Color = null,
 
         /// CSS Provider for any styles based on Ghostty configuration values.
         // css_provider: ?*gtk.CssProvider = null,
@@ -703,7 +703,7 @@ pub const Surface = extern struct {
         progress_bar_overlay: *gtk.ProgressBar,
         error_page: *adw.StatusPage,
         terminal_page: *gtk.Overlay,
-        process_overlay: *gtk.Box,
+        border_overlay: *gtk.Box,
 
         /// The context for this surface (window, tab, or split)
         context: apprt.surface.NewSurfaceContext = .window,
@@ -778,26 +778,30 @@ pub const Surface = extern struct {
 
     /// Callback used to determine whether border should be shown around the
     /// surface.
-    fn closureShouldBorderBeShown(
+    fn closureShouldBorderOverlayBeShown(
         _: *Self,
         config_: ?*Config,
         bell_ringing_: c_int,
+        show_border_overlay_: c_int,
     ) callconv(.c) c_int {
         const bell_ringing = bell_ringing_ != 0;
+        const show_border_overlay = show_border_overlay_ != 0;
 
         // If the bell isn't ringing exit early because when the surface is
         // first created there's a race between this code being run and the
         // config being set on the surface. That way we don't overwhelm people
         // with the warning that we issue if the config isn't set and overwhelm
         // ourselves with large numbers of bug reports.
-        if (!bell_ringing) return @intFromBool(false);
+        if (!bell_ringing and !show_border_overlay) return @intFromBool(false);
 
         const config = if (config_) |v| v.get() else {
             log.warn("config unavailable for computing whether border should be shown, likely bug", .{});
             return @intFromBool(false);
         };
 
-        return @intFromBool(config.@"bell-features".border);
+        if (bell_ringing and config.@"bell-features".border) return @intFromBool(true);
+        if (show_border_overlay) return @intFromBool(true);
+        return @intFromBool(false);
     }
 
     /// Callback used to determine whether unfocused-split-fill / unfocused-split-opacity
@@ -808,18 +812,6 @@ pub const Surface = extern struct {
         is_split: c_int,
     ) callconv(.c) c_int {
         return @intFromBool(focused == 0 and is_split != 0);
-    }
-
-    /// Callback used to determine whether process overlay should be shown around the
-    /// surface.
-    fn closureShouldProcessOverlayBeShown(
-        _: *Self,
-        _: ?*Config,
-        show_process_overlay_: c_int,
-    ) callconv(.c) c_int {
-        const show_process_overlay = show_process_overlay_ != 0;
-
-        return @intFromBool(show_process_overlay);
     }
 
     pub fn toggleFullscreen(self: *Self) void {
@@ -1829,7 +1821,7 @@ pub const Surface = extern struct {
         priv.vadj_signal_group = null;
         priv.scanner_source = null;
         priv.last_pgrp = 0;
-        priv.process_overlay_color = null;
+        priv.border_overlay_color = null;
 
         // If our configuration is null then we get the configuration
         // from the application.
@@ -2168,9 +2160,10 @@ pub const Surface = extern struct {
         if (ringing) self.ringBell();
 
         // Property change only happens on actual state change
-        const priv = self.private();
+        const priv: *Private = self.private();
         if (priv.bell_ringing == ringing) return;
         priv.bell_ringing = ringing;
+        self.setBorderColor();
         self.as(gobject.Object).notifyByPspec(properties.@"bell-ringing".impl.param_spec);
     }
 
@@ -3267,7 +3260,7 @@ pub const Surface = extern struct {
     };
 
     fn initSurface(self: *Self) InitError!void {
-        const priv = self.private();
+        const priv: *Private = self.private();
         assert(priv.core_surface == null);
         const gl_area = priv.gl_area;
 
@@ -3295,8 +3288,6 @@ pub const Surface = extern struct {
         // Add ourselves to the list of surfaces on the app.
         try app.core().addSurface(self.rt());
         errdefer app.core().deleteSurface(self.rt());
-
-        log.warn("IIIIIIIIIIIIIIIIIIIII config: {s}", .{if (priv.config == null) "null" else "not null"});
 
         if (priv.config == null) {
             priv.config = Application.default().getConfig();
@@ -3330,14 +3321,6 @@ pub const Surface = extern struct {
         // Store it!
         priv.core_surface = surface;
 
-        // var buf: [32]u8 = undefined;
-        // const class = std.fmt.bufPrintZ(&buf, "surface-{x:0>16}", .{surface.id}) catch {
-        //     log.warn("unable to set up CSS class for surface {x:0>16}", .{surface.id});
-        //     return;
-        // };
-        // log.warn("CCCCCCCCCCCCCCC adding css class: {s}", .{class});
-        // self.as(gtk.Widget).addCssClass(class);
-
         // Emit the signal that we initialized the surface.
         Surface.signals.init.impl.emit(
             self,
@@ -3346,170 +3329,57 @@ pub const Surface = extern struct {
             null,
         );
 
-        log.warn("XXXXXXXXXXXXXXXXXXXXXXXXX", .{});
-        // self.initRuntimeCss();
-        // app.loadRuntimeCss() catch {};
-        log.warn("YYYYYYYYYYYYYYYYYYYYYYYYY", .{});
-
         priv.scanner_source = switch (comptime builtin.os.tag) {
             .linux => glib.timeoutAdd(250, ProcessScannerLinux.scanner, self),
             else => null,
         };
     }
 
-    // fn initRuntimeCss(self: *Self) void {
-    //     const object = self.as(gobject.Object);
-    //     object.freezeNotify();
-    //     defer object.thawNotify();
-
-    //     const priv: *Private = self.private();
-    //     const surface = priv.core_surface orelse return;
-
-    //     const display: *gdk.Display = gdk.Display.getDefault() orelse {
-    //         log.warn("gdk display is null, won't set up runtime css for surface {x:0>16}", .{surface.id});
-    //         return;
-    //     };
-
-    //     const css_provider = gtk.CssProvider.new();
-
-    //     // _ = gtk.CssProvider.signals.parsing_error.connect(
-    //     //     css_provider,
-    //     //     *Surface,
-    //     //     signalCssParsingError,
-    //     //     self,
-    //     //     .{},
-    //     // );
-
-    //     gtk.StyleContext.addProviderForDisplay(
-    //         display,
-    //         css_provider.as(gtk.StyleProvider),
-    //         gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 4,
-    //     );
-
-    //     log.warn("CCCCCCCCCCCCCCC adding css provider for: {x:0>16}", .{surface.id});
-    //     priv.css_provider = css_provider;
-
-    //     // self.loadRuntimeCss();
-    //     Application.default().loadRuntimeCss() catch {};
-
-    //     var buf: [128]u8 = undefined;
-    //     const class = std.fmt.bufPrintZ(&buf, "surface-{x:0>16}", .{surface.id}) catch {
-    //         log.warn("unable to set up CSS class for surface {x:0>16}", .{surface.id});
-    //         return;
-    //     };
-    //     log.warn("CCCCCCCCCCCCCCC adding css class: {s}", .{class});
-    //     self.as(gtk.Widget).addCssClass(class);
-    // }
-
-    // fn signalCssParsingError(
-    //     _: *gtk.CssProvider,
-    //     css_section: *gtk.CssSection,
-    //     err: *glib.Error,
-    //     _: *Self,
-    // ) callconv(.c) void {
-    //     log.warn("css parsing failed: {s} {d} {s}", .{
-    //         glib.quarkToString(err.f_domain),
-    //         err.f_code,
-    //         err.f_message orelse "«unknown»",
-    //     });
-    //     if (comptime gtk_version.atLeast(4, 16, 0)) bytes: {
-    //         const bytes = css_section.getBytes() orelse break :bytes;
-    //         var len: usize = undefined;
-    //         const ptr = bytes.getData(&len) orelse break :bytes;
-    //         const data = ptr[0..len];
-    //         log.warn("problematic css:\n{s}", .{data});
-    //     }
-    // }
-
-    // fn loadRuntimeCss(self: *Self) void {
-    //     const object = self.as(gobject.Object);
-    //     object.freezeNotify();
-    //     defer object.thawNotify();
-
-    //     const app = Application.default();
-    //     const alloc = app.allocator();
-    //     const priv: *Private = self.private();
-    //     const config = priv.config orelse return;
-    //     const cfg = config.get();
-    //     const surface = priv.core_surface orelse return;
-    //     const css_provider = priv.css_provider orelse return;
-
-    //     var buf: std.Io.Writer.Allocating = .init(alloc);
-    //     defer buf.deinit();
-    //     const writer = &buf.writer;
-
-    //     if (priv.process_overlay_color) |color| {
-    //         writer.print(
-    //             \\.surface.surface-{x:0>16} .process-overlay {{
-    //             \\  border-color: rgba({d}, {d}, {d}, {d:.1});
-    //             \\}}
-    //         , .{ surface.id, color.r, color.g, color.b, cfg.@"process-overlay-opacity" }) catch {
-    //             log.warn("unable to set up runtime css for surface {x:0>16}", .{surface.id});
-    //             return;
-    //         };
-    //     } else {
-    //         writer.print(
-    //             \\.surface.surface-{x:0>16} .process-overlay {{
-    //             \\  border-color: rgba(0, 0, 0, 0.0);
-    //             \\}}
-    //         , .{surface.id}) catch {
-    //             log.warn("unable to set up runtime css for surface {x:0>16}", .{surface.id});
-    //             return;
-    //         };
-    //     }
-
-    //     const contents = writer.buffered();
-    //     log.info("setting css:\n{s}", .{contents});
-    //     const bytes = glib.Bytes.new(contents.ptr, contents.len);
-    //     defer bytes.unref();
-    //     log.warn("AAAAAAAAAAAAAAAAAAAAAAAAAAA", .{});
-    //     css_provider.loadFromBytes(bytes);
-    //     log.warn("BBBBBBBBBBBBBBBBBBBBBBBBBBB", .{});
-    // }
-
-    pub fn addRuntimeCss(self: *Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    /// Determine if process overlay should be shown.
+    fn propShowBorderOverlay(self: *Self, value: *gobject.Value) void {
         const priv: *Private = self.private();
-        const config = priv.config orelse return;
-        const cfg = config.get();
-        const surface = priv.core_surface orelse return;
-
-        if (priv.process_overlay_color) |color| {
-            try writer.print(
-                \\.surface.surface-{x:0>16} .process-overlay {{
-                \\  border-color: rgba({d}, {d}, {d}, {d:.1});
-                \\}}
-            , .{ surface.id, color.r, color.g, color.b, cfg.@"process-overlay-opacity" });
-        } else {
-            try writer.print(
-                \\.surface.surface-{x:0>16} .process-overlay {{
-                \\  border-color: rgba(0, 0, 0, 0.0);
-                \\}}
-            , .{surface.id});
-        }
+        value.setBoolean(@intFromBool(priv.bell_ringing or priv.border_overlay_color != null));
     }
 
-    /// Determine if
-    fn propShowProcessOverlay(self: *Self, value: *gobject.Value) void {
-        log.warn("ZZZZZZZZZZZZZZZZZZZ", .{});
+    fn setBorderColor(
+        self: *Self,
+    ) void {
         const priv: *Private = self.private();
-        // This is a little bit of a hack. We use the lack of a core surface
-        // to indicate that we are very early in the initialization sequence of
-        // the surface. We reveal the process overlay if this happens, but it's
-        // essentially invisible because the CSS should make it so. The process
-        // overlay should get hidden again shortly thereafter. The reason that
-        // this is needed is that the runtime CSS doesn't seem to work properly
-        // the 1st time the process overlay is revealed. I'm not sure if this is
-        // a bug in Ghostty or a bug in GTK but it's the only way that I could
-        // get this to work reliably.
-        // if (priv.core_surface == null) {
-        //     value.setBoolean(@intFromBool(true));
-        //     return;
-        // }
-        // if (priv.css_provider == null) {
-        //     value.setBoolean(@intFromBool(false));
-        //     return;
-        // }
-        value.setBoolean(@intFromBool(priv.process_overlay_color != null));
+
+        var buf: [32]u8 = undefined;
+        const new_class_ = new_class: {
+            if (priv.bell_ringing) break :new_class "bell-ringing";
+            const color = priv.border_overlay_color orelse break :new_class null;
+            break :new_class std.fmt.bufPrintZ(
+                &buf,
+                "border-color-{f}",
+                .{color.short()},
+            ) catch null;
+        };
+
+        const object = self.as(gobject.Object);
+        if (new_class_) |new_class| {
+            // Only remove the old border color classes if we are adding
+            // a new one. This will prevent the border from flashing
+            // white while the revealer transitions.
+            const widget = priv.border_overlay.as(gtk.Widget);
+            const classes: [*:null]?[*:0]u8 = @ptrCast(widget.getCssClasses());
+            defer glib.strfreev(classes);
+            var i: usize = 0;
+            while (classes[i] != null) : (i += 1) {
+                const class_ = classes[i] orelse unreachable;
+                const class = std.mem.span(class_);
+                if (std.mem.startsWith(u8, class, "border-color-")) {
+                    widget.removeCssClass(class_);
+                }
+                if (std.mem.eql(u8, class, "bell-ringing")) {
+                    widget.removeCssClass("bell-ringing");
+                }
+            }
+
+            widget.addCssClass(new_class);
+        }
+        object.notifyByPspec(properties.@"show-border-overlay".impl.param_spec);
     }
 
     pub const ProcessScannerLinux = struct {
@@ -3530,7 +3400,7 @@ pub const Surface = extern struct {
             const config = priv.config orelse return CONTINUE;
             const cfg = config.get();
 
-            if (cfg.@"process-overlay".empty()) return CONTINUE;
+            if (cfg.@"border-overlay".empty()) return CONTINUE;
 
             const pgrp: i32 = pgrp: {
                 var pgrp: i32 = undefined;
@@ -3545,10 +3415,10 @@ pub const Surface = extern struct {
             if (pgrp == priv.last_pgrp) return CONTINUE;
             priv.last_pgrp = pgrp;
 
-            const new_color_: ?Color = color: {
+            priv.border_overlay_color = color: {
                 euid: {
                     // Skip if privileged is turned off.
-                    if (!cfg.@"process-overlay".privileged) break :euid;
+                    if (!cfg.@"border-overlay".privileged) break :euid;
 
                     var path_buf: [128]u8 = undefined;
                     const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/status", .{pgrp}) catch break :euid;
@@ -3560,12 +3430,12 @@ pub const Surface = extern struct {
                     const data_len = file.readAll(&data_buf) catch break :euid;
                     const data = data_buf[0..data_len];
 
-                    break :color parseStatus(data, cfg.@"process-overlay-privileged-color") orelse break :euid;
+                    break :color parseStatus(data, cfg.@"border-overlay-privileged-color") orelse break :euid;
                 }
 
                 command: {
                     // Skip if processes are turned off.
-                    if (!cfg.@"process-overlay".processes) break :command;
+                    if (!cfg.@"border-overlay".processes) break :command;
 
                     var path_buf: [128]u8 = undefined;
                     const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{pgrp}) catch break :command;
@@ -3577,60 +3447,13 @@ pub const Surface = extern struct {
                     const data_len = file.readAll(&data_buf) catch break :command;
                     const data = data_buf[0..data_len];
 
-                    break :color parseCommandLine(data, &cfg.@"process-overlay-process-color-map".map);
+                    break :color parseCommandLine(data, &cfg.@"border-overlay-process-color-map".map);
                 }
 
                 break :color null;
             };
 
-            const changed = changed: {
-                const old_color = priv.process_overlay_color orelse {
-                    const new_color = new_color_ orelse break :changed false;
-
-                    priv.process_overlay_color = new_color;
-                    break :changed true;
-                };
-
-                const new_color = new_color_ orelse {
-                    priv.process_overlay_color = null;
-                    break :changed true;
-                };
-
-                if (old_color.equal(new_color)) break :changed false;
-
-                priv.process_overlay_color = new_color;
-
-                break :changed true;
-            };
-
-            if (changed) {
-                const object = self.as(gobject.Object);
-                if (new_color_) |new_color| {
-                    // Only remove the old border color classes if we are adding
-                    // a new one. This will prevent the border from flashing
-                    // white while the revealer transitions.
-                    const widget = priv.process_overlay.as(gtk.Widget);
-                    const classes: [*:null]?[*:0]u8 = @ptrCast(widget.getCssClasses());
-                    defer glib.strfreev(classes);
-                    var i: usize = 0;
-                    while (classes[i] != null) : (i += 1) {
-                        const class_ = classes[i] orelse unreachable;
-                        const class = std.mem.span(class_);
-                        if (std.mem.startsWith(u8, class, "border-color")) {
-                            widget.removeCssClass(class_);
-                        }
-                    }
-
-                    var buf: [32]u8 = undefined;
-                    const class = std.fmt.bufPrintZ(
-                        &buf,
-                        "border-color-{x:0>2}{x:0>2}{x:0>2}",
-                        .{ new_color.r, new_color.g, new_color.b },
-                    ) catch return CONTINUE;
-                    widget.addCssClass(class);
-                }
-                object.notifyByPspec(properties.@"show-process-overlay".impl.param_spec);
-            }
+            self.setBorderColor();
 
             return CONTINUE;
         }
@@ -3825,7 +3648,7 @@ pub const Surface = extern struct {
             class.bindTemplateChildPrivate("terminal_page", .{});
             class.bindTemplateChildPrivate("drop_target", .{});
             class.bindTemplateChildPrivate("im_context", .{});
-            class.bindTemplateChildPrivate("process_overlay", .{});
+            class.bindTemplateChildPrivate("border_overlay", .{});
 
             // Template Callbacks
             class.bindTemplateCallback("focus_enter", &ecFocusEnter);
@@ -3858,13 +3681,12 @@ pub const Surface = extern struct {
             class.bindTemplateCallback("notify_mouse_hidden", &propMouseHidden);
             class.bindTemplateCallback("notify_mouse_shape", &propMouseShape);
             class.bindTemplateCallback("notify_vadjustment", &propVAdjustment);
-            class.bindTemplateCallback("should_border_be_shown", &closureShouldBorderBeShown);
+            class.bindTemplateCallback("should_border_overlay_be_shown", &closureShouldBorderOverlayBeShown);
             class.bindTemplateCallback("should_unfocused_split_be_shown", &closureShouldUnfocusedSplitBeShown);
             class.bindTemplateCallback("search_stop", &searchStop);
             class.bindTemplateCallback("search_changed", &searchChanged);
             class.bindTemplateCallback("search_next_match", &searchNextMatch);
             class.bindTemplateCallback("search_previous_match", &searchPreviousMatch);
-            class.bindTemplateCallback("should_process_overlay_be_shown", &closureShouldProcessOverlayBeShown);
 
             // Properties
             gobject.ext.registerProperties(class, &.{
@@ -3886,7 +3708,7 @@ pub const Surface = extern struct {
                 properties.@"title-override".impl,
                 properties.zoom.impl,
                 properties.@"is-split".impl,
-                properties.@"show-process-overlay".impl,
+                properties.@"show-border-overlay".impl,
 
                 // For Gtk.Scrollable
                 properties.hadjustment.impl,
