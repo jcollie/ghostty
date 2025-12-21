@@ -3755,10 +3755,10 @@ term: []const u8 = "xterm-ghostty",
 /// This only works on macOS since only macOS has an auto-update feature.
 @"auto-update-channel": ?build_config.ReleaseChannel = null,
 
-@"process-overlay": ProcessOverlay = .default,
-@"process-overlay-privileged-color": Color = .{ .r = 143, .g = 20, .b = 2 },
-@"process-overlay-process-color-map": RepeatableColorMap = .empty,
-@"process-overlay-opacity": f32 = 0.5,
+@"border-overlay": BorderOverlay = .default,
+@"border-overlay-privileged-color": Color = .{ .r = 143, .g = 20, .b = 2 },
+@"border-overlay-process-color-map": RepeatableColorMap = .empty,
+@"border-overlay-opacity": f32 = 0.5,
 
 /// This is set by the CLI parser for deinit.
 _arena: ?ArenaAllocator = null,
@@ -9867,13 +9867,13 @@ pub const NotifyOnCommandFinishAction = packed struct {
 };
 
 /// See process-overlay
-pub const ProcessOverlay = packed struct {
+pub const BorderOverlay = packed struct {
     privileged: bool = true,
     processes: bool = true,
 
-    pub const default: ProcessOverlay = .{};
-    pub fn empty(self: ProcessOverlay) bool {
-        const fields = @typeInfo(ProcessOverlay).@"struct".fields;
+    pub const default: BorderOverlay = .{};
+    pub fn empty(self: BorderOverlay) bool {
+        const fields = @typeInfo(BorderOverlay).@"struct".fields;
         inline for (fields) |field| {
             if (@field(self, field.name)) return false;
         }
@@ -9897,7 +9897,7 @@ pub fn initializeProcessOverlayProcessColorMap(self: *Config, alloc: Allocator) 
         .{ "toolbox", Color{ .r = 242, .g = 140, .b = 40 } },
     }) |entry| {
         const key = try alloc.dupeZ(u8, entry[0]);
-        const e = try self.@"process-overlay-process-color-map".map.getOrPut(alloc, key);
+        const e = try self.@"border-overlay-process-color-map".map.getOrPut(alloc, key);
         e.value_ptr.* = entry[1];
         if (e.found_existing) alloc.free(key);
     }
