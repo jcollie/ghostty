@@ -110,6 +110,30 @@ pub const Command = union(Key) {
         // TODO: err option
     },
 
+    /// Set command line.
+    ///
+    /// Used by shell integration to inform Ghostty what command the shell is
+    /// currently executing. Only used by OSC 633.
+    ///
+    /// https://code.visualstudio.com/docs/terminal/shell-integration#_supported-escape-sequences
+    set_command_line: struct {
+        command_line: ?[:0]const u8 = null,
+        nonce: ?[:0]const u8 = null,
+    },
+
+    /// Set parameter.
+    ///
+    /// Used by shell integration to inform Ghostty of various capabilities.
+    ///
+    /// https://code.visualstudio.com/docs/terminal/shell-integration#_supported-escape-sequences
+    set_parameter: union(enum) {
+        /// Indicate whether the terminal is using a Windows backend like `winpty` or `conpty`.
+        is_windows: bool,
+        /// Indicate whether the terminal has rich command detection capabilities.
+        has_rich_command_detection: bool,
+    },
+
+    ///
     /// Set or get clipboard contents. If data is null, then the current
     /// clipboard contents are sent to the pty. If data is set, this
     /// contents is set on the clipboard.
@@ -204,6 +228,8 @@ pub const Command = union(Key) {
             "prompt_end",
             "end_of_input",
             "end_of_command",
+            "set_command_line",
+            "set_parameter",
             "clipboard_contents",
             "report_pwd",
             "mouse_shape",
@@ -344,6 +370,7 @@ pub const Parser = struct {
         @"2",
         @"4",
         @"5",
+        @"6",
         @"7",
         @"8",
         @"9",
@@ -360,6 +387,7 @@ pub const Parser = struct {
         @"21",
         @"22",
         @"52",
+        @"63",
         @"77",
         @"104",
         @"110",
@@ -373,6 +401,7 @@ pub const Parser = struct {
         @"118",
         @"119",
         @"133",
+        @"633",
         @"777",
     };
 
@@ -433,6 +462,8 @@ pub const Parser = struct {
             .prompt_start,
             .report_pwd,
             .show_desktop_notification,
+            .set_command_line,
+            .set_parameter,
             => {},
         }
 
@@ -512,6 +543,7 @@ pub const Parser = struct {
                 '2' => self.state = .@"2",
                 '4' => self.state = .@"4",
                 '5' => self.state = .@"5",
+                '6' => self.state = .@"6",
                 '7' => self.state = .@"7",
                 '8' => self.state = .@"8",
                 '9' => self.state = .@"9",
@@ -607,6 +639,21 @@ pub const Parser = struct {
                 else => self.state = .invalid,
             },
 
+            .@"6" => switch (c) {
+                '3' => self.state = .@"63",
+                else => self.state = .invalid,
+            },
+
+            .@"63" => switch (c) {
+                '3' => self.state = .@"633",
+                else => self.state = .invalid,
+            },
+
+            .@"633" => switch (c) {
+                ';' => self.writeToFixed(),
+                else => self.state = .invalid,
+            },
+
             .@"7" => switch (c) {
                 ';' => self.writeToFixed(),
                 '7' => self.state = .@"77",
@@ -675,6 +722,12 @@ pub const Parser = struct {
             .@"119",
             => self.parseOscColor(terminator_ch),
 
+            // States that are needed as intermediate steps but are invalid in themselves.
+            .@"6",
+            .@"63",
+            .@"77",
+            => null,
+
             .@"7" => self.parseReportPwd(terminator_ch),
 
             .@"8" => self.parseHyperlink(terminator_ch),
@@ -687,10 +740,9 @@ pub const Parser = struct {
 
             .@"52" => self.parseClipboardOperation(terminator_ch),
 
-            .@"77" => null,
-
-            .@"133" => self.parseSemanticPrompt(terminator_ch),
-
+            .@"133",
+            .@"633",
+            => self.parseSemanticPrompt(terminator_ch),
             .@"777" => self.parseRxvtExtension(terminator_ch),
         };
     }
@@ -1184,8 +1236,9 @@ pub const Parser = struct {
         return &self.command;
     }
 
-    /// Parse OSC 133, semantic prompts
+    /// Parse OSC 133 and OSC 633, semantic prompts
     fn parseSemanticPrompt(self: *Parser, _: ?u8) ?*Command {
+        assert(self.state == .@"133" or self.state == .@"633");
         const writer = self.writer orelse {
             self.state = .invalid;
             return null;
@@ -1201,6 +1254,8 @@ pub const Parser = struct {
                     .prompt_start = .{},
                 };
                 if (data.len == 1) break :prompt_start;
+                // only OSC 133;A has optional parameters
+                if (self.state != .@"133") break :prompt_start;
                 if (data[1] != ';') {
                     self.state = .invalid;
                     return null;
@@ -1226,7 +1281,7 @@ pub const Parser = struct {
                                 else => break :value null,
                             }
                         }) orelse {
-                            log.info("OSC 133 A: invalid redraw value: {s}", .{kv.value});
+                            log.info("OSC {t} A: invalid redraw value: {s}", .{ self.state, kv.value });
                             break :redraw;
                         };
                     } else if (std.mem.eql(u8, kv.key, "special_key")) redraw: {
@@ -1239,7 +1294,7 @@ pub const Parser = struct {
                                 else => break :value null,
                             }
                         }) orelse {
-                            log.info("OSC 133 A invalid special_key value: {s}", .{kv.value});
+                            log.info("OSC {t} A invalid special_key value: {s}", .{ self.state, kv.value });
                             break :redraw;
                         };
                     } else if (std.mem.eql(u8, kv.key, "click_events")) redraw: {
@@ -1252,7 +1307,7 @@ pub const Parser = struct {
                                 else => break :value null,
                             }
                         }) orelse {
-                            log.info("OSC 133 A invalid click_events value: {s}", .{kv.value});
+                            log.info("OSC {t} A invalid click_events value: {s}", .{ self.state, kv.value });
                             break :redraw;
                         };
                     } else if (std.mem.eql(u8, kv.key, "k")) k: {
@@ -1267,7 +1322,7 @@ pub const Parser = struct {
                             'i' => .primary,
                             else => .primary,
                         };
-                    } else log.info("OSC 133 A: unknown semantic prompt option: {s}", .{kv.key});
+                    } else log.info("OSC {t} A: unknown semantic prompt option: {s}", .{ self.state, kv.key });
                 }
             },
             'B' => prompt_end: {
@@ -1282,7 +1337,7 @@ pub const Parser = struct {
                     return null;
                 };
                 while (it.next()) |kv| {
-                    log.info("OSC 133 B: unknown semantic prompt option: {s}", .{kv.key});
+                    log.info("OSC {t} B: unknown semantic prompt option: {s}", .{ self.state, kv.key });
                 }
             },
             'C' => end_of_input: {
@@ -1290,6 +1345,8 @@ pub const Parser = struct {
                     .end_of_input = .{},
                 };
                 if (data.len == 1) break :end_of_input;
+                // only OSC 133;C has optional parameters
+                if (self.state != .@"133") break :end_of_input;
                 if (data[1] != ';') {
                     self.state = .invalid;
                     return null;
@@ -1304,7 +1361,7 @@ pub const Parser = struct {
                     } else if (std.mem.eql(u8, kv.key, "cmdline_url")) {
                         self.command.end_of_input.command_line = string_encoding.urlPercentDecode(kv.value) catch null;
                     } else {
-                        log.info("OSC 133 C: unknown semantic prompt option: {s}", .{kv.key});
+                        log.info("OSC {t} C: unknown semantic prompt option: {s}", .{ self.state, kv.key });
                     }
                 }
             },
@@ -1323,6 +1380,32 @@ pub const Parser = struct {
                     },
                 };
             },
+            'E' => {
+                // only OSC 633 defines the E extension
+                if (self.state != .@"633") return null;
+                if (data.len == 1) return null;
+                if (data[1] != ';') return null;
+                self.command = .{ .set_command_line = .{} };
+                // append a zero to the buffer so that we can get sentinel-terminated strings
+                writer.writeByte(0) catch return null;
+                const tmp = writer.buffered();
+                var command_line = tmp[2 .. tmp.len - 1];
+                if (std.mem.indexOfScalar(u8, command_line, ';')) |idx| {
+                    command_line[idx] = 0;
+                    self.command.set_command_line.nonce = command_line[idx + 1 .. command_line.len :0];
+                    command_line = data[0..idx];
+                }
+                const decoded = string_encoding.hexDecode(command_line) catch return null;
+                tmp[2 + decoded.len] = 0;
+                self.command.set_command_line.command_line = tmp[2 .. 2 + decoded.len :0];
+            },
+            // 'P' => {
+            //     self.state = .invalid;
+            //     // only OSC 633 defines the P extension
+            //     if (self.state != .@"633") return null;
+            //     if (data.len == 1) return null;
+            //     if (data[1] != ';') return null;
+            // },
             else => {
                 self.state = .invalid;
                 return null;
@@ -2985,6 +3068,138 @@ test "OSC 133: end_of_input with cmdline_url 9" {
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .end_of_input);
     try testing.expect(cmd.end_of_input.command_line == null);
+}
+
+test "OSC 633: prompt_start" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;A";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .prompt_start);
+    try testing.expect(cmd.prompt_start.aid == null);
+    try testing.expect(cmd.prompt_start.redraw);
+}
+
+test "OSC 633: prompt_start with single option" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;A;aid=14";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .prompt_start);
+    try testing.expect(cmd.prompt_start.aid == null);
+    try testing.expect(cmd.prompt_start.redraw);
+}
+
+test "OSC 633: end_of_command no exit code" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;D";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .end_of_command);
+}
+
+test "OSC 633: end_of_command with exit code" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;D;25";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .end_of_command);
+    try testing.expectEqual(@as(u8, 25), cmd.end_of_command.exit_code.?);
+}
+
+test "OSC 633: prompt_end" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;B";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .prompt_end);
+}
+
+test "OSC 633: end_of_input" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;C";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .end_of_input);
+}
+
+test "OSC 633: end_of_input with cmdline 1" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;C;cmdline=echo bobr kurwa";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .end_of_input);
+    try testing.expect(cmd.end_of_input.command_line == null);
+}
+
+test "OSC 633: set_command_line 1" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr kurwa";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expectEqualStrings("echo bobr kurwa", cmd.set_command_line.command_line.?);
+}
+
+test "OSC 633: set_command_line 2" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr \\\\ kurwa";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expectEqualStrings("echo bobr \\ kurwa", cmd.set_command_line.command_line.?);
+}
+
+test "OSC 633: set_command_line 3" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr \\xAB kurwa";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expectEqualStrings("echo bobr \xAB kurwa", cmd.set_command_line.command_line.?);
 }
 
 test "OSC: OSC 777 show desktop notification with title" {
