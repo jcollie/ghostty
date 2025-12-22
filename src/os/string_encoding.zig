@@ -274,3 +274,51 @@ fn isValidChar(c: u8) bool {
 pub fn urlPercentEncode(writer: *std.Io.Writer, data: []const u8) std.Io.Writer.Error!void {
     try std.Uri.Component.percentEncode(writer, data, isValidChar);
 }
+
+/// Do an in-place decode of a string that has been encoded using `\xAB` or
+/// `\\`. This is safe because a string can only get shorter after decoding.
+/// This destructively modifies the buffer given to it. If an error is returned
+/// the buffer may be in an unusable state.
+pub fn hexDecode(buf: []u8) error{DecodeError}![]const u8 {
+    var src: usize = 0;
+    var dst: usize = 0;
+    while (src < buf.len) {
+        switch (buf[src]) {
+            '\\' => {
+                src += 1;
+                if (src >= buf.len) return error.DecodeError;
+                switch (buf[src]) {
+                    '\\' => {
+                        buf[dst] = '\\';
+                        dst += 1;
+                        src += 1;
+                        continue;
+                    },
+                    'x', 'X' => {
+                        if (src + 2 >= buf.len) return error.DecodeError;
+                        switch (buf[src + 1]) {
+                            '0'...'9', 'a'...'f', 'A'...'F' => |u| {
+                                switch (buf[src + 2]) {
+                                    '0'...'9', 'a'...'f', 'A'...'F' => |l| {
+                                        buf[dst] = std.math.shl(u8, hex(u), 4) | hex(l);
+                                        src += 3;
+                                        dst += 1;
+                                    },
+                                    else => return error.DecodeError,
+                                }
+                            },
+                            else => return error.DecodeError,
+                        }
+                    },
+                    else => return error.DecodeError,
+                }
+            },
+            else => {
+                if (src != dst) buf[dst] = buf[src];
+                src += 1;
+                dst += 1;
+            },
+        }
+    }
+    return buf[0..dst];
+}
