@@ -1380,22 +1380,26 @@ pub const Parser = struct {
                     },
                 };
             },
-            'E' => {
+            'E' => set_command_line: {
                 // only OSC 633 defines the E extension
                 if (self.state != .@"633") return null;
+
                 if (data.len == 1) return null;
                 if (data[1] != ';') return null;
-                self.command = .{ .set_command_line = .{} };
+
                 // append a zero to the buffer so that we can get sentinel-terminated strings
                 writer.writeByte(0) catch return null;
+
                 const tmp = writer.buffered();
+                self.command = .{ .set_command_line = .{} };
+
                 var command_line = tmp[2 .. tmp.len - 1];
                 if (std.mem.indexOfScalar(u8, command_line, ';')) |idx| {
                     command_line[idx] = 0;
                     self.command.set_command_line.nonce = command_line[idx + 1 .. command_line.len :0];
                     command_line = data[0..idx];
                 }
-                const decoded = string_encoding.hexDecode(command_line) catch return null;
+                const decoded = string_encoding.hexDecode(command_line) catch break :set_command_line;
                 tmp[2 + decoded.len] = 0;
                 self.command.set_command_line.command_line = tmp[2 .. 2 + decoded.len :0];
             },
@@ -3171,6 +3175,7 @@ test "OSC 633: set_command_line 1" {
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .set_command_line);
     try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expect(cmd.set_command_line.nonce == null);
     try testing.expectEqualStrings("echo bobr kurwa", cmd.set_command_line.command_line.?);
 }
 
@@ -3185,6 +3190,7 @@ test "OSC 633: set_command_line 2" {
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .set_command_line);
     try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expect(cmd.set_command_line.nonce == null);
     try testing.expectEqualStrings("echo bobr \\ kurwa", cmd.set_command_line.command_line.?);
 }
 
@@ -3199,7 +3205,68 @@ test "OSC 633: set_command_line 3" {
     const cmd = p.end(null).?.*;
     try testing.expect(cmd == .set_command_line);
     try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expect(cmd.set_command_line.nonce == null);
     try testing.expectEqualStrings("echo bobr \xAB kurwa", cmd.set_command_line.command_line.?);
+}
+
+test "OSC 633: set_command_line 4" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr kurwa\\xAB";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expect(cmd.set_command_line.nonce == null);
+    try testing.expectEqualStrings("echo bobr kurwa\xAB", cmd.set_command_line.command_line.?);
+}
+
+test "OSC 633: set_command_line 5" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr kurwa\\xA";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line == null);
+    try testing.expect(cmd.set_command_line.nonce == null);
+}
+
+test "OSC 633: set_command_line 6" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr kurwa\\xAB;abc123";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line != null);
+    try testing.expect(cmd.set_command_line.nonce != null);
+    try testing.expectEqualStrings("echo bobr kurwa\xAB", cmd.set_command_line.command_line.?);
+    try testing.expectEqualStrings("abd123", cmd.set_command_line.nonce.?);
+}
+
+test "OSC 633: set_command_line 7" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;E;echo bobr kurwa\\xA;abc123";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_command_line);
+    try testing.expect(cmd.set_command_line.command_line == null);
+    try testing.expect(cmd.set_command_line.nonce != null);
+    try testing.expectEqualStrings("abd123", cmd.set_command_line.nonce.?);
 }
 
 test "OSC: OSC 777 show desktop notification with title" {
