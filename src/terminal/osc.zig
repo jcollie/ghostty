@@ -1380,6 +1380,7 @@ pub const Parser = struct {
                     },
                 };
             },
+            // https://code.visualstudio.com/docs/terminal/shell-integration#_supported-escape-sequences
             'E' => set_command_line: {
                 // only OSC 633 defines the E extension
                 if (self.state != .@"633") return null;
@@ -1396,26 +1397,65 @@ pub const Parser = struct {
                 var command_line = tmp[2 .. tmp.len - 1];
                 if (std.mem.indexOfScalar(u8, command_line, ';')) |idx| {
                     command_line[idx] = 0;
-                    self.command.set_command_line.nonce = command_line[idx + 1 .. command_line.len :0];
-                    command_line = data[0..idx];
+                    self.command.set_command_line.nonce = tmp[idx + 3 .. tmp.len - 1 :0];
+                    command_line = tmp[2 .. 2 + idx];
                 }
                 const decoded = string_encoding.hexDecode(command_line) catch break :set_command_line;
                 tmp[2 + decoded.len] = 0;
                 self.command.set_command_line.command_line = tmp[2 .. 2 + decoded.len :0];
             },
-            // 'P' => {
-            //     self.state = .invalid;
-            //     // only OSC 633 defines the P extension
-            //     if (self.state != .@"633") return null;
-            //     if (data.len == 1) return null;
-            //     if (data[1] != ';') return null;
-            // },
+            // https://code.visualstudio.com/docs/terminal/shell-integration#_supported-escape-sequences
+            'P' => {
+                // only OSC 633 defines the P extension
+                if (self.state != .@"633") return null;
+
+                if (data.len == 1) return null;
+                if (data[1] != ';') return null;
+
+                const idx = std.mem.indexOfScalarPos(u8, data, 2, '=') orelse return null;
+                const key = data[2..idx];
+                if (std.ascii.eqlIgnoreCase("Cwd", key)) {
+                    writer.writeByte(0) catch return null;
+                    const tmp = writer.buffered();
+                    self.command = .{
+                        .report_pwd = .{ .value = tmp[idx + 1 .. tmp.len - 1 :0] },
+                    };
+                } else if (std.ascii.eqlIgnoreCase("IsWindows", key)) {
+                    self.command = .{
+                        .set_parameter = .{
+                            .is_windows = checkTrueFalse(data[idx + 1 ..]) catch return null,
+                        },
+                    };
+                } else if (std.ascii.eqlIgnoreCase("HasRichCommandDetection", key)) {
+                    self.command = .{
+                        .set_parameter = .{
+                            .has_rich_command_detection = checkTrueFalse(data[idx + 1 ..]) catch return null,
+                        },
+                    };
+                } else return null;
+            },
             else => {
                 self.state = .invalid;
                 return null;
             },
         }
         return &self.command;
+    }
+
+    fn checkTrueFalse(data: []const u8) error{DecodeError}!bool {
+        if (std.ascii.eqlIgnoreCase("True", data)) return true;
+        if (std.ascii.eqlIgnoreCase("False", data)) return false;
+        return error.DecodeError;
+    }
+
+    test checkTrueFalse {
+        const testing = std.testing;
+
+        try testing.expect(try checkTrueFalse("True") == true);
+        try testing.expect(try checkTrueFalse("False") == false);
+        try testing.expect(try checkTrueFalse("true") == true);
+        try testing.expect(try checkTrueFalse("false") == false);
+        try testing.expectError(error.DecodeError, checkTrueFalse("kurwa"));
     }
 
     const SemanticPromptKVIterator = struct {
@@ -3074,6 +3114,39 @@ test "OSC 133: end_of_input with cmdline_url 9" {
     try testing.expect(cmd.end_of_input.command_line == null);
 }
 
+test "OSC 133: invalid extension 1" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "133;E";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end(null) == null);
+}
+
+test "OSC 133: invalid extension 2" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "133;P";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end(null) == null);
+}
+
+test "OSC 133: invalid extension 3" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "133;Z";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end(null) == null);
+}
+
 test "OSC 633: prompt_start" {
     const testing = std.testing;
 
@@ -3251,7 +3324,7 @@ test "OSC 633: set_command_line 6" {
     try testing.expect(cmd.set_command_line.command_line != null);
     try testing.expect(cmd.set_command_line.nonce != null);
     try testing.expectEqualStrings("echo bobr kurwa\xAB", cmd.set_command_line.command_line.?);
-    try testing.expectEqualStrings("abd123", cmd.set_command_line.nonce.?);
+    try testing.expectEqualStrings("abc123", cmd.set_command_line.nonce.?);
 }
 
 test "OSC 633: set_command_line 7" {
@@ -3266,7 +3339,98 @@ test "OSC 633: set_command_line 7" {
     try testing.expect(cmd == .set_command_line);
     try testing.expect(cmd.set_command_line.command_line == null);
     try testing.expect(cmd.set_command_line.nonce != null);
-    try testing.expectEqualStrings("abd123", cmd.set_command_line.nonce.?);
+    try testing.expectEqualStrings("abc123", cmd.set_command_line.nonce.?);
+}
+
+test "OSC 633: set_parameter 1" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;Cwd=/tmp";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .report_pwd);
+    try testing.expectEqualStrings("/tmp", cmd.report_pwd.value);
+}
+
+test "OSC 633: set_parameter 2" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;IsWindows=True";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_parameter);
+    try testing.expect(cmd.set_parameter == .is_windows);
+    try testing.expect(cmd.set_parameter.is_windows == true);
+}
+
+test "OSC 633: set_parameter 3" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;IsWindows=False";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_parameter);
+    try testing.expect(cmd.set_parameter == .is_windows);
+    try testing.expect(cmd.set_parameter.is_windows == false);
+}
+
+test "OSC 633: set_parameter 4" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;HasRichCommandDetection=True";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_parameter);
+    try testing.expect(cmd.set_parameter == .has_rich_command_detection);
+    try testing.expect(cmd.set_parameter.has_rich_command_detection == true);
+}
+
+test "OSC 633: set_parameter 5" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;HasRichCommandDetection=False";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end(null).?.*;
+    try testing.expect(cmd == .set_parameter);
+    try testing.expect(cmd.set_parameter == .has_rich_command_detection);
+    try testing.expect(cmd.set_parameter.has_rich_command_detection == false);
+}
+
+test "OSC 633: set_parameter 6" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;Unknown=False";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end(null) == null);
+}
+
+test "OSC 633: set_parameter 7" {
+    const testing = std.testing;
+
+    var p: Parser = .init(null);
+
+    const input = "633;P;IsWindows=Bobr";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end(null) == null);
 }
 
 test "OSC: OSC 777 show desktop notification with title" {
