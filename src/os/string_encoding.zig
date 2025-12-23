@@ -322,3 +322,56 @@ pub fn hexDecode(buf: []u8) error{DecodeError}![]const u8 {
     }
     return buf[0..dst];
 }
+
+test "hex_decode 1" {
+    const s: []const u8 = "bobr kurwa";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    const dst = try hexDecode(&src);
+    try std.testing.expectEqualStrings("bobr kurwa", dst);
+}
+
+test "hex_decode 2" {
+    const s: []const u8 = "bobr\\\\ kurwa";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    const dst = try hexDecode(&src);
+    try std.testing.expectEqualStrings("bobr\\ kurwa", dst);
+}
+
+test "hex_decode 3" {
+    const s: []const u8 = "bobr\\xAB kurwa";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    const dst = try hexDecode(&src);
+    try std.testing.expectEqualStrings("bobr\xAB kurwa", dst);
+}
+
+test "hex_decode 4" {
+    const s: []const u8 = "bobr kurwa\\";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    try std.testing.expectError(error.DecodeError, hexDecode(&src));
+}
+
+test "hex_decode 5" {
+    const s: []const u8 = "bobr kurwa\\x";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    try std.testing.expectError(error.DecodeError, hexDecode(&src));
+}
+
+test "hex_decode 6" {
+    const s: []const u8 = "bobr kurwa\\xA";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    try std.testing.expectError(error.DecodeError, hexDecode(&src));
+}
+
+test "hex_decode 7" {
+    const s: []const u8 = "bobr kurwa\\xAB";
+    var src: [s.len]u8 = undefined;
+    @memcpy(&src, s);
+    const dst = try hexDecode(&src);
+    try std.testing.expectEqualStrings("bobr kurwa\xAB", dst);
+}
