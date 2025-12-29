@@ -89,7 +89,7 @@ Overlay terminal_page {
   // widget which undesirable side effects. Second, we can make it reactive
   // here in the blueprint with relatively little code.
   Revealer {
-    reveal-child: bind $should_border_be_shown(template.config, template.bell-ringing) as <bool>;
+    reveal-child: bind $should_border_overlay_be_shown(template.config, template.bell-ringing, template.show-border-overlay) as <bool>;
     transition-type: crossfade;
     transition-duration: 500;
     // Revealers take up the full size, we need this to not capture events.
@@ -97,9 +97,9 @@ Overlay terminal_page {
     can-target: false;
     focusable: false;
 
-    Box bell_overlay {
+    Box border_overlay {
       styles [
-        "bell-overlay",
+        "border-overlay",
       ]
 
       halign: fill;

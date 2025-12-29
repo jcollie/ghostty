@@ -101,3 +101,7 @@ pub fn defaultTermioEnv(self: *Self) !std.process.EnvMap {
 pub fn redrawInspector(self: *Self) void {
     self.surface.redrawInspector();
 }
+
+pub fn addRuntimeCss(self: *Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    try self.surface.addRuntimeCss(writer);
+}

@@ -883,6 +883,50 @@ pub const Application = extern struct {
             , .{ .font_family = font_family });
         }
 
+        {
+            var map: std.AutoArrayHashMapUnmanaged(u24, bool) = .empty;
+            defer map.deinit(alloc);
+
+            privileged: {
+                const color = config.@"border-overlay-privileged-color";
+                const k = color.int();
+                const v = map.get(k) orelse false;
+                if (v) break :privileged;
+                try map.put(alloc, k, true);
+                try writer.print(
+                    \\.border-color-{f} {{
+                    \\   border-color: {f};
+                    \\}}
+                    \\
+                ,
+                    .{
+                        color.short(),
+                        color.rgba(config.@"border-overlay-opacity"),
+                    },
+                );
+            }
+
+            var it = config.@"border-overlay-process-color-map".iterator();
+            while (it.next()) |entry| {
+                const color = entry.value_ptr.*;
+                const k = color.int();
+                const v = map.get(k) orelse false;
+                if (v) continue;
+                try map.put(alloc, k, true);
+                try writer.print(
+                    \\.border-color-{f} {{
+                    \\   border-color: {f};
+                    \\}}
+                    \\
+                ,
+                    .{
+                        color.short(),
+                        color.rgba(config.@"border-overlay-opacity"),
+                    },
+                );
+            }
+        }
+
         const contents = buf.written();
 
         log.debug("runtime CSS is {d} bytes", .{contents.len});
@@ -890,7 +934,6 @@ pub const Application = extern struct {
         const bytes = glib.Bytes.new(contents.ptr, contents.len);
         defer bytes.unref();
 
-        // Clears any previously loaded CSS from this provider
         priv.css_provider.loadFromBytes(bytes);
     }
 

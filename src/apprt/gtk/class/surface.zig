@@ -1,5 +1,6 @@
 const std = @import("std");
 const assert = @import("../../../quirks.zig").inlineAssert;
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const adw = @import("adw");
 const gdk = @import("gdk");
@@ -17,6 +18,7 @@ const internal_os = @import("../../../os/main.zig");
 const renderer = @import("../../../renderer.zig");
 const terminal = @import("../../../terminal/main.zig");
 const CoreSurface = @import("../../../Surface.zig");
+const CoreConfig = @import("../../../config/Config.zig");
 const gresource = @import("../build/gresource.zig");
 const ext = @import("../ext.zig");
 const gtk_key = @import("../key.zig");
@@ -33,6 +35,10 @@ const TitleDialog = @import("surface_title_dialog.zig").SurfaceTitleDialog;
 const Window = @import("window.zig").Window;
 const InspectorWindow = @import("inspector_window.zig").InspectorWindow;
 const i18n = @import("../../../os/i18n.zig");
+const Color = CoreConfig.Color;
+const RepeatableColorMap = CoreConfig.RepeatableColorMap;
+
+const gtk_version = @import("../gtk_version.zig");
 
 const log = std.log.scoped(.gtk_ghostty_surface);
 
@@ -302,6 +308,21 @@ pub const Surface = extern struct {
                         &Private.offset,
                         "is_split",
                     ),
+                },
+            );
+        };
+
+        pub const @"show-border-overlay" = struct {
+            pub const name = "show-border-overlay";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                bool,
+                .{
+                    .default = false,
+                    .accessor = .{
+                        .getter = propShowBorderOverlay,
+                    },
                 },
             );
         };
@@ -643,6 +664,15 @@ pub const Surface = extern struct {
         /// The source that handles setting our child property.
         idle_rechild: ?c_uint = null,
 
+        /// The source that handles scanning the subprocesses for interesting
+        /// properties.
+        scanner_source: ?c_uint = null,
+
+        /// The last process group that was scanned for its properties.
+        last_pgrp: i32 = 0,
+
+        border_overlay_color: ?Color = null,
+
         /// A weak reference to an inspector window.
         inspector: ?*InspectorWindow = null,
 
@@ -670,6 +700,7 @@ pub const Surface = extern struct {
         progress_bar_overlay: *gtk.ProgressBar,
         error_page: *adw.StatusPage,
         terminal_page: *gtk.Overlay,
+        border_overlay: *gtk.Box,
 
         pub var offset: c_int = 0;
     };
@@ -697,7 +728,7 @@ pub const Surface = extern struct {
         self: *Self,
         parent: *CoreSurface,
     ) void {
-        const priv = self.private();
+        const priv: *Private = self.private();
 
         // This is a mistake! We can only set a parent before surface
         // realization. We log this because this is probably a logic error.
@@ -739,26 +770,30 @@ pub const Surface = extern struct {
 
     /// Callback used to determine whether border should be shown around the
     /// surface.
-    fn closureShouldBorderBeShown(
+    fn closureShouldBorderOverlayBeShown(
         _: *Self,
         config_: ?*Config,
         bell_ringing_: c_int,
+        show_border_overlay_: c_int,
     ) callconv(.c) c_int {
         const bell_ringing = bell_ringing_ != 0;
+        const show_border_overlay = show_border_overlay_ != 0;
 
         // If the bell isn't ringing exit early because when the surface is
         // first created there's a race between this code being run and the
         // config being set on the surface. That way we don't overwhelm people
         // with the warning that we issue if the config isn't set and overwhelm
         // ourselves with large numbers of bug reports.
-        if (!bell_ringing) return @intFromBool(false);
+        if (!bell_ringing and !show_border_overlay) return @intFromBool(false);
 
         const config = if (config_) |v| v.get() else {
             log.warn("config unavailable for computing whether border should be shown, likely bug", .{});
             return @intFromBool(false);
         };
 
-        return @intFromBool(config.@"bell-features".border);
+        if (bell_ringing and config.@"bell-features".border) return @intFromBool(true);
+        if (show_border_overlay) return @intFromBool(true);
+        return @intFromBool(false);
     }
 
     /// Callback used to determine whether unfocused-split-fill / unfocused-split-opacity
@@ -966,6 +1001,7 @@ pub const Surface = extern struct {
             // Remove the `error` CSS class so that the progress bar shows as normal.
             .set => {
                 progress_bar.as(gtk.Widget).removeCssClass("error");
+                progress_bar.as(gtk.Widget).removeCssClass("pause");
                 if (value.progress) |progress| {
                     progress_bar.setFraction(computeFraction(progress));
                 } else {
@@ -977,6 +1013,7 @@ pub const Surface = extern struct {
             // Set the `error` CSS class so that the progress bar shows as an error color.
             .@"error" => {
                 progress_bar.as(gtk.Widget).addCssClass("error");
+                progress_bar.as(gtk.Widget).removeCssClass("pause");
                 if (value.progress) |progress| {
                     progress_bar.setFraction(computeFraction(progress));
                 } else {
@@ -987,6 +1024,7 @@ pub const Surface = extern struct {
             // The state of progress is unknown, so pulse the progress bar to
             // indicate that things are still happening.
             .indeterminate => {
+                progress_bar.as(gtk.Widget).removeCssClass("pause");
                 progress_bar.pulse();
             },
 
@@ -995,6 +1033,8 @@ pub const Surface = extern struct {
             // happening. Otherwise this is mainly used to keep the progress bar on
             // screen instead of timing out.
             .pause => {
+                progress_bar.as(gtk.Widget).removeCssClass("error");
+                progress_bar.as(gtk.Widget).addCssClass("pause");
                 if (value.progress) |progress| {
                     progress_bar.setFraction(computeFraction(progress));
                 }
@@ -1733,14 +1773,17 @@ pub const Surface = extern struct {
     // Virtual Methods
 
     fn init(self: *Self, _: *Class) callconv(.c) void {
-        gtk.Widget.initTemplate(self.as(gtk.Widget));
+        const widget = self.as(gtk.Widget);
+
+        gtk.Widget.initTemplate(widget);
 
         // Initialize our actions
         self.initActionMap();
 
-        const priv = self.private();
+        const priv: *Private = self.private();
 
         // Initialize some private fields so they aren't undefined
+        priv.core_surface = null;
         priv.rt_surface = .{ .surface = self };
         priv.precision_scroll = false;
         priv.cursor_pos = .{ .x = 0, .y = 0 };
@@ -1749,6 +1792,9 @@ pub const Surface = extern struct {
         priv.focused = true;
         priv.size = .{ .width = 0, .height = 0 };
         priv.vadj_signal_group = null;
+        priv.scanner_source = null;
+        priv.last_pgrp = 0;
+        priv.border_overlay_color = null;
 
         // If our configuration is null then we get the configuration
         // from the application.
@@ -1772,8 +1818,14 @@ pub const Surface = extern struct {
         };
         priv.drop_target.setGtypes(&drop_target_types, drop_target_types.len);
 
-        // Setup properties we can't set from our Blueprint file.
-        self.as(gtk.Widget).setCursorFromName("text");
+        // Initialize our GLArea. We only set the values we can't set
+        // in our blueprint file.
+        const gl_area = priv.gl_area;
+        gl_area.setRequiredVersion(
+            renderer.OpenGL.MIN_VERSION_MAJOR,
+            renderer.OpenGL.MIN_VERSION_MINOR,
+        );
+        widget.setCursorFromName("text");
 
         // Initialize our config
         self.propConfig(undefined, null);
@@ -1835,6 +1887,13 @@ pub const Surface = extern struct {
                 log.warn("unable to remove idle source", .{});
             }
             priv.idle_rechild = null;
+        }
+
+        if (priv.scanner_source) |v| {
+            if (glib.Source.remove(v) == 0) {
+                log.warn("unable to remove idle source", .{});
+            }
+            priv.scanner_source = null;
         }
 
         // This works around a GTK double-free bug where if you bind
@@ -2074,9 +2133,10 @@ pub const Surface = extern struct {
         if (ringing) self.ringBell();
 
         // Property change only happens on actual state change
-        const priv = self.private();
+        const priv: *Private = self.private();
         if (priv.bell_ringing == ringing) return;
         priv.bell_ringing = ringing;
+        self.setBorderColor();
         self.as(gobject.Object).notifyByPspec(properties.@"bell-ringing".impl.param_spec);
     }
 
@@ -3173,7 +3233,7 @@ pub const Surface = extern struct {
     };
 
     fn initSurface(self: *Self) InitError!void {
-        const priv = self.private();
+        const priv: *Private = self.private();
         assert(priv.core_surface == null);
         const gl_area = priv.gl_area;
 
@@ -3201,6 +3261,10 @@ pub const Surface = extern struct {
         // Add ourselves to the list of surfaces on the app.
         try app.core().addSurface(self.rt());
         errdefer app.core().deleteSurface(self.rt());
+
+        if (priv.config == null) {
+            priv.config = Application.default().getConfig();
+        }
 
         // Initialize our surface configuration.
         var config = try apprt.surface.newConfig(
@@ -3236,7 +3300,166 @@ pub const Surface = extern struct {
             .{},
             null,
         );
+
+        priv.scanner_source = switch (comptime builtin.os.tag) {
+            .linux => glib.timeoutAdd(250, ProcessScannerLinux.scanner, self),
+            else => null,
+        };
     }
+
+    /// Determine if process overlay should be shown.
+    fn propShowBorderOverlay(self: *Self, value: *gobject.Value) void {
+        const priv: *Private = self.private();
+        value.setBoolean(@intFromBool(priv.bell_ringing or priv.border_overlay_color != null));
+    }
+
+    fn setBorderColor(
+        self: *Self,
+    ) void {
+        const priv: *Private = self.private();
+
+        var buf: [32]u8 = undefined;
+        const new_class_ = new_class: {
+            if (priv.bell_ringing) break :new_class "bell-ringing";
+            const color = priv.border_overlay_color orelse break :new_class null;
+            break :new_class std.fmt.bufPrintZ(
+                &buf,
+                "border-color-{f}",
+                .{color.short()},
+            ) catch null;
+        };
+
+        const object = self.as(gobject.Object);
+        if (new_class_) |new_class| {
+            // Only remove the old border color classes if we are adding
+            // a new one. This will prevent the border from flashing
+            // white while the revealer transitions.
+            const widget = priv.border_overlay.as(gtk.Widget);
+            const classes: [*:null]?[*:0]u8 = @ptrCast(widget.getCssClasses());
+            defer glib.strfreev(classes);
+            var i: usize = 0;
+            while (classes[i] != null) : (i += 1) {
+                const class_ = classes[i] orelse unreachable;
+                const class = std.mem.span(class_);
+                if (std.mem.startsWith(u8, class, "border-color-")) {
+                    widget.removeCssClass(class_);
+                }
+                if (std.mem.eql(u8, class, "bell-ringing")) {
+                    widget.removeCssClass("bell-ringing");
+                }
+            }
+
+            widget.addCssClass(new_class);
+        }
+        object.notifyByPspec(properties.@"show-border-overlay".impl.param_spec);
+    }
+
+    pub const ProcessScannerLinux = struct {
+        const CONTINUE = @intFromBool(glib.SOURCE_CONTINUE);
+
+        /// Runs periodically and gets some properties of the process that
+        /// controls the terminal. Use those properties to determine if a
+        /// colored border should be applied to the surface.
+        pub fn scanner(ud: ?*anyopaque) callconv(.c) c_int {
+            const self: *Surface = @ptrCast(@alignCast(ud orelse return CONTINUE));
+            const priv: *Private = self.private();
+
+            const surface = priv.core_surface orelse return CONTINUE;
+            if (surface.io.backend != .exec) return CONTINUE;
+            const exec = surface.io.backend.exec;
+            const pty = exec.subprocess.pty orelse return CONTINUE;
+
+            const config = priv.config orelse return CONTINUE;
+            const cfg = config.get();
+
+            if (cfg.@"border-overlay".empty()) return CONTINUE;
+
+            const pgrp: i32 = pgrp: {
+                var pgrp: i32 = undefined;
+                const rc = std.os.linux.tcgetpgrp(pty.master, &pgrp);
+                switch (std.os.linux.E.init(rc)) {
+                    .SUCCESS => break :pgrp pgrp,
+                    else => return CONTINUE,
+                }
+            };
+
+            // if the pgrp has not changed, don't go any further.
+            if (pgrp == priv.last_pgrp) return CONTINUE;
+            priv.last_pgrp = pgrp;
+
+            priv.border_overlay_color = color: {
+                euid: {
+                    // Skip if privileged is turned off.
+                    if (!cfg.@"border-overlay".privileged) break :euid;
+
+                    var path_buf: [128]u8 = undefined;
+                    const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/status", .{pgrp}) catch break :euid;
+
+                    const file = std.fs.openFileAbsolute(path, .{}) catch break :euid;
+                    defer file.close();
+
+                    var data_buf: [2048]u8 = undefined;
+                    const data_len = file.readAll(&data_buf) catch break :euid;
+                    const data = data_buf[0..data_len];
+
+                    break :color parseStatus(data, cfg.@"border-overlay-privileged-color") orelse break :euid;
+                }
+
+                command: {
+                    // Skip if processes are turned off.
+                    if (!cfg.@"border-overlay".processes) break :command;
+
+                    var path_buf: [128]u8 = undefined;
+                    const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cmdline", .{pgrp}) catch break :command;
+
+                    const file = std.fs.openFileAbsolute(path, .{}) catch break :command;
+                    defer file.close();
+
+                    var data_buf: [2048]u8 = undefined;
+                    const data_len = file.readAll(&data_buf) catch break :command;
+                    const data = data_buf[0..data_len];
+
+                    break :color parseCommandLine(data, &cfg.@"border-overlay-process-color-map".map);
+                }
+
+                break :color null;
+            };
+
+            self.setBorderColor();
+
+            return CONTINUE;
+        }
+
+        /// Parse /proc/<pid>/status to see if the process has an effective UID
+        /// of 0. If yes, we should apply a colored border to the surface.
+        fn parseStatus(value: []const u8, color: Color) ?Color {
+            var lines = std.mem.splitScalar(u8, value, '\n');
+            while (lines.next()) |line| {
+                if (!std.mem.startsWith(u8, line, "Uid:")) continue;
+                var fields = std.mem.tokenizeScalar(u8, line[5..], std.ascii.control_code.ht);
+                _ = fields.next() orelse return null;
+                const raw = fields.next() orelse return null;
+                const euid = std.fmt.parseUnsigned(std.os.linux.pid_t, raw, 10) catch return null;
+                if (euid == 0) return color;
+                return null;
+            }
+            return null;
+        }
+
+        /// Parse the contents of /proc/<pid>/cmdline to see if we should apply
+        /// a colored border to the surface.
+        fn parseCommandLine(
+            value: []const u8,
+            map: *const CoreConfig.RepeatableColorMap.Map,
+        ) ?Color {
+            const end = std.mem.indexOfScalar(u8, value, 0) orelse return null;
+            const start = start: {
+                const start = std.mem.lastIndexOfScalar(u8, value[0..end], '/') orelse break :start 0;
+                break :start start + 1;
+            };
+            return map.get(value[start..end :0]) orelse null;
+        }
+    };
 
     fn resizeOverlaySchedule(self: *Self) void {
         const priv = self.private();
@@ -3397,6 +3620,7 @@ pub const Surface = extern struct {
             class.bindTemplateChildPrivate("terminal_page", .{});
             class.bindTemplateChildPrivate("drop_target", .{});
             class.bindTemplateChildPrivate("im_context", .{});
+            class.bindTemplateChildPrivate("border_overlay", .{});
 
             // Template Callbacks
             class.bindTemplateCallback("focus_enter", &ecFocusEnter);
@@ -3429,7 +3653,7 @@ pub const Surface = extern struct {
             class.bindTemplateCallback("notify_mouse_hidden", &propMouseHidden);
             class.bindTemplateCallback("notify_mouse_shape", &propMouseShape);
             class.bindTemplateCallback("notify_vadjustment", &propVAdjustment);
-            class.bindTemplateCallback("should_border_be_shown", &closureShouldBorderBeShown);
+            class.bindTemplateCallback("should_border_overlay_be_shown", &closureShouldBorderOverlayBeShown);
             class.bindTemplateCallback("should_unfocused_split_be_shown", &closureShouldUnfocusedSplitBeShown);
             class.bindTemplateCallback("search_stop", &searchStop);
             class.bindTemplateCallback("search_changed", &searchChanged);
@@ -3456,6 +3680,7 @@ pub const Surface = extern struct {
                 properties.@"title-override".impl,
                 properties.zoom.impl,
                 properties.@"is-split".impl,
+                properties.@"show-border-overlay".impl,
 
                 // For Gtk.Scrollable
                 properties.hadjustment.impl,
