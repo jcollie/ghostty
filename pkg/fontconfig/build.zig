@@ -561,7 +561,7 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
         lib.addConfigHeader(fcstdint_h);
         module.addConfigHeader(fcstdint_h);
 
-        const generate_fc_lang_h = b.addSystemCommand(&.{"python"});
+        const generate_fc_lang_h = b.addSystemCommand(&.{"python3"});
         generate_fc_lang_h.addFileArg(upstream.path("fc-lang/fc-lang.py"));
         for (orths) |orth| {
             generate_fc_lang_h.addArg(orth);
@@ -577,7 +577,7 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
         lib.addIncludePath(fc_lang_h.dirname());
         module.addIncludePath(fc_lang_h.dirname());
 
-        const generate_fc_case_h = b.addSystemCommand(&.{"python"});
+        const generate_fc_case_h = b.addSystemCommand(&.{"python3"});
         generate_fc_case_h.addFileArg(upstream.path("fc-case/fc-case.py"));
         generate_fc_case_h.addFileArg(upstream.path("fc-case/CaseFolding.txt"));
         generate_fc_case_h.addArg("--template");
