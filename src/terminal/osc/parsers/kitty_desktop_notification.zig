@@ -284,10 +284,10 @@ pub fn parsePackedStruct(comptime T: type, str: []const u8) T {
     return result;
 }
 
-/// Characters that are valid in a metadata value. Including `=` is
-/// "technically" against the spec but is needed since Base64 encoded values
-/// (with padding) are valid for some options. Including `?` is "technically"
-/// against the spec but is needed since it is a valid value for the `p` option.
+/// Characters that are valid in a metadata value. Including `=` is technically
+/// against the spec but is needed since Base64 encoded values (with padding)
+/// are valid for some options. Including `?` is technically against the spec
+/// but is needed since it is a valid value for the `p` option.
 const valid_metadata_value_characters: []const u8 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_/+.,(){}[]*&^%$#@!`~=?";
 
 fn isValidMetadataValue(str: []const u8) bool {
