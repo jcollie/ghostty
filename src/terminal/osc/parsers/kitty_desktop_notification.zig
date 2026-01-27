@@ -94,19 +94,34 @@ pub const Urgency = enum {
 };
 
 pub const Option = enum {
+    /// What action(s) should be taken when a notification is clicked.
     a,
+    /// Should a notification be sent to the application when the notification
+    /// is closed?
     c,
+    /// Are we done with the notification, and it is ready to be sent?
     d,
+    /// Is the payload encoded with Base64?
     e,
+    /// The nname of the application that is sending the notification.
     f,
+    /// Identifier for icon data.
     g,
+    /// Identifier for the notification.
     i,
+    /// Icon name.
     n,
+    /// When to honor the notification request.
     o,
+    /// Type of the payload.
     p,
+    /// The sound name to play with the notification.
     s,
+    /// The type of the notification.
     t,
+    /// The urgency of the notification.
     u,
+    /// When to auto-close the notification.
     w,
 
     pub fn Type(comptime key: Option) type {
@@ -269,107 +284,21 @@ pub fn parsePackedStruct(comptime T: type, str: []const u8) T {
     return result;
 }
 
-fn isValidMetadataValueCharacter(c: u8) bool {
-    return switch (c) {
-        'a'...'z',
-        'A'...'Z',
-        '0'...'9',
-        '-',
-        '_',
-        '/',
-        '+',
-        '.',
-        ',',
-        '(',
-        ')',
-        '{',
-        '}',
-        '[',
-        ']',
-        '*',
-        '&',
-        '^',
-        '%',
-        '$',
-        '#',
-        '@',
-        '!',
-        '`',
-        '~',
-        // Including `=` is "technically" against the spec but is needed since
-        // Base64 encoded values (with padding) are valid for some options.
-        '=',
-        // Including `?` is "technically" against the spec but is needed since
-        // it is a valid value for the `p` option.
-        '?',
-        => true,
-        else => false,
-    };
-}
-
-const invalid_metadata_value_characters: []const u8 = i: {
-    @setEvalBranchQuota(2000);
-    var count = 0;
-    for (0..256) |i| {
-        if (!isValidMetadataValueCharacter(i)) count += 1;
-    }
-    var tmp: [count]u8 = undefined;
-    var index = 0;
-    for (0..256) |i| {
-        if (!isValidMetadataValueCharacter(i)) {
-            tmp[index] = i;
-            index += 1;
-        }
-    }
-    const result = tmp;
-    break :i &result;
-};
+/// Characters that are valid in a metadata value. Including `=` is
+/// "technically" against the spec but is needed since Base64 encoded values
+/// (with padding) are valid for some options. Including `?` is "technically"
+/// against the spec but is needed since it is a valid value for the `p` option.
+const valid_metadata_value_characters: []const u8 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_/+.,(){}[]*&^%$#@!`~=?";
 
 fn isValidMetadataValue(str: []const u8) bool {
-    if (std.mem.indexOfAny(u8, str, invalid_metadata_value_characters)) |_| {
-        return false;
-    } else {
-        return true;
-    }
+    return std.mem.indexOfNone(u8, str, valid_metadata_value_characters) == null;
 }
 
-fn isValidIdentifierCharacter(c: u8) bool {
-    return switch (c) {
-        'a'...'z',
-        'A'...'Z',
-        '0'...'9',
-        '-',
-        '_',
-        '+',
-        => true,
-        else => false,
-    };
-}
-
-const invalid_identifier_characters: []const u8 = i: {
-    @setEvalBranchQuota(2000);
-    var count = 0;
-    for (0..256) |i| {
-        if (!isValidIdentifierCharacter(i)) count += 1;
-    }
-    var tmp: [count]u8 = undefined;
-    var index = 0;
-    for (0..256) |i| {
-        if (!isValidIdentifierCharacter(i)) {
-            tmp[index] = i;
-            index += 1;
-        }
-    }
-    const result = tmp;
-    break :i &result;
-};
+/// Characters that are valid in identifiers.
+const valid_identifier_characters: []const u8 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_+";
 
 fn isValidIdentifier(str: []const u8) bool {
-    if (std.mem.indexOfAny(u8, str, invalid_identifier_characters)) |_| {
-        return false;
-    } else {
-        return true;
-    }
+    return std.mem.indexOfNone(u8, str, valid_identifier_characters) == null;
 }
 
 fn parseIdentifier(str: []const u8) ?[]const u8 {
