@@ -156,11 +156,13 @@ pub const Command = union(Key) {
     kitty_clipboard_protocol: KittyClipboardProtocol,
 
     /// Kitty desktop notifications (OSC 99)
-    kitty_desktop_notification: parsers.kitty_desktop_notification.OSC,
+    kitty_desktop_notification: KittyDesktopNotification,
 
     pub const SemanticPrompt = parsers.semantic_prompt.Command;
 
     pub const KittyClipboardProtocol = parsers.kitty_clipboard_protocol.OSC;
+
+    pub const KittyDesktopNotification = parsers.kitty_desktop_notification.OSC;
 
     pub const Key = LibEnum(
         if (build_options.c_abi) .c else .zig,
