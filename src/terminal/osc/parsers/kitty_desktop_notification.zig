@@ -8,6 +8,7 @@ const assert = @import("../../../quirks.zig").inlineAssert;
 
 const Parser = @import("../../osc.zig").Parser;
 const Command = @import("../../osc.zig").Command;
+const Terminator = @import("../../osc.zig").Terminator;
 const encoding = @import("../encoding.zig");
 const lib = @import("../../../lib/main.zig");
 const lib_target: lib.Target = if (build_options.c_abi) .c else .zig;
@@ -19,6 +20,8 @@ pub const OSC = struct {
     metadata: []const u8,
     /// The raw payload. It may be Base64 encoded, check the `e` option.
     payload: []const u8,
+    /// The terminator that was used in case we need to send a response.
+    terminator: Terminator,
 
     /// Decode an option from the metadata.
     pub fn readOption(self: OSC, comptime key: Option) key.Type() {
@@ -361,7 +364,7 @@ pub fn Iterator(comptime key: Option) type {
     };
 }
 
-pub fn parse(parser: *Parser, _: ?u8) ?*Command {
+pub fn parse(parser: *Parser, terminator_ch: ?u8) ?*Command {
     assert(parser.state == .@"99");
 
     const writer = parser.writer orelse {
@@ -391,6 +394,7 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
         .kitty_desktop_notification = .{
             .metadata = metadata,
             .payload = payload,
+            .terminator = .init(terminator_ch),
         },
     };
 
@@ -429,6 +433,7 @@ test "OSC 99: empty metadata and payload" {
     }
     try testing.expectEqual(.normal, cmd.kitty_desktop_notification.readOption(.u));
     try testing.expectEqual(-1, cmd.kitty_desktop_notification.readOption(.w));
+    try testing.expectEqual(.st, cmd.kitty_desktop_notification.terminator);
 }
 
 test "OSC 99: empty metadata with payload" {
