@@ -76,6 +76,9 @@
   # developer shell
   glycin-loaders,
   librsvg,
+  noto-fonts,
+  noto-fonts-cjk-sans,
+  noto-fonts-color-emoji,
 }: let
   # See package.nix. Keep in sync.
   ld_library_path = import ./build-support/ld-library-path.nix {
@@ -141,6 +144,11 @@ in
         (python3.withPackages (python-pkgs: [
           python-pkgs.ucs-detect
         ]))
+
+        # fonts for testing
+        noto-fonts
+        noto-fonts-cjk-sans
+        noto-fonts-color-emoji
       ]
       ++ lib.optionals stdenv.hostPlatform.isLinux [
         # My nix shell environment installs the non-interactive version
