@@ -153,9 +153,11 @@ pub const Command = union(Key) {
     kitty_text_sizing: parsers.kitty_text_sizing.OSC,
 
     /// Kitty desktop notifications (OSC 99)
-    kitty_desktop_notification: parsers.kitty_desktop_notification.OSC,
+    kitty_desktop_notification: KittyDesktopNotification,
 
     pub const SemanticPrompt = parsers.semantic_prompt.Command;
+
+    pub const KittyDesktopNotification = parsers.kitty_desktop_notification.OSC;
 
     pub const Key = LibEnum(
         if (build_options.c_abi) .c else .zig,
