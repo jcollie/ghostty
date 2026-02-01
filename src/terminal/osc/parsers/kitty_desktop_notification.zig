@@ -106,9 +106,9 @@ pub const Option = enum {
     d,
     /// Is the payload encoded with Base64?
     e,
-    /// The nname of the application that is sending the notification.
+    /// The name of the application that is sending the notification.
     f,
-    /// Identifier for icon data.
+    /// Identifier for icon data. Only used when the payload is icon data.
     g,
     /// Identifier for the notification.
     i,
@@ -173,45 +173,15 @@ pub const Option = enum {
         comptime key: Option,
         metadata: []const u8,
     ) key.Type() {
-        switch (key) {
+        var it: Iterator(key) = switch (key) {
             inline .t, .n => return .init(metadata),
-            else => {},
-        }
-
-        const value = value: {
-            var pos: usize = 0;
-            while (pos < metadata.len) {
-                // skip any whitespace
-                while (pos < metadata.len and std.ascii.isWhitespace(metadata[pos])) pos += 1;
-                // bail if we are out of metadata
-                if (pos >= metadata.len) return key.default();
-                if (metadata[pos] != @tagName(key)[0]) {
-                    // this isn't the key we are looking for, skip to the next option, or bail if
-                    // there is no next option
-                    pos = std.mem.indexOfScalarPos(u8, metadata, pos, ':') orelse return key.default();
-                    pos += 1;
-                    continue;
-                }
-                // skip past the key
-                pos += 1;
-                // skip any whitespace
-                while (pos < metadata.len and std.ascii.isWhitespace(metadata[pos])) pos += 1;
-                // bail if we are out of metadata
-                if (pos >= metadata.len) return key.default();
-                // a valid option has an '='
-                if (metadata[pos] != '=') return key.default();
-                // the end of the value is bounded by a ':' or the end of the metadata
-                const end = std.mem.indexOfScalarPos(u8, metadata, pos, ':') orelse metadata.len;
-                // return the value after stripping any leading or trailing whitespace
-                break :value std.mem.trim(u8, metadata[pos + 1 .. end], &std.ascii.whitespace);
-            }
-            // the key was not found
-            return key.default();
+            inline else => .init(metadata),
         };
 
-        if (!isValidMetadataValue(value)) return key.default();
+        const value = it.next() orelse return key.default();
 
-        // return the parsed value
+        // return the parsed value, the iterator guarantees that it's a valid
+        // metadata value
         return switch (key) {
             .a => .init(value),
             .c => parseBool(value) orelse key.default(),
@@ -248,7 +218,7 @@ fn parseBool(str: []const u8) ?bool {
     };
 }
 
-/// This is similar to the packed struct parsed used in the configs. The
+/// This is similar to the packed struct parser used in the configs. The
 /// differences are that a literal `true` or `false` value does not turn on/off
 /// all the values, and the negation prefix is `-` not `no-`.
 pub fn parsePackedStruct(comptime T: type, str: []const u8) T {
@@ -273,7 +243,7 @@ pub fn parsePackedStruct(comptime T: type, str: []const u8) T {
         };
 
         inline for (info.fields) |field| {
-            assert(field.type == bool);
+            comptime assert(field.type == bool);
             if (std.mem.eql(u8, field.name, part)) {
                 @field(result, field.name) = value;
                 continue :loop;
@@ -291,7 +261,7 @@ pub fn parsePackedStruct(comptime T: type, str: []const u8) T {
 /// against the spec but is needed since Base64 encoded values (with padding)
 /// are valid for some options. Including `?` is technically against the spec
 /// but is needed since it is a valid value for the `p` option.
-const valid_metadata_value_characters: []const u8 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_/+.,(){}[]*&^%$#@!`~=?";
+const valid_metadata_value_characters: []const u8 = valid_identifier_characters ++ "/.,(){}[]*&^%$#@!`~=?";
 
 fn isValidMetadataValue(str: []const u8) bool {
     return std.mem.indexOfNone(u8, str, valid_metadata_value_characters) == null;
@@ -309,7 +279,7 @@ fn parseIdentifier(str: []const u8) ?[]const u8 {
     return null;
 }
 
-/// Used when an option can appear multiple times in the metadata
+/// Used to iterate over matching key/values in the metadata
 pub fn Iterator(comptime key: Option) type {
     return struct {
         metadata: []const u8,
@@ -322,7 +292,10 @@ pub fn Iterator(comptime key: Option) type {
             };
         }
 
+        /// Return the value of the next matching key. The value is guaranteed
+        /// to be `null` or a valid metadata value.
         pub fn next(self: *Iterator(key)) ?[]const u8 {
+            // bail if we are out of metadata
             if (self.pos >= self.metadata.len) return null;
             while (self.pos < self.metadata.len) {
                 // skip any whitespace
