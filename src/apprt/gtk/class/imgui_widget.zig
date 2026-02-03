@@ -257,8 +257,8 @@ pub const ImguiWidget = extern struct {
             priv.tick_callback_id = 0;
         }
 
-        self.setCurrentContext() catch return;
-        cimgui.ImGui_ImplOpenGL3_Shutdown();
+        // self.setCurrentContext() catch return;
+        // cimgui.ImGui_ImplOpenGL3_Shutdown();
     }
 
     /// Handle a request to resize the GLArea
