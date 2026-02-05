@@ -1963,6 +1963,7 @@ pub const Surface = extern struct {
                 log.warn("unable to remove pending horizontal scroll reset source", .{});
             }
             priv.pending_horizontal_scroll_reset = null;
+        }
 
         if (priv.scanner_source) |v| {
             if (glib.Source.remove(v) == 0) {
