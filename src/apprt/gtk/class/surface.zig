@@ -3675,17 +3675,25 @@ pub const Surface = extern struct {
         const widget = self.as(gtk.Widget);
 
         const snapshot = gtk.Snapshot.new();
-        // defer snapshot.unref();
 
         gtk.Widget.virtual_methods.snapshot.call(
             Class.parent,
             self.as(Parent),
             snapshot,
         );
-        const node = snapshot.freeToNode() orelse return;
+        const node = snapshot.freeToNode() orelse {
+            log.warn("unable to take snapshot of surface", .{});
+            return;
+        };
 
-        const native = widget.getNative() orelse return;
-        const native_renderer = native.getRenderer() orelse return;
+        const native = widget.getNative() orelse {
+            log.warn("unable to get native object for surface", .{});
+            return;
+        };
+        const native_renderer = native.getRenderer() orelse {
+            log.warn("unable to get renderer for native object", .{});
+            return;
+        };
 
         var rect: graphene.Rect = undefined;
         _ = rect.init(
@@ -3698,25 +3706,93 @@ pub const Surface = extern struct {
         const texture = native_renderer.renderTexture(node, &rect);
         defer texture.unref();
 
-        _ = texture.saveToPng("test.png");
+        const alloc = Application.default().allocator();
+
+        const cache_dir = internal_os.xdg.cache(alloc, .{ .subdir = "ghostty" }) catch |err| {
+            log.warn("unable to get cache dir: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_dir);
+
+        const now = std.time.nanoTimestamp();
+
+        const cache_name = std.fmt.allocPrint(alloc, "snapshot{d:0<19}.png", .{now}) catch |err| {
+            log.warn("unable to format name for snapshot file: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_name);
+        const cache_path = std.fs.path.joinZ(alloc, &.{ cache_dir, cache_name }) catch |err| {
+            log.warn("unable to build path to snapshot file: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_path);
+
+        {
+            const bytes = texture.saveToPngBytes();
+            defer bytes.unref();
+
+            var size: usize = undefined;
+            const data = bytes.getData(&size) orelse {
+                log.warn("snapshot produced an empty image", .{});
+                return;
+            };
+            if (size == 0) {
+                log.warn("snapshot produced an empty image", .{});
+                return;
+            }
+
+            var buf: [1024]u8 = undefined;
+            var file = std.fs.cwd().atomicFile(
+                cache_path,
+                .{
+                    .make_path = true,
+                    .write_buffer = &buf,
+                },
+            ) catch |err| {
+                log.warn("unable to open snapshot file: {t}", .{err});
+                return;
+            };
+            defer file.deinit();
+            const writer = &file.file_writer.interface;
+
+            writer.writeAll(data[0..size]) catch |err| {
+                log.warn("unable to write image data to snapshot file: {t}", .{err});
+                return;
+            };
+            writer.flush() catch |err| {
+                log.warn("unable to flush image data to snapshot file: {t}", .{err});
+                return;
+            };
+
+            file.finish() catch |err| {
+                log.warn("unable to finish writing data to snapshot file: {t}", .{err});
+                return;
+            };
+        }
 
         switch (action) {
             .copy => self.setClipboard(
                 .standard,
                 &.{
-                    .{ .mime = "text/plain", .data = "test.png" },
+                    .{ .mime = "text/plain", .data = cache_path },
                 },
                 false,
             ),
             .paste => paste: {
-                const surface = self.core() orelse break :paste;
+                const surface = self.core() orelse {
+                    log.warn("gobject surface is not associated with a core surface!", .{});
+                    break :paste;
+                };
                 _ = surface.performBindingAction(.{
-                    .text = "test.png",
-                }) catch {};
+                    .text = cache_path,
+                }) catch |err| {
+                    log.warn("unable to paste snapshot path: {t}", .{err});
+                };
             },
             .open => {
-                const alloc = Application.default().allocator();
-                internal_os.open(alloc, .unknown, "test.png") catch {};
+                internal_os.open(alloc, .unknown, cache_path) catch |err| {
+                    log.warn("unable to open snapshot file: {t}", .{err});
+                };
             },
         }
     }
