@@ -897,6 +897,9 @@ pub const Action = union(enum) {
     /// this will report performable as false.
     deactivate_all_key_tables,
 
+    /// Take snapshot of surface.
+    take_snapshot: Snapshot,
+
     /// Quit Ghostty.
     quit,
 
@@ -1140,6 +1143,12 @@ pub const Action = union(enum) {
         pub const default: CloseTabMode = .this;
     };
 
+    pub const Snapshot = enum {
+        copy,
+        paste,
+        open,
+    };
+
     fn parseEnum(comptime T: type, value: []const u8) !T {
         return std.meta.stringToEnum(T, value) orelse return Error.InvalidFormat;
     }
@@ -1358,6 +1367,7 @@ pub const Action = union(enum) {
             .deactivate_all_key_tables,
             .end_key_sequence,
             .crash,
+            .take_snapshot,
             => .surface,
 
             // These are less obvious surface actions. They're surface

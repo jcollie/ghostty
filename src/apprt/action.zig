@@ -340,6 +340,8 @@ pub const Action = union(Key) {
     /// otherwise the terminal-set title.
     copy_title_to_clipboard,
 
+    take_snapshot: Snapshot,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -406,6 +408,7 @@ pub const Action = union(Key) {
         search_selected,
         readonly,
         copy_title_to_clipboard,
+        take_snapshot,
 
         test "ghostty.h Action.Key" {
             try lib.checkGhosttyHEnum(Key, "GHOSTTY_ACTION_");
@@ -622,6 +625,12 @@ pub const Readonly = enum(c_int) {
     test "ghostty.h Readonly" {
         try lib.checkGhosttyHEnum(Readonly, "GHOSTTY_READONLY_");
     }
+};
+
+pub const Snapshot = enum(c_int) {
+    copy,
+    paste,
+    open,
 };
 
 pub const MouseVisibility = enum(c_int) {
