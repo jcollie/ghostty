@@ -7,6 +7,7 @@ const gdk = @import("gdk");
 const gio = @import("gio");
 const glib = @import("glib");
 const gobject = @import("gobject");
+const graphene = @import("graphene");
 const gtk = @import("gtk");
 
 const apprt = @import("../../../apprt.zig");
@@ -3668,6 +3669,56 @@ pub const Surface = extern struct {
         _ = surface.performBindingAction(.{ .navigate_search = .previous }) catch |err| {
             log.warn("unable to perform navigate_search action err={}", .{err});
         };
+    }
+
+    pub fn takeSnapshot(self: *Surface, action: apprt.action.Snapshot) void {
+        const widget = self.as(gtk.Widget);
+
+        const snapshot = gtk.Snapshot.new();
+        // defer snapshot.unref();
+
+        gtk.Widget.virtual_methods.snapshot.call(
+            Class.parent,
+            self.as(Parent),
+            snapshot,
+        );
+        const node = snapshot.freeToNode() orelse return;
+
+        const native = widget.getNative() orelse return;
+        const native_renderer = native.getRenderer() orelse return;
+
+        var rect: graphene.Rect = undefined;
+        _ = rect.init(
+            0.0,
+            0.0,
+            @floatFromInt(widget.getWidth()),
+            @floatFromInt(widget.getHeight()),
+        );
+
+        const texture = native_renderer.renderTexture(node, &rect);
+        defer texture.unref();
+
+        _ = texture.saveToPng("test.png");
+
+        switch (action) {
+            .copy => self.setClipboard(
+                .standard,
+                &.{
+                    .{ .mime = "text/plain", .data = "test.png" },
+                },
+                false,
+            ),
+            .paste => paste: {
+                const surface = self.core() orelse break :paste;
+                _ = surface.performBindingAction(.{
+                    .text = "test.png",
+                }) catch {};
+            },
+            .open => {
+                const alloc = Application.default().allocator();
+                internal_os.open(alloc, .unknown, "test.png") catch {};
+            },
+        }
     }
 
     const C = Common(Self, Private);
