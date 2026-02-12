@@ -331,6 +331,8 @@ pub const Action = union(Key) {
     /// The readonly state of the surface has changed.
     readonly: Readonly,
 
+    take_snapshot: Snapshot,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -396,6 +398,7 @@ pub const Action = union(Key) {
         search_total,
         search_selected,
         readonly,
+        take_snapshot,
     };
 
     /// Sync with: ghostty_action_u
@@ -563,6 +566,12 @@ pub const QuitTimer = enum(c_int) {
 pub const Readonly = enum(c_int) {
     off,
     on,
+};
+
+pub const Snapshot = enum(c_int) {
+    copy,
+    paste,
+    open,
 };
 
 pub const MouseVisibility = enum(c_int) {

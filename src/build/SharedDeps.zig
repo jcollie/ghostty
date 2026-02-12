@@ -572,6 +572,7 @@ fn addGtkNg(
             .{ "gio", "gio2" },
             .{ "glib", "glib2" },
             .{ "gobject", "gobject2" },
+            .{ "graphene", "graphene1" },
             .{ "gtk", "gtk4" },
             .{ "xlib", "xlib2" },
         };
@@ -583,6 +584,7 @@ fn addGtkNg(
 
     step.linkSystemLibrary2("gtk4", dynamic_link_opts);
     step.linkSystemLibrary2("libadwaita-1", dynamic_link_opts);
+    step.linkSystemLibrary2("graphene-1", dynamic_link_opts);
 
     if (self.config.x11) {
         step.linkSystemLibrary2("X11", dynamic_link_opts);

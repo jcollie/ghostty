@@ -732,6 +732,7 @@ pub const Application = extern struct {
             .end_search => Action.endSearch(target),
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
+            .take_snapshot => return Action.takeSnapshot(target, value),
 
             // Unimplemented
             .secure_input,
@@ -2661,6 +2662,19 @@ const Action = struct {
                 core.rt_surface.gobj().keyTableAction(value) catch |err| {
                     log.warn("error handling key_table action: {}", .{err});
                 };
+                return true;
+            },
+        }
+    }
+
+    pub fn takeSnapshot(target: apprt.Target, value: apprt.Action.Value(.take_snapshot)) bool {
+        switch (target) {
+            .app => {
+                log.warn("take_snapshot action to app is unexpected", .{});
+                return false;
+            },
+            .surface => |core| {
+                core.rt_surface.gobj().takeSnapshot(value);
                 return true;
             },
         }
