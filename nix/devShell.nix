@@ -70,6 +70,7 @@
   wayland,
   wayland-scanner,
   wayland-protocols,
+  graphene,
   zon2nix,
   pkgs,
   # needed by GTK for loading SVG icons while running from within the
@@ -162,6 +163,7 @@ in
         expat
         fontconfig
         freetype
+        graphene
         harfbuzz
         libpng
         libxml2
