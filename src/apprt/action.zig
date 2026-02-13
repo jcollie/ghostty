@@ -331,6 +331,7 @@ pub const Action = union(Key) {
     /// The readonly state of the surface has changed.
     readonly: Readonly,
 
+    /// Take a snapshot of the surface.
     take_snapshot: Snapshot,
 
     /// Sync with: ghostty_action_tag_e
