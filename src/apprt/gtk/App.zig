@@ -29,9 +29,11 @@ pub const application_id = switch (builtin.mode) {
 
 /// GTK object path
 pub const object_path = switch (builtin.mode) {
-    .Debug, .ReleaseSafe => "/com/mitchellh/ghostty_debug",
-    .ReleaseFast, .ReleaseSmall => "/com/mitchellh/ghostty",
+    .Debug, .ReleaseSafe => resource_path ++ "_debug",
+    .ReleaseFast, .ReleaseSmall => resource_path,
 };
+
+pub const resource_path = "/com/mitchellh/ghostty";
 
 /// The GObject Application instance
 app: *Application,

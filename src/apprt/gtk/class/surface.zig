@@ -39,6 +39,7 @@ const InspectorWindow = @import("inspector_window.zig").InspectorWindow;
 const i18n = @import("../../../os/i18n.zig");
 const Color = CoreConfig.Color;
 const RepeatableColorMap = CoreConfig.RepeatableColorMap;
+const media = @import("../media.zig");
 
 const gtk_version = @import("../gtk_version.zig");
 
@@ -2445,34 +2446,8 @@ pub const Surface = extern struct {
                 1.0,
             );
 
-            assert(std.fs.path.isAbsolute(path));
-            const media_file = gtk.MediaFile.newForFilename(path);
-
-            // If the audio file is marked as required, we'll emit an error if
-            // there was a problem playing it. Otherwise there will be silence.
-            if (required) {
-                _ = gobject.Object.signals.notify.connect(
-                    media_file,
-                    ?*anyopaque,
-                    mediaFileError,
-                    null,
-                    .{ .detail = "error" },
-                );
-            }
-
-            // Watch for the "ended" signal so that we can clean up after
-            // ourselves.
-            _ = gobject.Object.signals.notify.connect(
-                media_file,
-                ?*anyopaque,
-                mediaFileEnded,
-                null,
-                .{ .detail = "ended" },
-            );
-
-            const media_stream = media_file.as(gtk.MediaStream);
-            media_stream.setVolume(volume);
-            media_stream.play();
+            const media_file = media.fromFilename(path) orelse break :audio;
+            media.playMediaFile(media_file, volume, required);
         }
     }
 
@@ -3604,35 +3579,6 @@ pub const Surface = extern struct {
         right.setVisible(0);
     }
 
-    fn mediaFileError(
-        media_file: *gtk.MediaFile,
-        _: *gobject.ParamSpec,
-        _: ?*anyopaque,
-    ) callconv(.c) void {
-        const path = path: {
-            const file = media_file.getFile() orelse break :path null;
-            break :path file.getPath();
-        };
-        defer if (path) |p| glib.free(p);
-
-        const media_stream = media_file.as(gtk.MediaStream);
-        const err = media_stream.getError() orelse return;
-        log.warn("error playing bell from {s}: {s} {d} {s}", .{
-            path orelse "<<unknown>>",
-            glib.quarkToString(err.f_domain),
-            err.f_code,
-            err.f_message orelse "",
-        });
-    }
-
-    fn mediaFileEnded(
-        media_file: *gtk.MediaFile,
-        _: *gobject.ParamSpec,
-        _: ?*anyopaque,
-    ) callconv(.c) void {
-        media_file.unref();
-    }
-
     fn titleDialogSet(
         _: *TitleDialog,
         title_ptr: [*:0]const u8,
@@ -3795,6 +3741,9 @@ pub const Surface = extern struct {
                 };
             },
         }
+
+        // This will send a "snapshot taken" toast unless the user turns it off.
+        _ = self.as(gtk.Widget).activateAction("win.snapshot-taken", null);
     }
 
     const C = Common(Self, Private);
