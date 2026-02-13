@@ -340,6 +340,7 @@ pub const Action = union(Key) {
     /// otherwise the terminal-set title.
     copy_title_to_clipboard,
 
+    /// Take a snapshot of the surface.
     take_snapshot: Snapshot,
 
     /// Sync with: ghostty_action_tag_e
