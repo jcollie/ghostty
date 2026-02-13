@@ -380,7 +380,7 @@ pub const Application = extern struct {
             // Force the resource path to a known value so it doesn't depend
             // on the app id (which changes between debug/release and can be
             // user-configured) and force it to load in compiled resources.
-            .resource_base_path = "/com/mitchellh/ghostty",
+            .resource_base_path = ApprtApp.resource_path,
         });
 
         // Setup our private state. More setup is done in the init

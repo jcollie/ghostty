@@ -130,19 +130,35 @@ pub fn main() !void {
     const alloc = debug_allocator.allocator();
 
     // Collect the UI files that are passed in as arguments.
-    var ui_files: std.ArrayListUnmanaged([]const u8) = .empty;
+    var ui_files: std.ArrayList([]const u8) = .empty;
     defer {
         for (ui_files.items) |item| alloc.free(item);
         ui_files.deinit(alloc);
     }
+
+    // Collect other files that are passed in as arguments.
+    var other_files: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (other_files.items) |item| alloc.free(item);
+        other_files.deinit(alloc);
+    }
+
     var it = try std.process.argsWithAllocator(alloc);
     defer it.deinit();
     while (it.next()) |arg| {
-        if (!std.mem.endsWith(u8, arg, ".ui")) continue;
-        try ui_files.append(
-            alloc,
-            try alloc.dupe(u8, arg),
-        );
+        if (std.mem.endsWith(u8, arg, ".ui")) {
+            try ui_files.append(
+                alloc,
+                try alloc.dupe(u8, arg),
+            );
+            continue;
+        }
+        if (std.mem.endsWith(u8, arg, ".oga")) {
+            try other_files.append(
+                alloc,
+                try alloc.dupe(u8, arg),
+            );
+        }
     }
 
     var buf: [4096]u8 = undefined;
@@ -154,9 +170,9 @@ pub fn main() !void {
         \\
     );
 
-    try genRoot(writer);
+    try genRoot(writer, other_files.items);
     try genIcons(writer);
-    try genUi(alloc, writer, &ui_files);
+    try genUi(alloc, writer, ui_files.items);
 
     try writer.writeAll(
         \\</gresources>
@@ -211,7 +227,7 @@ fn genIcons(writer: *std.Io.Writer) !void {
 }
 
 /// Generate the resources at the root prefix.
-fn genRoot(writer: *std.Io.Writer) !void {
+fn genRoot(writer: *std.Io.Writer, other_files: []const []const u8) !void {
     try writer.print(
         \\  <gresource prefix="{s}">
         \\
@@ -232,6 +248,13 @@ fn genRoot(writer: *std.Io.Writer) !void {
         );
     }
 
+    for (other_files) |other_file| {
+        try writer.print(
+            "    <file alias=\"{s}\">{s}</file>\n",
+            .{ std.fs.path.basename(other_file), other_file },
+        );
+    }
+
     try writer.writeAll(
         \\  </gresource>
         \\
@@ -244,14 +267,14 @@ fn genRoot(writer: *std.Io.Writer) !void {
 fn genUi(
     alloc: Allocator,
     writer: *std.Io.Writer,
-    files: *const std.ArrayListUnmanaged([]const u8),
+    ui_files: []const []const u8,
 ) !void {
     try writer.print(
         \\  <gresource prefix="{s}/ui">
         \\
     , .{prefix});
 
-    for (files.items) |ui_file| {
+    for (ui_files) |ui_file| {
         for (blueprints) |bp| {
             const expected = try std.fmt.allocPrint(
                 alloc,

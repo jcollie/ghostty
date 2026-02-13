@@ -13,6 +13,7 @@ const apprt = @import("../../../apprt.zig");
 const configpkg = @import("../../../config.zig");
 const TitlebarStyle = configpkg.Config.GtkTitlebarStyle;
 const input = @import("../../../input.zig");
+const ApprtApp = @import("../App.zig");
 const CoreSurface = @import("../../../Surface.zig");
 const ext = @import("../ext.zig");
 const gtk_version = @import("../gtk_version.zig");
@@ -29,6 +30,7 @@ const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
+const media = @import("../media.zig");
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -354,6 +356,7 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
+            .init("snapshot-taken", actionSnapshotTaken, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -1988,6 +1991,38 @@ pub const Window = extern struct {
         // TODO: accept the surface that toggled the command palette as a
         // parameter
         self.toggleInspector();
+    }
+
+    fn actionSnapshotTaken(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        const priv: *Private = self.private();
+
+        const toast = toast: {
+            const cfg = priv.config orelse break :toast true;
+            const config = cfg.get();
+            break :toast config.@"app-notifications".@"snapshot-taken";
+        };
+
+        const alert = toast: {
+            const cfg = priv.config orelse break :toast true;
+            const config = cfg.get();
+            break :toast config.@"app-alerts".@"snapshot-taken";
+        };
+
+        if (toast) {
+            self.addToast(i18n._("Snapshot taken"));
+        }
+
+        if (alert) {
+            // Play a "camera shutter" sound.
+            const resource = ApprtApp.resource_path ++ "/camera-shutter.oga";
+
+            const media_file = media.fromResource(resource) orelse return;
+            media.playMediaFile(media_file, 1.0, true);
+        }
     }
 
     const C = Common(Self, Private);

@@ -834,6 +834,10 @@ pub fn gtkNgDistResources(
             xml_run.addFileArg(ui_file);
         }
 
+        if (b.lazyDependency("xdg-sound-theme", .{})) |xdg| {
+            xml_run.addFileArg(xdg.path("stereo/camera-shutter.oga"));
+        }
+
         break :gresource_xml xml_run.captureStdOut();
     };
 
