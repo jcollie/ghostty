@@ -315,6 +315,14 @@ in
       };
     }
     {
+      name = "N-V-__8AAJt1BwCBmXebkHPnl0ESRzNfCWcSux-T5t3Bt2NA";
+      path = fetchZigArtifact {
+        name = "xdg-sound-theme";
+        url = "git+https://gitlab.freedesktop.org/xdg/xdg-sound-theme.git#5bf2359c5e72408567310b7d7d31e88cf165247d";
+        hash = "sha256-2ashujcBXPJSM7F7v8S3QgJKblV1tee8MjLq9Bh4GWo=";
+      };
+    }
+    {
       name = "z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ";
       path = fetchZigArtifact {
         name = "z2d";
