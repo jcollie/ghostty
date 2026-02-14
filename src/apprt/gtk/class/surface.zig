@@ -2416,7 +2416,7 @@ pub const Surface = extern struct {
     /// Handle bell features that need to happen every time a BEL is received
     /// Currently this is audio and system but this could change in the future.
     fn ringBell(self: *Self) void {
-        const priv = self.private();
+        const priv: *Private = self.private();
 
         // Emit the signal
         signals.bell.impl.emit(
