@@ -144,6 +144,11 @@
     "url": "https://deps.files.ghostty.org/wuffs-122037b39d577ec2db3fd7b2130e7b69ef6cc1807d68607a7c232c958315d381b5cd.tar.gz",
     "hash": "sha256-nkzSCr6W5sTG7enDBXEIhgEm574uLD41UVR2wlC+HBM="
   },
+  "N-V-__8AAJt1BwCBmXebkHPnl0ESRzNfCWcSux-T5t3Bt2NA": {
+    "name": "xdg-sound-theme",
+    "url": "git+https://gitlab.freedesktop.org/xdg/xdg-sound-theme.git#5bf2359c5e72408567310b7d7d31e88cf165247d",
+    "hash": "sha256-2ashujcBXPJSM7F7v8S3QgJKblV1tee8MjLq9Bh4GWo="
+  },
   "z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ": {
     "name": "z2d",
     "url": "https://deps.files.ghostty.org/z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ.tar.gz",
