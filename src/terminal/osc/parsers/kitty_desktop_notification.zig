@@ -175,8 +175,8 @@ pub const Option = enum {
         metadata: []const u8,
     ) key.Type() {
         var it: Iterator(Option, isValidMetadataValue, key) = switch (key) {
-            inline .t, .n => return .init(metadata),
-            inline else => .init(metadata),
+            .t, .n => return .init(metadata),
+            else => .init(metadata),
         };
 
         const value = it.next() orelse return key.default();
