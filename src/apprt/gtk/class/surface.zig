@@ -3620,6 +3620,52 @@ pub const Surface = extern struct {
     pub fn takeSnapshot(self: *Surface, action: apprt.action.Snapshot) void {
         const widget = self.as(gtk.Widget);
 
+        const alloc = Application.default().allocator();
+
+        const cache_dir = internal_os.xdg.cache(alloc, .{ .subdir = "ghostty" }) catch |err| {
+            log.warn("unable to get cache dir: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_dir);
+
+        const now = std.time.nanoTimestamp();
+
+        const cache_name = std.fmt.allocPrint(alloc, "snapshot{d:0<19}.png", .{now}) catch |err| {
+            log.warn("unable to format name for snapshot file: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_name);
+        const cache_path = std.fs.path.joinZ(alloc, &.{ cache_dir, cache_name }) catch |err| {
+            log.warn("unable to build path to snapshot file: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_path);
+
+        const cache_uri: [:0]const u8 = cache_uri: {
+            const uri: std.Uri = .{
+                .scheme = "file",
+                .host = .{
+                    .raw = "localhost",
+                },
+                .path = .{
+                    .raw = cache_path,
+                },
+            };
+            var cache_uri_writer: std.Io.Writer.Allocating = .init(alloc);
+            defer cache_uri_writer.deinit();
+            uri.writeToStream(
+                &cache_uri_writer.writer,
+                .{ .scheme = true, .authority = true, .path = true },
+            ) catch |err| {
+                log.warn("unable to write cache uri to buffer: {t}", .{err});
+                return;
+            };
+            break :cache_uri cache_uri_writer.toOwnedSliceSentinel(0) catch |err| {
+                log.warn("unable to copy cache uri to sentinel string: {t}", .{err});
+                return;
+            };
+        };
+
         const snapshot = gtk.Snapshot.new();
 
         gtk.Widget.virtual_methods.snapshot.call(
@@ -3651,27 +3697,6 @@ pub const Surface = extern struct {
 
         const texture = native_renderer.renderTexture(node, &rect);
         defer texture.unref();
-
-        const alloc = Application.default().allocator();
-
-        const cache_dir = internal_os.xdg.cache(alloc, .{ .subdir = "ghostty" }) catch |err| {
-            log.warn("unable to get cache dir: {t}", .{err});
-            return;
-        };
-        defer alloc.free(cache_dir);
-
-        const now = std.time.nanoTimestamp();
-
-        const cache_name = std.fmt.allocPrint(alloc, "snapshot{d:0<19}.png", .{now}) catch |err| {
-            log.warn("unable to format name for snapshot file: {t}", .{err});
-            return;
-        };
-        defer alloc.free(cache_name);
-        const cache_path = std.fs.path.joinZ(alloc, &.{ cache_dir, cache_name }) catch |err| {
-            log.warn("unable to build path to snapshot file: {t}", .{err});
-            return;
-        };
-        defer alloc.free(cache_path);
 
         {
             const bytes = texture.saveToPngBytes();
@@ -3716,34 +3741,58 @@ pub const Surface = extern struct {
             };
         }
 
-        switch (action) {
-            .copy => self.setClipboard(
-                .standard,
-                &.{
-                    .{ .mime = "text/plain", .data = cache_path },
-                },
-                false,
-            ),
+        {
+            const recent_manager = gtk.RecentManager.getDefault();
+            const recent_data: gtk.RecentData = .{
+                .f_display_name = @constCast("Ghostty Snapshot"),
+                .f_description = @constCast("Ghostty Snapshot"),
+                .f_mime_type = @constCast("image/png"),
+                .f_app_name = @constCast("Ghostty"),
+                .f_app_exec = @constCast("ghostty"),
+                .f_groups = null,
+                .f_is_private = @intFromBool(false),
+            };
+            if (recent_manager.addFull(cache_uri.ptr, &recent_data) == 0) {
+                log.warn("unable to add snapshot to recent items", .{});
+            }
+        }
+
+        const success = switch (action) {
+            .copy => copy: {
+                self.setClipboard(
+                    .standard,
+                    &.{
+                        .{ .mime = "text/plain", .data = cache_path },
+                    },
+                    false,
+                );
+                break :copy true;
+            },
             .paste => paste: {
                 const surface = self.core() orelse {
                     log.warn("gobject surface is not associated with a core surface!", .{});
-                    break :paste;
+                    break :paste false;
                 };
-                _ = surface.performBindingAction(.{
+                break :paste surface.performBindingAction(.{
                     .text = cache_path,
                 }) catch |err| {
                     log.warn("unable to paste snapshot path: {t}", .{err});
+                    break :paste false;
                 };
             },
-            .open => {
+            .open => open: {
                 internal_os.open(alloc, .unknown, cache_path) catch |err| {
                     log.warn("unable to open snapshot file: {t}", .{err});
+                    break :open false;
                 };
+                break :open true;
             },
-        }
+        };
 
-        // This will send a "snapshot taken" toast unless the user turns it off.
-        _ = self.as(gtk.Widget).activateAction("win.snapshot-taken", null);
+        if (success) {
+            // This will send a "snapshot taken" toast and sound unless the user turns it off.
+            _ = self.as(gtk.Widget).activateAction("win.snapshot-taken", null);
+        }
     }
 
     const C = Common(Self, Private);
