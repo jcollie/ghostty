@@ -2,6 +2,7 @@ const Self = @This();
 
 const std = @import("std");
 const apprt = @import("../../apprt.zig");
+const configpkg = @import("../../config.zig");
 const CoreSurface = @import("../../Surface.zig");
 const ApprtApp = @import("App.zig");
 const Application = @import("class/application.zig").Application;
@@ -104,4 +105,8 @@ pub fn redrawInspector(self: *Self) void {
 
 pub fn addRuntimeCss(self: *Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try self.surface.addRuntimeCss(writer);
+}
+
+pub fn getConfigOverrides(self: *Self) ?*const configpkg.ConfigOverrides {
+    return self.gobj().getConfigOverrides();
 }
