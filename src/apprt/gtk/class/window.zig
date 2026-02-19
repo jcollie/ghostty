@@ -376,7 +376,7 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
-            .init("snapshot-taken", actionSnapshotTaken, null),
+            .init("screenshot-taken", actionScreenshotTaken, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2048,7 +2048,7 @@ pub const Window = extern struct {
         self.toggleInspector();
     }
 
-    fn actionSnapshotTaken(
+    fn actionScreenshotTaken(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
         self: *Window,
@@ -2058,17 +2058,17 @@ pub const Window = extern struct {
         const toast = toast: {
             const cfg = priv.config orelse break :toast true;
             const config = cfg.get();
-            break :toast config.@"app-notifications".@"snapshot-taken";
+            break :toast config.@"app-notifications".@"screenshot-taken";
         };
 
         const alert = toast: {
             const cfg = priv.config orelse break :toast true;
             const config = cfg.get();
-            break :toast config.@"app-alerts".@"snapshot-taken";
+            break :toast config.@"app-alerts".@"screenshot-taken";
         };
 
         if (toast) {
-            self.addToast(i18n._("Snapshot taken"));
+            self.addToast(i18n._("Screenshot taken"));
         }
 
         if (alert) {

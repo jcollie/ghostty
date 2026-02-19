@@ -48,6 +48,11 @@
             .hash = "wayland-0.5.0-dev-lQa1khrMAQDJDwYFKpdH3HizherB7sHo5dKMECfvxQHe",
             .lazy = true,
         },
+        .zeit = .{
+            .url = "git+https://github.com/rockorager/zeit#7ac64d72dbfb1a4ad549102e7d4e232a687d32d8",
+            .hash = "zeit-0.6.0-5I6bk36tAgATpSl9wjFmRPMqYN2Mn0JQHgIcRNcqDpJA",
+            .lazy = true,
+        },
         .zf = .{
             // natecraddock/zf
             .url = "https://deps.files.ghostty.org/zf-3c52637b7e937c5ae61fd679717da3e276765b23.tar.gz",
