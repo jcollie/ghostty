@@ -154,6 +154,11 @@
     "url": "https://deps.files.ghostty.org/z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ.tar.gz",
     "hash": "sha256-afIdou/V7gk3/lXE0J5Ir8T7L5GgHvFnyMJ1rgRnl/c="
   },
+  "zeit-0.6.0-5I6bk36tAgATpSl9wjFmRPMqYN2Mn0JQHgIcRNcqDpJA": {
+    "name": "zeit",
+    "url": "git+https://github.com/rockorager/zeit#7ac64d72dbfb1a4ad549102e7d4e232a687d32d8",
+    "hash": "sha256-CDYwSqx0xA3Xx7/eDCtP0lHbheIScPwnffV2nxzJ/mU="
+  },
   "zf-0.10.3-OIRy8RuJAACKA3Lohoumrt85nRbHwbpMcUaLES8vxDnh": {
     "name": "zf",
     "url": "https://deps.files.ghostty.org/zf-3c52637b7e937c5ae61fd679717da3e276765b23.tar.gz",

@@ -413,6 +413,12 @@ pub fn add(
         step.root_module.addImport("z2d", dep.module("z2d"));
     }
     self.addUucode(b, step.root_module, target, optimize);
+    if (b.lazyDependency("zeit", .{
+        .target = target,
+        .optimize = optimize,
+    })) |dep| {
+        step.root_module.addImport("zeit", dep.module("zeit"));
+    }
     if (b.lazyDependency("zf", .{
         .target = target,
         .optimize = optimize,

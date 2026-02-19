@@ -331,6 +331,14 @@ in
       };
     }
     {
+      name = "zeit-0.6.0-5I6bk36tAgATpSl9wjFmRPMqYN2Mn0JQHgIcRNcqDpJA";
+      path = fetchZigArtifact {
+        name = "zeit";
+        url = "git+https://github.com/rockorager/zeit#7ac64d72dbfb1a4ad549102e7d4e232a687d32d8";
+        hash = "sha256-CDYwSqx0xA3Xx7/eDCtP0lHbheIScPwnffV2nxzJ/mU=";
+      };
+    }
+    {
       name = "zf-0.10.3-OIRy8RuJAACKA3Lohoumrt85nRbHwbpMcUaLES8vxDnh";
       path = fetchZigArtifact {
         name = "zf";

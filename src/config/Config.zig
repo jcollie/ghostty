@@ -3115,8 +3115,8 @@ keybind: Keybinds = .{},
 ///     to the clipboard.
 ///   - `config-reload` (default: true) - Show a notification when
 ///     the configuration is reloaded.
-///   - `snapshot-taken` (default: true) - Show a notification when
-///     a snapshot is taken. (Available since 1.3.0)
+///   - `screenshot-taken` (default: true) - Show a notification when
+///     a screenshot is taken. (Available since 1.3.0)
 ///
 /// To specify a notification to enable, specify the name of the notification.
 /// To specify a notification to disable, prefix the name with `no-`. For
@@ -3138,13 +3138,13 @@ keybind: Keybinds = .{},
 ///
 /// Possible alerts are:
 ///
-///   - `snapshot-taken` (default: true) - Play a "camera shutter" sound when a
-///     snapshot is taken. (Available since 1.3.0)
+///   - `screenshot-taken` (default: true) - Play a "camera shutter" sound when a
+///     screenshot is taken. (Available since 1.3.0)
 ///
 /// To specify an alert to enable, specify the name of the alert. To specify
 /// an alert to disable, prefix the name with `no-`. For example, to disable
-/// `snapshot-taken`, set this configuration to `no-snapshot-taken`. To enable
-/// it, set this configuration to `snapshot-taken`.
+/// `screenshot-taken`, set this configuration to `no-screenshot-taken`. To enable
+/// it, set this configuration to `screenshot-taken`.
 ///
 /// Multiple alerts can be enabled or disabled by separating them with a comma.
 ///
@@ -8759,12 +8759,12 @@ pub const GtkTitlebarStyle = enum(c_int) {
 pub const AppNotifications = packed struct {
     @"clipboard-copy": bool = true,
     @"config-reload": bool = true,
-    @"snapshot-taken": bool = true,
+    @"screenshot-taken": bool = true,
 };
 
 /// See app-alerts
 pub const AppAlerts = packed struct {
-    @"snapshot-taken": bool = true,
+    @"screenshot-taken": bool = true,
 };
 
 /// See bell-features
