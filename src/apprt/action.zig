@@ -336,8 +336,8 @@ pub const Action = union(Key) {
     /// otherwise the terminal-set title.
     copy_title_to_clipboard,
 
-    /// Take a snapshot of the surface.
-    take_snapshot: Snapshot,
+    /// Take a screenshot of the surface.
+    take_screenshot: Screenshot,
 
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
@@ -405,7 +405,7 @@ pub const Action = union(Key) {
         search_selected,
         readonly,
         copy_title_to_clipboard,
-        take_snapshot,
+        take_screenshot,
     };
 
     /// Sync with: ghostty_action_u
@@ -575,7 +575,7 @@ pub const Readonly = enum(c_int) {
     on,
 };
 
-pub const Snapshot = enum(c_int) {
+pub const Screenshot = enum(c_int) {
     copy,
     paste,
     open,

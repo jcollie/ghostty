@@ -5989,9 +5989,9 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             try self.queueRender();
         },
 
-        .take_snapshot => |v| return try self.rt_app.performAction(
+        .take_screenshot => |v| return try self.rt_app.performAction(
             .{ .surface = self },
-            .take_snapshot,
+            .take_screenshot,
             switch (v) {
                 .copy => .copy,
                 .paste => .paste,

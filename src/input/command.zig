@@ -681,21 +681,21 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Put a little Ghostty in your terminal.",
         }},
 
-        .take_snapshot => comptime &.{
+        .take_screenshot => comptime &.{
             .{
-                .action = .{ .take_snapshot = .copy },
-                .title = "Take a Snapshot and Copy Path",
-                .description = "Take a snapshot of the surface and copy the path to the image to the clipboard.",
+                .action = .{ .take_screenshot = .copy },
+                .title = "Take a Screenshot and Copy Path",
+                .description = "Take a screenshot of the surface and copy the path to the image to the clipboard.",
             },
             .{
-                .action = .{ .take_snapshot = .paste },
-                .title = "Take a Snapshot and Paste Path",
-                .description = "Take a snapshot of the surface and paste the path to the image.",
+                .action = .{ .take_screenshot = .paste },
+                .title = "Take a Screenshot and Paste Path",
+                .description = "Take a screenshot of the surface and paste the path to the image.",
             },
             .{
-                .action = .{ .take_snapshot = .open },
-                .title = "Take a Snapshot and Open",
-                .description = "Take a snapshot of the surface and open the image.",
+                .action = .{ .take_screenshot = .open },
+                .title = "Take a Screenshot and Open",
+                .description = "Take a screenshot of the surface and open the image.",
             },
         },
 

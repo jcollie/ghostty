@@ -900,8 +900,8 @@ pub const Action = union(enum) {
     /// this will report performable as false.
     deactivate_all_key_tables,
 
-    /// Take snapshot of surface.
-    take_snapshot: Snapshot,
+    /// Take screenshot of surface.
+    take_screenshot: Screenshot,
 
     /// Quit Ghostty.
     quit,
@@ -1146,7 +1146,7 @@ pub const Action = union(enum) {
         pub const default: CloseTabMode = .this;
     };
 
-    pub const Snapshot = enum {
+    pub const Screenshot = enum {
         copy,
         paste,
         open,
@@ -1370,7 +1370,7 @@ pub const Action = union(enum) {
             .deactivate_all_key_tables,
             .end_key_sequence,
             .crash,
-            .take_snapshot,
+            .take_screenshot,
             => .surface,
 
             // These are less obvious surface actions. They're surface

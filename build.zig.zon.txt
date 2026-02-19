@@ -1,4 +1,5 @@
 git+https://github.com/jacobsandlund/uucode#5f05f8f83a75caea201f12cc8ea32a2d82ea9732
+git+https://github.com/rockorager/zeit#7ac64d72dbfb1a4ad549102e7d4e232a687d32d8
 git+https://gitlab.freedesktop.org/xdg/xdg-sound-theme.git#5bf2359c5e72408567310b7d7d31e88cf165247d
 https://deps.files.ghostty.org/DearBindings_v0.17_ImGui_v1.92.5-docking.tar.gz
 https://deps.files.ghostty.org/JetBrainsMono-2.304.tar.gz
