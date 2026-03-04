@@ -225,7 +225,7 @@ test "fallback when xdg env empty and subdir" {
     const alloc = std.testing.allocator;
 
     const saved_home = home: {
-        const home = std.posix.getenv("HOME") orelse break :home null;
+        const home = getenv("HOME") orelse break :home null;
         break :home try alloc.dupeZ(u8, home);
     };
     defer env: {
@@ -255,7 +255,7 @@ test "fallback when xdg env empty and subdir" {
     inline for (cases) |case| {
         // Save and restore each environment variable
         const saved_env = blk: {
-            const value = std.posix.getenv(case.name) orelse break :blk null;
+            const value = getenv(case.name) orelse break :blk null;
             break :blk try alloc.dupeZ(u8, value);
         };
         defer env: {
