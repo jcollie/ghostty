@@ -106,17 +106,28 @@ pub fn getenvNotEmpty(key: []const u8) ?[]const u8 {
     return result;
 }
 
-pub fn setenv(key: [:0]const u8, value: [:0]const u8) c_int {
+pub fn setenv(key: []const u8, value: []const u8) c_int {
+    const keyZ = global.state.alloc.dupeZ(u8, key) catch return -1;
+    defer global.state.alloc.free(keyZ);
+
+    const valueZ = global.state.alloc.dupeZ(u8, value) catch return -1;
+    defer global.state.alloc.free(valueZ);
+
+    global.state.environ_map.put(key, value) catch return -1;
+
     return switch (builtin.os.tag) {
-        .windows => c._putenv_s(key.ptr, value.ptr),
-        else => c.setenv(key.ptr, value.ptr, 1),
+        .windows => c._putenv_s(keyZ.ptr, valueZ.ptr),
+        else => c.setenv(keyZ.ptr, valueZ.ptr, 1),
     };
 }
 
-pub fn unsetenv(key: [:0]const u8) c_int {
+pub fn unsetenv(key: []const u8) c_int {
+    const keyZ = global.state.alloc.dupeZ(u8, key) catch return -1;
+    defer global.state.alloc.free(keyZ);
+
     return switch (builtin.os.tag) {
-        .windows => c._putenv_s(key.ptr, ""),
-        else => c.unsetenv(key.ptr),
+        .windows => c._putenv_s(keyZ.ptr, ""),
+        else => c.unsetenv(keyZ.ptr),
     };
 }
 
