@@ -64,6 +64,23 @@ fn isExecutable(mode: std.fs.File.Mode) bool {
 
 // `uname -n` is the *nix equivalent of `hostname.exe` on Windows
 test "expand: hostname" {
+    const alloc = std.testing.allocator;
+
+    // partially initialize global state
+    const global = &@import("../global.zig").state;
+    global.* = .{
+        .gpa = null,
+        .logging = undefined,
+        .resources_dir = undefined,
+        .action = null,
+        .alloc = alloc,
+        .environ_map = try std.process.getEnvMap(alloc),
+    };
+    defer {
+        global.environ_map.deinit();
+        global.* = undefined;
+    }
+
     const executable = if (builtin.os.tag == .windows) "hostname.exe" else "uname";
     const path = (try expand(testing.allocator, executable)).?;
     defer testing.allocator.free(path);
@@ -71,11 +88,45 @@ test "expand: hostname" {
 }
 
 test "expand: does not exist" {
+    const alloc = std.testing.allocator;
+
+    // partially initialize global state
+    const global = &@import("../global.zig").state;
+    global.* = .{
+        .gpa = null,
+        .logging = undefined,
+        .resources_dir = undefined,
+        .action = null,
+        .alloc = alloc,
+        .environ_map = try std.process.getEnvMap(alloc),
+    };
+    defer {
+        global.environ_map.deinit();
+        global.* = undefined;
+    }
+
     const path = try expand(testing.allocator, "thisreallyprobablydoesntexist123");
     try testing.expect(path == null);
 }
 
 test "expand: slash" {
+    const alloc = std.testing.allocator;
+
+    // partially initialize global state
+    const global = &@import("../global.zig").state;
+    global.* = .{
+        .gpa = null,
+        .logging = undefined,
+        .resources_dir = undefined,
+        .action = null,
+        .alloc = alloc,
+        .environ_map = try std.process.getEnvMap(alloc),
+    };
+    defer {
+        global.environ_map.deinit();
+        global.* = undefined;
+    }
+
     const path = (try expand(testing.allocator, "foo/env")).?;
     defer testing.allocator.free(path);
     try testing.expect(path.len == 7);

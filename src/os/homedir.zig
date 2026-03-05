@@ -134,7 +134,23 @@ fn expandHomeUnix(path: []const u8, buf: []u8) ExpandError![]const u8 {
 
 test "expandHomeUnix" {
     const testing = std.testing;
-    const allocator = testing.allocator;
+    const alloc = testing.allocator;
+
+    // partially initialize global state
+    const global = &@import("../global.zig").state;
+    global.* = .{
+        .gpa = null,
+        .logging = undefined,
+        .resources_dir = undefined,
+        .action = null,
+        .alloc = alloc,
+        .environ_map = try std.process.getEnvMap(alloc),
+    };
+    defer {
+        global.environ_map.deinit();
+        global.* = undefined;
+    }
+
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const home_dir = try expandHomeUnix("~/", &buf);
     // Joining the home directory `~` with the path `/`
@@ -142,8 +158,8 @@ test "expandHomeUnix" {
     try testing.expect(home_dir[home_dir.len - 1] == std.fs.path.sep);
 
     const downloads = try expandHomeUnix("~/Downloads/shader.glsl", &buf);
-    const expected_downloads = try std.mem.concat(allocator, u8, &[_][]const u8{ home_dir, "Downloads/shader.glsl" });
-    defer allocator.free(expected_downloads);
+    const expected_downloads = try std.mem.concat(alloc, u8, &[_][]const u8{ home_dir, "Downloads/shader.glsl" });
+    defer alloc.free(expected_downloads);
     try testing.expectEqualStrings(expected_downloads, downloads);
 
     try testing.expectEqualStrings("~", try expandHomeUnix("~", &buf));
@@ -153,8 +169,8 @@ test "expandHomeUnix" {
 
     // Expect an error if the buffer is large enough to hold the home directory,
     // but not the expanded path
-    var small_buf = try allocator.alloc(u8, home_dir.len);
-    defer allocator.free(small_buf);
+    var small_buf = try alloc.alloc(u8, home_dir.len);
+    defer alloc.free(small_buf);
     try testing.expectError(error.BufferTooSmall, expandHomeUnix(
         "~/Downloads",
         small_buf[0..],
@@ -163,6 +179,22 @@ test "expandHomeUnix" {
 
 test {
     const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // partially initialize global state
+    const global = &@import("../global.zig").state;
+    global.* = .{
+        .gpa = null,
+        .logging = undefined,
+        .resources_dir = undefined,
+        .action = null,
+        .alloc = alloc,
+        .environ_map = try std.process.getEnvMap(alloc),
+    };
+    defer {
+        global.environ_map.deinit();
+        global.* = undefined;
+    }
 
     var buf: [1024]u8 = undefined;
     const result = try home(&buf);
