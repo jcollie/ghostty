@@ -4734,7 +4734,7 @@ test "set: formatEntries leaf_chained" {
 
     // Write the trigger first (as formatEntry in Config.zig does)
     try entry.key_ptr.format(&writer);
-    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer));
+    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer, false));
 
     const expected =
         \\keybind = a=new_window
@@ -4770,7 +4770,7 @@ test "set: formatEntries leaf_chained multiple chains" {
     var writer: std.Io.Writer = .fixed(&buf);
 
     try entry.key_ptr.format(&writer);
-    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer));
+    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer, false));
 
     const expected =
         \\keybind = ctrl+a=new_window
@@ -4802,7 +4802,7 @@ test "set: formatEntries leaf_chained with text action" {
 
     const entry = s.get(.{ .key = .{ .unicode = 'a' } }).?;
     try entry.key_ptr.format(&writer);
-    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer));
+    try entry.value_ptr.formatEntries(&writer, formatterpkg.entryFormatter("keybind", &output.writer, false));
 
     const expected =
         \\keybind = a=text:hello
