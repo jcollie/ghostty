@@ -6,7 +6,9 @@ const gdk = @import("gdk");
 const gio = @import("gio");
 const glib = @import("glib");
 const gobject = @import("gobject");
+const graphene = @import("graphene");
 const gtk = @import("gtk");
+const zeit = @import("zeit");
 
 const apprt = @import("../../../apprt.zig");
 const build_config = @import("../../../build_config.zig");
@@ -2428,7 +2430,7 @@ pub const Surface = extern struct {
     /// Handle bell features that need to happen every time a BEL is received
     /// Currently this is audio and system but this could change in the future.
     fn ringBell(self: *Self) void {
-        const priv = self.private();
+        const priv: *Private = self.private();
 
         // Emit the signal
         signals.bell.impl.emit(
@@ -3492,6 +3494,254 @@ pub const Surface = extern struct {
         _ = surface.performBindingAction(.{ .navigate_search = .previous }) catch |err| {
             log.warn("unable to perform navigate_search action err={}", .{err});
         };
+    }
+
+    pub fn captureScreenshot(self: *Surface, action: apprt.action.Screenshot) void {
+        const widget = self.as(gtk.Widget);
+
+        const alloc = Application.default().allocator();
+
+        const cache_dir = internal_os.xdg.cache(alloc, .{ .subdir = "ghostty" }) catch |err| {
+            log.warn("unable to get cache dir: {t}", .{err});
+            return;
+        };
+        defer alloc.free(cache_dir);
+
+        const screenshot_filename, const screenshot_description = x: {
+            var env = std.process.getEnvMap(alloc) catch |err| {
+                log.warn("unable to get environment map: {t}", .{err});
+                return;
+            };
+            defer env.deinit();
+
+            const local = zeit.local(alloc, &env) catch |err| {
+                log.warn("unable to determine local time zone: {t}", .{err});
+                return;
+            };
+            defer local.deinit();
+
+            const now = zeit.instant(.{ .timezone = &local }) catch |err| {
+                log.warn("unable to get the time: {t}", .{err});
+                return;
+            };
+
+            const dt = now.time();
+
+            const description = description: {
+                var writer: std.Io.Writer.Allocating = .init(alloc);
+                defer writer.deinit();
+
+                writer.writer.writeAll("Ghostty screenshot from ") catch |err| {
+                    log.warn("unable to add the prefix to the buffer: {t}", .{err});
+                    return;
+                };
+
+                dt.strftime(&writer.writer, "%Y-%m-%d %H:%M:%S %Z") catch |err| {
+                    log.warn("unable to format the time: {t}", .{err});
+                    return;
+                };
+                break :description writer.toOwnedSliceSentinel(0) catch |err| {
+                    log.warn("unable to convert the buffer to a slice: {t}", .{err});
+                    return;
+                };
+            };
+
+            const filename = filename: {
+                var writer: std.Io.Writer.Allocating = .init(alloc);
+                defer writer.deinit();
+
+                writer.writer.writeAll(description) catch |err| {
+                    log.warn("unable to add the filename to the buffer: {t}", .{err});
+                    return;
+                };
+
+                writer.writer.writeAll(".png") catch |err| {
+                    log.warn("unable to add the extension to the buffer: {t}", .{err});
+                    return;
+                };
+
+                break :filename writer.toOwnedSlice() catch |err| {
+                    log.warn("unable to convert the buffer to a slice: {t}", .{err});
+                    return;
+                };
+            };
+
+            break :x .{ filename, description };
+        };
+        defer alloc.free(screenshot_filename);
+        defer alloc.free(screenshot_description);
+
+        const screenshot_path = std.fs.path.joinZ(alloc, &.{ cache_dir, screenshot_filename }) catch |err| {
+            log.warn("unable to build path to snapshot file: {t}", .{err});
+            return;
+        };
+        defer alloc.free(screenshot_path);
+
+        const screenshot_uri = cache_uri: {
+            const uri: std.Uri = .{
+                .scheme = "file",
+                .host = .{
+                    .raw = "localhost",
+                },
+                .path = .{
+                    .raw = screenshot_path,
+                },
+            };
+            var writer: std.Io.Writer.Allocating = .init(alloc);
+            defer writer.deinit();
+            uri.writeToStream(
+                &writer.writer,
+                .{ .scheme = true, .authority = true, .path = true },
+            ) catch |err| {
+                log.warn("unable to write cache uri to buffer: {t}", .{err});
+                return;
+            };
+            break :cache_uri writer.toOwnedSliceSentinel(0) catch |err| {
+                log.warn("unable to copy screenshot uri to sentinel string: {t}", .{err});
+                return;
+            };
+        };
+        defer alloc.free(screenshot_uri);
+
+        const data = data: {
+            const snapshot = gtk.Snapshot.new();
+
+            gtk.Widget.virtual_methods.snapshot.call(
+                Class.parent,
+                self.as(Parent),
+                snapshot,
+            );
+
+            const node = snapshot.freeToNode() orelse {
+                log.warn("unable to take snapshot of surface", .{});
+                return;
+            };
+
+            const native = widget.getNative() orelse {
+                log.warn("unable to get native object for surface", .{});
+                return;
+            };
+            const native_renderer = native.getRenderer() orelse {
+                log.warn("unable to get renderer for native object", .{});
+                return;
+            };
+
+            var surface_rect: graphene.Rect = undefined;
+            _ = surface_rect.init(
+                0.0,
+                0.0,
+                @floatFromInt(widget.getWidth()),
+                @floatFromInt(widget.getHeight()),
+            );
+
+            const texture = native_renderer.renderTexture(node, &surface_rect);
+            defer texture.unref();
+
+            const bytes = texture.saveToPngBytes();
+            defer bytes.unref();
+
+            var size: usize = undefined;
+            const data = bytes.getData(&size) orelse {
+                log.warn("screenshot produced an empty image", .{});
+                return;
+            };
+            if (size == 0) {
+                log.warn("screenshot produced an empty image", .{});
+                return;
+            }
+
+            break :data alloc.dupeZ(u8, data[0..size]) catch return;
+        };
+        defer alloc.free(data);
+
+        {
+            var buf: [1024]u8 = undefined;
+            var file = std.fs.cwd().atomicFile(
+                screenshot_path,
+                .{
+                    .make_path = true,
+                    .write_buffer = &buf,
+                },
+            ) catch |err| {
+                log.warn("unable to open screenshot file: {t}", .{err});
+                return;
+            };
+            defer file.deinit();
+
+            const writer = &file.file_writer.interface;
+
+            writer.writeAll(data) catch |err| {
+                log.warn("unable to write image data to screenshot file: {t}", .{err});
+                return;
+            };
+            writer.flush() catch |err| {
+                log.warn("unable to flush image data to screenshot file: {t}", .{err});
+                return;
+            };
+
+            file.finish() catch |err| {
+                log.warn("unable to finish writing data to screenshot file: {t}", .{err});
+                return;
+            };
+        }
+
+        {
+            const recent_manager = gtk.RecentManager.getDefault();
+            const recent_data: gtk.RecentData = .{
+                .f_display_name = screenshot_description.ptr,
+                .f_description = screenshot_description.ptr,
+                .f_mime_type = @constCast("image/png"),
+                .f_app_name = @constCast("Ghostty"),
+                .f_app_exec = @constCast("ghostty"),
+                .f_groups = null,
+                .f_is_private = @intFromBool(false),
+            };
+            if (recent_manager.addFull(screenshot_uri.ptr, &recent_data) == 0) {
+                log.warn("unable to add snapshot to recent items", .{});
+            }
+        }
+
+        // This will send a "snapshot taken" toast and sound unless the user turns it off.
+        _ = self.as(gtk.Widget).activateAction("win.screenshot-taken", null);
+
+        switch (action) {
+            .copy_path => {
+                self.setClipboard(
+                    .standard,
+                    &.{
+                        .{ .mime = "text/plain", .data = screenshot_path },
+                    },
+                    false,
+                );
+            },
+            .paste_path => paste: {
+                const surface = self.core() orelse {
+                    log.warn("gobject surface is not associated with a core surface!", .{});
+                    break :paste;
+                };
+                _ = surface.performBindingAction(.{
+                    .text = screenshot_path,
+                }) catch |err| {
+                    log.warn("unable to paste snapshot path: {t}", .{err});
+                    break :paste;
+                };
+            },
+            .open => {
+                internal_os.open(alloc, .unknown, screenshot_path) catch |err| {
+                    log.warn("unable to open snapshot file: {t}", .{err});
+                };
+            },
+            .copy_image => {
+                self.setClipboard(
+                    .standard,
+                    &.{
+                        .{ .mime = "text/plain", .data = screenshot_path },
+                        .{ .mime = "image/png", .data = data },
+                    },
+                    false,
+                );
+            },
+        }
     }
 
     const C = Common(Self, Private);

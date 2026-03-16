@@ -3125,6 +3125,8 @@ keybind: Keybinds = .{},
 ///     to the clipboard.
 ///   - `config-reload` (default: true) - Show a notification when
 ///     the configuration is reloaded.
+///   - `screenshot-taken` (default: true) - Show a notification when
+///     a screenshot is taken. (Available since 1.3.0)
 ///
 /// To specify a notification to enable, specify the name of the notification.
 /// To specify a notification to disable, prefix the name with `no-`. For
@@ -3141,6 +3143,28 @@ keybind: Keybinds = .{},
 ///
 /// Available since: 1.1.0
 @"app-notifications": AppNotifications = .{},
+
+/// Control the in-app audio alerts that Ghostty plays.
+///
+/// Possible alerts are:
+///
+///   - `screenshot-taken` (default: true) - Play a "camera shutter" sound when a
+///     screenshot is taken. (Available since 1.3.0)
+///
+/// To specify an alert to enable, specify the name of the alert. To specify
+/// an alert to disable, prefix the name with `no-`. For example, to disable
+/// `screenshot-taken`, set this configuration to `no-screenshot-taken`. To enable
+/// it, set this configuration to `screenshot-taken`.
+///
+/// Multiple alerts can be enabled or disabled by separating them with a comma.
+///
+/// A value of "false" will disable all alerts. A value of "true" will enable
+/// all alerts.
+///
+/// This configuration only applies to GTK.
+///
+/// Available since: 1.3.0
+@"app-alerts": AppAlerts = .{},
 
 /// If anything other than false, fullscreen mode on macOS will not use the
 /// native fullscreen, but make the window fullscreen without animations and
@@ -9034,6 +9058,12 @@ pub const GtkTitlebarStyle = enum(c_int) {
 pub const AppNotifications = packed struct {
     @"clipboard-copy": bool = true,
     @"config-reload": bool = true,
+    @"screenshot-taken": bool = true,
+};
+
+/// See app-alerts
+pub const AppAlerts = packed struct {
+    @"screenshot-taken": bool = true,
 };
 
 /// See bell-features

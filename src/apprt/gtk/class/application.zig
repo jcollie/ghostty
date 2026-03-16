@@ -764,6 +764,7 @@ pub const Application = extern struct {
             .end_search => Action.endSearch(target),
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
+            .capture_screenshot => return Action.captureScreenshot(target, value),
 
             // Unimplemented
             .secure_input,
@@ -779,7 +780,6 @@ pub const Application = extern struct {
             .check_for_updates,
             .undo,
             .redo,
-            .capture_screenshot,
             => {
                 log.warn("unimplemented action={}", .{action});
                 return false;
@@ -2803,6 +2803,19 @@ const Action = struct {
                 core.rt_surface.gobj().keyTableAction(value) catch |err| {
                     log.warn("error handling key_table action: {}", .{err});
                 };
+                return true;
+            },
+        }
+    }
+
+    pub fn captureScreenshot(target: apprt.Target, value: apprt.Action.Value(.capture_screenshot)) bool {
+        switch (target) {
+            .app => {
+                log.warn("take_screenshot action to app is unexpected", .{});
+                return false;
+            },
+            .surface => |core| {
+                core.rt_surface.gobj().captureScreenshot(value);
                 return true;
             },
         }
