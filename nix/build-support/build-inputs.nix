@@ -13,6 +13,7 @@
   pkgs.expat
   pkgs.fontconfig
   pkgs.freetype
+  pkgs.graphene
   pkgs.harfbuzz
   pkgs.libpng
   pkgs.libxml2
