@@ -29,6 +29,8 @@ const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
+const media = @import("../media.zig");
+const build_info = @import("../build/info.zig");
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -374,6 +376,7 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
+            .init("screenshot-taken", actionScreenshotTaken, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2028,6 +2031,38 @@ pub const Window = extern struct {
         // TODO: accept the surface that toggled the command palette as a
         // parameter
         self.toggleInspector();
+    }
+
+    fn actionScreenshotTaken(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        const priv: *Private = self.private();
+
+        const toast = toast: {
+            const cfg = priv.config orelse break :toast true;
+            const config = cfg.get();
+            break :toast config.@"app-notifications".@"screenshot-taken";
+        };
+
+        const alert = toast: {
+            const cfg = priv.config orelse break :toast true;
+            const config = cfg.get();
+            break :toast config.@"app-alerts".@"screenshot-taken";
+        };
+
+        if (toast) {
+            self.addToast(i18n._("Screenshot taken"));
+        }
+
+        if (alert) {
+            // Play a "camera shutter" sound.
+            const resource = build_info.resource_path ++ "/camera-shutter.oga";
+
+            const media_file = media.fromResource(resource) orelse return;
+            media.playMediaFile(media_file, 1.0, true);
+        }
     }
 
     const C = Common(Self, Private);
