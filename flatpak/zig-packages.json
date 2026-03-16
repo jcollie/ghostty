@@ -174,10 +174,22 @@
     "sha256": "9e4cd20abe96e6c4c6ede9c3057108860126e7be2e2c3e35515476c250be1c13"
   },
   {
+    "type": "git",
+    "url": "https://gitlab.freedesktop.org/xdg/xdg-sound-theme.git",
+    "commit": "5bf2359c5e72408567310b7d7d31e88cf165247d",
+    "dest": "vendor/p/N-V-__8AAJt1BwCBmXebkHPnl0ESRzNfCWcSux-T5t3Bt2NA"
+  },
+  {
     "type": "archive",
     "url": "https://deps.files.ghostty.org/z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ.tar.gz",
     "dest": "vendor/p/z2d-0.10.0-j5P_Hu-6FgBsZNgwphIqh17jDnj8_yPtD8yzjO6PpHRQ",
     "sha256": "a83f977b19c08d26a7440c2be5921a3d8d5a421356e431552783d82f0848af61"
+  },
+  {
+    "type": "git",
+    "url": "https://github.com/rockorager/zeit",
+    "commit": "7ac64d72dbfb1a4ad549102e7d4e232a687d32d8",
+    "dest": "vendor/p/zeit-0.6.0-5I6bk36tAgATpSl9wjFmRPMqYN2Mn0JQHgIcRNcqDpJA"
   },
   {
     "type": "archive",
