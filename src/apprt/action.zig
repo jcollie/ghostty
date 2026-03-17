@@ -343,8 +343,8 @@ pub const Action = union(Key) {
     /// otherwise the terminal-set title.
     copy_title_to_clipboard,
 
-    /// Take a screenshot of the surface.
-    take_screenshot: Screenshot,
+    /// Capture a screenshot of the surface.
+    capture_screenshot: Screenshot,
 
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
@@ -413,7 +413,7 @@ pub const Action = union(Key) {
         search_selected,
         readonly,
         copy_title_to_clipboard,
-        take_screenshot,
+        capture_screenshot,
 
         test "ghostty.h Action.Key" {
             try lib.checkGhosttyHEnum(Key, "GHOSTTY_ACTION_");

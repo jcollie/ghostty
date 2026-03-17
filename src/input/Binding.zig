@@ -907,8 +907,8 @@ pub const Action = union(enum) {
     /// this will report performable as false.
     deactivate_all_key_tables,
 
-    /// Take screenshot of a surface.
-    take_screenshot: Screenshot,
+    /// Capture a screenshot of a surface.
+    capture_screenshot: Screenshot,
 
     /// Quit Ghostty.
     quit,
@@ -1388,7 +1388,7 @@ pub const Action = union(enum) {
             .deactivate_all_key_tables,
             .end_key_sequence,
             .crash,
-            .take_screenshot,
+            .capture_screenshot,
             => .surface,
 
             // These are less obvious surface actions. They're surface
