@@ -681,6 +681,29 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Put a little Ghostty in your terminal.",
         }},
 
+        .take_screenshot => comptime &.{
+            .{
+                .action = .{ .take_screenshot = .copy_path },
+                .title = "Take a Screenshot and Copy Path",
+                .description = "Take a screenshot of the active surface and copy the path to the image to the clipboard.",
+            },
+            .{
+                .action = .{ .take_screenshot = .paste_path },
+                .title = "Take a Screenshot and Paste Path",
+                .description = "Take a screenshot of the active surface and paste the path to the image.",
+            },
+            .{
+                .action = .{ .take_screenshot = .open },
+                .title = "Take a Screenshot and Open",
+                .description = "Take a screenshot of the active surface and open the image.",
+            },
+            .{
+                .action = .{ .take_screenshot = .copy_image },
+                .title = "Take a Screenshot and Copy the Image",
+                .description = "Take a screenshot of the active surface and copy the image to the clipboard.",
+            },
+        },
+
         // No commands because they're parameterized and there
         // aren't obvious values users would use. It is possible that
         // these may have commands in the future if there are very
