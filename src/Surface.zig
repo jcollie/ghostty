@@ -5871,6 +5871,17 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             screen.dirty.selection = true;
             try self.queueRender();
         },
+
+        .take_screenshot => |v| return try self.rt_app.performAction(
+            .{ .surface = self },
+            .take_screenshot,
+            switch (v) {
+                .copy_path => .copy_path,
+                .paste_path => .paste_path,
+                .open => .open,
+                .copy_image => .copy_image,
+            },
+        ),
     }
 
     return true;
