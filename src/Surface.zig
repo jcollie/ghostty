@@ -56,7 +56,9 @@ const max_active_key_tables = 8;
 
 /// Unique ID used to identify this surface for IPC purposes. It is
 /// exposed to the commands running in surfaces as the environment variable
-/// GHOSTTY_SURFACE.
+/// GHOSTTY_SURFACE. It must not be zero as zero is used to incicate a
+/// null value when communicating an ID over DBus as DBus does not allow
+/// null/maybe values.
 id: u64,
 
 /// Allocator
@@ -584,7 +586,14 @@ pub fn init(
     errdefer io_thread.deinit();
 
     self.* = .{
-        .id = std.crypto.random.int(u64),
+        .id = id: {
+            for (0..5) |_| {
+                const candidate = std.crypto.random.int(u64);
+                if (candidate == 0) continue;
+                break :id candidate;
+            }
+            @panic("unable to generate non-zero unique id for surface");
+        },
         .alloc = alloc,
         .app = app,
         .rt_app = rt_app,
