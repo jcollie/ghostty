@@ -335,6 +335,7 @@ pub const App = struct {
     ) (Allocator.Error || std.posix.WriteError || apprt.ipc.Errors)!bool {
         switch (action) {
             .new_window => return false,
+            .new_tab => return false,
         }
     }
 };
