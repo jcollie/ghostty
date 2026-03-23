@@ -123,6 +123,8 @@ test "desktop environment" {
         .linux, .freebsd => {
             var environ_map = try testing.environ.createMap(testing.allocator);
             defer environ_map.deinit();
+            _ = environ_map.orderedRemove("XDG_SESSION_DESKTOP");
+            _ = environ_map.orderedRemove("XDG_CURRENT_DESKTOP");
 
             try environ_map.put("XDG_SESSION_DESKTOP", "gnome");
             try testing.expectEqual(.gnome, desktopEnvironment(&environ_map));
