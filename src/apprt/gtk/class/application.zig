@@ -1299,6 +1299,8 @@ pub const Application = extern struct {
         // Set ourselves as the default application.
         gio.Application.setDefault(self.as(gio.Application));
 
+        self.registerDBusObjects(self.as(gio.Application).getDbusConnection());
+
         // The D-Bus connection is only valid after GApplication startup.
         self.openUri().setDbusConnection(
             self.as(gio.Application).getDbusConnection(),
@@ -1898,6 +1900,167 @@ pub const Application = extern struct {
             kind,
             url,
         ) catch |err| log.warn("unable to open url: {}", .{err});
+    }
+
+    const dbus_interface_info: gio.DBusInterfaceInfo = .{
+        .f_ref_count = -1,
+        .f_name = @constCast(("com.mitchellh.ghostty.Terminals"[0..]).ptr),
+        .f_methods = @constCast(&[_:null]?*gio.DBusMethodInfo{
+            @constCast(&gio.DBusMethodInfo{
+                .f_ref_count = -1,
+                .f_name = @constCast(("ListTerminals"[0..]).ptr),
+                .f_in_args = null,
+                .f_out_args = @constCast(&[_:null]?*gio.DBusArgInfo{
+                    @constCast(&gio.DBusArgInfo{
+                        .f_ref_count = -1,
+                        .f_name = @constCast(("terminals"[0..]).ptr),
+                        .f_signature = @constCast(("a(ttsss)"[0..]).ptr),
+                        .f_annotations = null,
+                    }),
+                    null,
+                }),
+                .f_annotations = null,
+            }),
+            null,
+        }),
+        .f_signals = null,
+        .f_properties = null,
+        .f_annotations = null,
+    };
+
+    const dbus_vtable: gio.DBusInterfaceVTable = .{
+        .f_method_call = dbusMethodCall,
+        .f_get_property = null,
+        .f_set_property = null,
+        .f_padding = undefined,
+    };
+
+    fn registerDBusObjects(self: *Self, dbus_: ?*gio.DBusConnection) void {
+        const dbus = dbus_ orelse {
+            log.warn("No DBus connection when trying to register objects!", .{});
+            return;
+        };
+
+        var err_: ?*glib.Error = null;
+        if (dbus.registerObject(
+            build_info.object_path,
+            @constCast(&dbus_interface_info),
+            @constCast(&dbus_vtable),
+            self,
+            dbusUserDataFree,
+            &err_,
+        ) == 0) {
+            if (err_) |err| {
+                defer err.free();
+                log.warn(
+                    "error registering dbus objects: {s}",
+                    .{err.f_message orelse "«unknown»"},
+                );
+            }
+        }
+        assert(err_ == null);
+    }
+
+    fn dbusUserDataFree(ud: ?*anyopaque) callconv(.c) void {
+        _ = ud;
+    }
+
+    fn dbusMethodCall(
+        dbus: *gio.DBusConnection,
+        sender_: ?[*:0]const u8,
+        object_path_: ?[*:0]const u8,
+        interface_name_: ?[*:0]const u8,
+        method_name_: ?[*:0]const u8,
+        parameters_: *glib.Variant,
+        invocation: *gio.DBusMethodInvocation,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        _ = dbus;
+
+        const self: *Self = @ptrCast(@alignCast(ud orelse return));
+
+        const sender = std.mem.sliceTo(
+            sender_ orelse {
+                invocation.returnDbusError("NoSender", "no sender");
+                return;
+            },
+            0,
+        );
+        log.warn("dbus sender: {s}", .{sender});
+
+        const object_path = std.mem.sliceTo(
+            object_path_ orelse {
+                invocation.returnDbusError("NoObjectPath", "no object path");
+                return;
+            },
+            0,
+        );
+        log.warn("dbus object path: {s}", .{object_path});
+
+        const interface_name = std.mem.sliceTo(
+            interface_name_ orelse {
+                invocation.returnDbusError("NoInterfaceName", "no interface name");
+                return;
+            },
+            0,
+        );
+        log.warn("dbus interface name: {s}", .{interface_name});
+
+        const method_name = std.mem.sliceTo(
+            method_name_ orelse {
+                invocation.returnDbusError("NoMethodName", "no method name");
+                return;
+            },
+            0,
+        );
+        log.warn("dbus method name: {s}", .{method_name});
+
+        if (std.mem.eql(u8, interface_name, "com.mitchellh.ghostty.Terminals")) {
+            self.dbusHandleTerminals(method_name, parameters_, invocation);
+            return;
+        }
+
+        invocation.returnDbusError("UnknownInterface", "unknown interface");
+    }
+
+    fn dbusHandleTerminals(self: *Self, method_name: [:0]const u8, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        if (std.mem.eql(u8, method_name, "ListTerminals")) {
+            self.dbusHandleListTerminals(parameters, invocation);
+            return;
+        }
+        invocation.returnDbusError("UnknownMethod", "unknown method");
+    }
+
+    fn dbusHandleListTerminals(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        _ = parameters;
+
+        const app = self.core();
+
+        const array_variant_type = glib.VariantType.new("a(ttsss)");
+        defer array_variant_type.free();
+        const struct_variant_type = glib.VariantType.new("(ttsss)");
+        defer struct_variant_type.free();
+
+        var arraybuilder: glib.VariantBuilder = undefined;
+        errdefer arraybuilder.clear();
+        arraybuilder.initStatic(array_variant_type);
+
+        for (app.surfaces.items) |rt_surface| {
+            const core_surface: *CoreSurface = rt_surface.core();
+            var structbuilder: glib.VariantBuilder = undefined;
+            errdefer structbuilder.clear();
+            structbuilder.initStatic(struct_variant_type);
+
+            structbuilder.addValue(glib.Variant.newUint64(core_surface.id));
+            structbuilder.addValue(glib.Variant.newUint64(core_surface.getProcessInfo(.foreground_pid) orelse 0));
+            structbuilder.addValue(glib.Variant.newString(core_surface.getProcessInfo(.tty_name) orelse ""));
+            structbuilder.addValue(glib.Variant.newString(rt_surface.getTitle() orelse ""));
+            structbuilder.addValue(glib.Variant.newString(rt_surface.getPwd() orelse ""));
+
+            arraybuilder.addValue(structbuilder.end());
+        }
+
+        invocation.returnValue(arraybuilder.end());
     }
 };
 
