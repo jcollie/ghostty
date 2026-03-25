@@ -2036,31 +2036,45 @@ pub const Application = extern struct {
 
         const app = self.core();
 
-        const array_variant_type = glib.VariantType.new("a(ttsss)");
-        defer array_variant_type.free();
-        const struct_variant_type = glib.VariantType.new("(ttsss)");
-        defer struct_variant_type.free();
+        const return_variant_type = glib.VariantType.new("(a(ttsss))");
+        defer return_variant_type.free();
 
-        var arraybuilder: glib.VariantBuilder = undefined;
-        errdefer arraybuilder.clear();
-        arraybuilder.initStatic(array_variant_type);
+        var returnbuilder: glib.VariantBuilder = undefined;
+        errdefer returnbuilder.clear();
+        returnbuilder.init(return_variant_type);
 
-        for (app.surfaces.items) |rt_surface| {
-            const core_surface: *CoreSurface = rt_surface.core();
-            var structbuilder: glib.VariantBuilder = undefined;
-            errdefer structbuilder.clear();
-            structbuilder.initStatic(struct_variant_type);
+        {
+            const array_variant_type = glib.VariantType.new("a(ttsss)");
+            defer array_variant_type.free();
 
-            structbuilder.addValue(glib.Variant.newUint64(core_surface.id));
-            structbuilder.addValue(glib.Variant.newUint64(core_surface.getProcessInfo(.foreground_pid) orelse 0));
-            structbuilder.addValue(glib.Variant.newString(core_surface.getProcessInfo(.tty_name) orelse ""));
-            structbuilder.addValue(glib.Variant.newString(rt_surface.getTitle() orelse ""));
-            structbuilder.addValue(glib.Variant.newString(rt_surface.getPwd() orelse ""));
+            const struct_variant_type = glib.VariantType.new("(ttsss)");
+            defer struct_variant_type.free();
 
-            arraybuilder.addValue(structbuilder.end());
+            var arraybuilder: glib.VariantBuilder = undefined;
+            errdefer arraybuilder.clear();
+            arraybuilder.init(array_variant_type);
+
+            for (app.surfaces.items) |rt_surface| {
+                const core_surface: *CoreSurface = rt_surface.core();
+                log.warn("adding surface {x:0>16}", .{core_surface.id});
+
+                var structbuilder: glib.VariantBuilder = undefined;
+                errdefer structbuilder.clear();
+                structbuilder.init(struct_variant_type);
+
+                structbuilder.addValue(glib.Variant.newUint64(core_surface.id));
+                structbuilder.addValue(glib.Variant.newUint64(core_surface.getProcessInfo(.foreground_pid) orelse 0));
+                structbuilder.addValue(glib.Variant.newString(core_surface.getProcessInfo(.tty_name) orelse ""));
+                structbuilder.addValue(glib.Variant.newString(rt_surface.getTitle() orelse ""));
+                structbuilder.addValue(glib.Variant.newString(rt_surface.getPwd() orelse ""));
+
+                arraybuilder.addValue(structbuilder.end());
+            }
+
+            returnbuilder.addValue(arraybuilder.end());
         }
 
-        invocation.returnValue(arraybuilder.end());
+        invocation.returnValue(returnbuilder.end());
     }
 };
 
