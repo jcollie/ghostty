@@ -4,6 +4,7 @@ const gio = @import("gio");
 const glib = @import("glib");
 
 const assert = @import("../../quirks.zig").inlineAssert;
+const WeakRef = @import("weak_ref.zig").WeakRef;
 
 const log = std.log.scoped(.gtk_dbus_object);
 
@@ -14,10 +15,12 @@ pub fn Object(comptime T: type) type {
         object_path: [:0]const u8,
         interfaces: []const InterfaceInfo,
 
+        /// Zig-friendly struct to define a DBus interface.
         pub const InterfaceInfo = struct {
             name: [:0]const u8,
             methods: []const MethodInfo,
 
+            /// Convert the Zig-friendly struct to the GObject struct needed by GIO.
             fn dbusInterfaceInfo(self: @This()) gio.DBusInterfaceInfo {
                 assert(@inComptime());
                 var var_ptrs: [self.methods.len:null]?*gio.DBusMethodInfo = @splat(null);
@@ -38,12 +41,14 @@ pub fn Object(comptime T: type) type {
             }
         };
 
+        /// Zig-friendly struct to define a DBus method.
         pub const MethodInfo = struct {
             name: [:0]const u8,
             in_args: []const ArgInfo,
             out_args: []const ArgInfo,
             handler: MethodHandler,
 
+            /// Convert the Zig-friendly struct to the GObject struct needed by GIO.
             fn dbusMethodInfo(self: @This()) gio.DBusMethodInfo {
                 assert(@inComptime());
                 return .{
@@ -74,10 +79,12 @@ pub fn Object(comptime T: type) type {
             }
         };
 
+        /// Zig-friendly struct to define a DBus method argument.
         pub const ArgInfo = struct {
             name: [:0]const u8,
             signature: [:0]const u8,
 
+            /// Convert the Zig-friendly struct to the GObject struct needed by GIO.
             fn dbusArgInfo(self: @This()) gio.DBusArgInfo {
                 assert(@inComptime());
                 return .{
@@ -89,8 +96,10 @@ pub fn Object(comptime T: type) type {
             }
         };
 
+        /// Function signature for a method handler.
         pub const MethodHandler = fn (*T, *glib.Variant, *gio.DBusMethodInvocation) void;
 
+        /// Zig ztructure for handling incoming DBus method calls.
         pub const Handler = struct {
             objects: []const DBusObject,
             map: ObjectNameMap,
@@ -106,40 +115,25 @@ pub fn Object(comptime T: type) type {
 
             const MethodNameMap = std.StaticStringMap(*const MethodHandler);
 
-            pub fn RegistrationIDs(comptime objects: []const Self) type {
+            /// Convert the Zig-friendly objects to GIO objects and a map to
+            /// make finding the appropriate handler function for a method
+            /// easier.
+            pub fn init(comptime zig_objects: []const Self) Self.Handler {
                 assert(@inComptime());
 
-                var c = 0;
-
-                for (objects) |object| {
-                    c += object.interfaces.len;
-                }
-
-                const count = c;
-
-                return struct {
-                    registration_ids: [count]c_uint,
-
-                    pub const init: @This() = @splat(0);
-                };
-            }
-
-            pub fn init(comptime objects: []const Self) Self.Handler {
-                assert(@inComptime());
-
-                const dbus_objects: []const DBusObject = i: {
+                const dbus_objects: []const DBusObject = dbo: {
                     var count = 0;
 
-                    for (objects) |object| {
+                    for (zig_objects) |object| {
                         count += object.interfaces.len;
                     }
 
-                    var dbi: [count]DBusObject = undefined;
+                    var var_objects: [count]DBusObject = undefined;
                     var index = 0;
 
-                    for (objects) |object| {
+                    for (zig_objects) |object| {
                         for (object.interfaces) |info| {
-                            dbi[index] = .{
+                            var_objects[index] = .{
                                 .object_path = object.object_path,
                                 .interface_info = info.dbusInterfaceInfo(),
                             };
@@ -148,19 +142,17 @@ pub fn Object(comptime T: type) type {
                         }
                     }
 
-                    const d = dbi;
-                    break :i &d;
+                    const const_objects = var_objects;
+                    break :dbo &const_objects;
                 };
 
                 const InterfaceNameMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const InterfaceNameMap });
-
                 const MethodNameMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const MethodNameMap });
-
                 const MethodHandlerMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const MethodHandler });
 
                 const map = object_name_map: {
-                    var object_name_kvs: [objects.len]InterfaceNameMapTuple = undefined;
-                    for (objects, 0..) |object, i| {
+                    var object_name_kvs: [zig_objects.len]InterfaceNameMapTuple = undefined;
+                    for (zig_objects, 0..) |object, i| {
                         object_name_kvs[i] = .{
                             object.object_path,
                             interface_name_map: {
@@ -199,48 +191,61 @@ pub fn Object(comptime T: type) type {
             pub const UserData = struct {
                 alloc: std.mem.Allocator,
                 handler: *const Self.Handler,
-                parent: *T,
+                parent: WeakRef(T),
 
                 pub fn new(alloc: std.mem.Allocator, handler: *const Self.Handler, parent: *T) std.mem.Allocator.Error!*UserData {
                     const userdata = try alloc.create(UserData);
                     userdata.* = .{
                         .alloc = alloc,
                         .handler = handler,
-                        .parent = parent.ref(),
+                        .parent = .empty,
                     };
+                    userdata.parent.set(parent);
                     return userdata;
                 }
 
                 pub fn deinit(self: *UserData) void {
                     const alloc = self.alloc;
-                    self.parent.unref();
+                    self.parent.set(null);
                     alloc.destroy(self);
                 }
             };
 
-            pub fn register(self: *const Self.Handler, alloc: std.mem.Allocator, parent: *T, dbus: *gio.DBusConnection) std.mem.Allocator.Error![]c_uint {
+            /// Register all of our objects at run-time. Returns a slice of
+            /// registration IDs that will be used to unregister the objects
+            /// when shutting down.
+            pub fn register(
+                self: *const Self.Handler,
+                alloc: std.mem.Allocator,
+                parent: *T,
+                dbus: *gio.DBusConnection,
+            ) std.mem.Allocator.Error![]c_uint {
+                assert(!@inComptime());
+
                 const registration_ids = try alloc.alloc(c_uint, self.objects.len);
                 errdefer alloc.free(registration_ids);
 
-                for (self.objects, 0..) |*d, i| {
-                    registration_ids[i] = 0;
-                    const userdata: *UserData = try .new(alloc, self, parent);
+                for (self.objects, 0..) |*dbus_object, i| {
+                    const user_data: *UserData = try .new(alloc, self, parent);
                     var err_: ?*glib.Error = null;
-                    const registration_id = dbus.registerObject(
-                        d.object_path,
-                        @constCast(&d.interface_info),
+                    registration_ids[i] = dbus.registerObject(
+                        dbus_object.object_path,
+                        @constCast(&dbus_object.interface_info),
                         @constCast(&dbus_vtable),
-                        userdata,
+                        user_data,
                         userDataFree,
                         &err_,
                     );
-                    registration_ids[i] = registration_id;
-                    if (registration_id == 0) {
+                    if (registration_ids[i] == 0) {
                         if (err_) |err| {
                             defer err.free();
                             log.warn(
-                                "error registering dbus objects: {s}",
-                                .{err.f_message orelse "«unknown»"},
+                                "error registering dbus interface {?s} for {s}: {s}",
+                                .{
+                                    dbus_object.interface_info.f_name,
+                                    dbus_object.object_path,
+                                    err.f_message orelse "«unknown error»",
+                                },
                             );
                         }
                         continue;
@@ -251,8 +256,8 @@ pub fn Object(comptime T: type) type {
                 return registration_ids;
             }
 
+            /// Used to free the user data that we allocated at registration time.
             fn userDataFree(ud: ?*anyopaque) callconv(.c) void {
-                log.warn("user data free", .{});
                 const userdata: *Self.Handler.UserData = @ptrCast(@alignCast(ud orelse return));
                 userdata.deinit();
             }
@@ -264,9 +269,10 @@ pub fn Object(comptime T: type) type {
                 .f_padding = undefined,
             };
 
+            /// Handle an incoming method call from DBus.
             fn methodCall(
                 _: *gio.DBusConnection,
-                sender_: ?[*:0]const u8,
+                _: ?[*:0]const u8,
                 object_path_: ?[*:0]const u8,
                 interface_name_: ?[*:0]const u8,
                 method_name_: ?[*:0]const u8,
@@ -276,13 +282,10 @@ pub fn Object(comptime T: type) type {
             ) callconv(.c) void {
                 const userdata: *Self.Handler.UserData = @ptrCast(@alignCast(ud orelse return));
 
-                const sender = std.mem.span(
-                    sender_ orelse {
-                        invocation.returnDbusError("NoSender", "no sender");
-                        return;
-                    },
-                );
-                log.warn("dbus sender: {s}", .{sender});
+                const parent = userdata.parent.get() orelse {
+                    log.warn("no parent object set", .{});
+                    return;
+                };
 
                 const object_path = std.mem.span(
                     object_path_ orelse {
@@ -290,21 +293,20 @@ pub fn Object(comptime T: type) type {
                         return;
                     },
                 );
-                log.warn("dbus object path: {s}", .{object_path});
+
                 const interface_name = std.mem.span(
                     interface_name_ orelse {
                         invocation.returnDbusError("NoInterfaceName", "no interface name");
                         return;
                     },
                 );
-                log.warn("dbus interface name: {s}", .{interface_name});
+
                 const method_name = std.mem.span(
                     method_name_ orelse {
                         invocation.returnDbusError("NoMethodName", "no method name");
                         return;
                     },
                 );
-                log.warn("dbus method name: {s}", .{method_name});
 
                 const object_path_map = userdata.handler.map.get(object_path) orelse {
                     invocation.returnDbusError("InvalidObjectPath", "invalid object path");
@@ -317,11 +319,11 @@ pub fn Object(comptime T: type) type {
                 };
 
                 const handler = interface_name_map.get(method_name) orelse {
-                    invocation.returnDbusError("InvalidInterfaceName", "invalid interface name");
+                    invocation.returnDbusError("InvalidMethodName", "invalid method name");
                     return;
                 };
 
-                handler(userdata.parent, parameters, invocation);
+                handler(parent, parameters, invocation);
             }
         };
     };

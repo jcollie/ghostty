@@ -437,9 +437,6 @@ pub const Application = extern struct {
     /// ensures that our memory is cleaned up properly.
     pub fn deinit(self: *Self) void {
         const alloc = self.allocator();
-
-        self.unregisterDBusObjects(alloc);
-
         const priv: *Private = self.private();
         priv.config.unref();
         priv.winproto.deinit();
@@ -492,6 +489,10 @@ pub const Application = extern struct {
         defer {
             // Ensure our timer source is removed
             self.stopQuitTimer();
+
+            // This needs to run before we shut down the application so that we
+            // have a DBus connection to work with.
+            self.unregisterDBusObjects(self.core().alloc);
 
             // Sync any remaining settings
             gio.Settings.sync();
@@ -1963,6 +1964,7 @@ pub const Application = extern struct {
         const priv: *Private = self.private();
         const dbus_registration_ids = priv.dbus_registration_ids orelse return;
         for (dbus_registration_ids) |dbus_registration_id| {
+            log.warn("unregister {d}", .{dbus_registration_id});
             _ = dbus.unregisterObject(dbus_registration_id);
         }
         alloc.free(dbus_registration_ids);
