@@ -5,7 +5,7 @@ const glib = @import("glib");
 
 const assert = @import("../../quirks.zig").inlineAssert;
 
-const log = std.log.scoped(.dbushelper);
+const log = std.log.scoped(.gtk_dbus_object);
 
 pub fn Object(comptime T: type) type {
     return struct {
@@ -25,6 +25,7 @@ pub fn Object(comptime T: type) type {
                     const m = method.dbusMethodInfo();
                     var_ptrs[i] = @constCast(&m);
                 }
+                var_ptrs[self.methods.len] = null;
                 const const_ptrs = var_ptrs;
                 return .{
                     .f_ref_count = -1,
@@ -36,8 +37,6 @@ pub fn Object(comptime T: type) type {
                 };
             }
         };
-
-        pub const MethodHandler = fn (*T, *glib.Variant, *gio.DBusMethodInvocation) void;
 
         pub const MethodInfo = struct {
             name: [:0]const u8,
@@ -54,17 +53,19 @@ pub fn Object(comptime T: type) type {
                         var var_ptrs: [self.in_args.len:null]?*gio.DBusArgInfo = @splat(null);
                         for (self.in_args, 0..) |arg, i| {
                             const a = arg.dbusArgInfo();
-                            var_ptrs[i] = @constCast(a);
+                            var_ptrs[i] = @constCast(&a);
                         }
+                        var_ptrs[self.in_args.len] = null;
                         const const_ptrs = var_ptrs;
                         break :args @constCast(&const_ptrs);
                     } else null,
                     .f_out_args = if (self.out_args.len > 0) args: {
-                        var var_ptrs: [self.in_args.len:null]?*gio.DBusArgInfo = @splat(null);
+                        var var_ptrs: [self.out_args.len:null]?*gio.DBusArgInfo = @splat(null);
                         for (self.out_args, 0..) |arg, i| {
                             const a = arg.dbusArgInfo();
                             var_ptrs[i] = @constCast(&a);
                         }
+                        var_ptrs[self.out_args.len] = null;
                         const const_ptrs = var_ptrs;
                         break :args @constCast(&const_ptrs);
                     } else null,
@@ -88,14 +89,40 @@ pub fn Object(comptime T: type) type {
             }
         };
 
-        pub const DBusObject = struct {
-            object_path: [:0]const u8,
-            interface_info: gio.DBusInterfaceInfo,
-        };
+        pub const MethodHandler = fn (*T, *glib.Variant, *gio.DBusMethodInvocation) void;
 
         pub const Handler = struct {
             objects: []const DBusObject,
             map: ObjectNameMap,
+
+            pub const DBusObject = struct {
+                object_path: [:0]const u8,
+                interface_info: gio.DBusInterfaceInfo,
+            };
+
+            const ObjectNameMap = std.StaticStringMap(*const InterfaceNameMap);
+
+            const InterfaceNameMap = std.StaticStringMap(*const MethodNameMap);
+
+            const MethodNameMap = std.StaticStringMap(*const MethodHandler);
+
+            pub fn RegistrationIDs(comptime objects: []const Self) type {
+                assert(@inComptime());
+
+                var c = 0;
+
+                for (objects) |object| {
+                    c += object.interfaces.len;
+                }
+
+                const count = c;
+
+                return struct {
+                    registration_ids: [count]c_uint,
+
+                    pub const init: @This() = @splat(0);
+                };
+            }
 
             pub fn init(comptime objects: []const Self) Self.Handler {
                 assert(@inComptime());
@@ -125,30 +152,36 @@ pub fn Object(comptime T: type) type {
                     break :i &d;
                 };
 
+                const InterfaceNameMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const InterfaceNameMap });
+
+                const MethodNameMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const MethodNameMap });
+
+                const MethodHandlerMapTuple = std.meta.Tuple(&[_]type{ []const u8, *const MethodHandler });
+
                 const map = object_name_map: {
-                    var object_name_kvs: [objects.len]std.meta.Tuple(&[_]type{ []const u8, *const InterfaceNameMap }) = undefined;
+                    var object_name_kvs: [objects.len]InterfaceNameMapTuple = undefined;
                     for (objects, 0..) |object, i| {
                         object_name_kvs[i] = .{
                             object.object_path,
                             interface_name_map: {
-                                var insterface_name_kvs: [object.interfaces.len]std.meta.Tuple(&[_]type{ []const u8, *const MethodHandlerMap }) = undefined;
+                                var interface_name_kvs: [object.interfaces.len]MethodNameMapTuple = undefined;
                                 for (object.interfaces, 0..) |interface, j| {
-                                    insterface_name_kvs[j] = .{
+                                    interface_name_kvs[j] = .{
                                         interface.name,
                                         method_handler_map: {
-                                            var method_handler_kvs: [interface.methods.len]std.meta.Tuple(&[_]type{ []const u8, *const MethodHandler }) = undefined;
+                                            var method_handler_kvs: [interface.methods.len]MethodHandlerMapTuple = undefined;
                                             for (interface.methods, 0..) |method, k| {
                                                 method_handler_kvs[k] = .{
                                                     method.name,
                                                     method.handler,
                                                 };
                                             }
-                                            const method_handler_map: MethodHandlerMap = .initComptime(method_handler_kvs);
+                                            const method_handler_map: MethodNameMap = .initComptime(method_handler_kvs);
                                             break :method_handler_map &method_handler_map;
                                         },
                                     };
                                 }
-                                const interface_name_map: InterfaceNameMap = .initComptime(insterface_name_kvs);
+                                const interface_name_map: InterfaceNameMap = .initComptime(interface_name_kvs);
                                 break :interface_name_map &interface_name_map;
                             },
                         };
@@ -167,30 +200,42 @@ pub fn Object(comptime T: type) type {
                 alloc: std.mem.Allocator,
                 handler: *const Self.Handler,
                 parent: *T,
-            };
 
-            pub fn register(self: *const Self.Handler, alloc: std.mem.Allocator, parent: *T, dbus_: ?*gio.DBusConnection) !void {
-                const dbus = dbus_ orelse {
-                    log.warn("No DBus connection when trying to register objects!", .{});
-                    return;
-                };
-
-                for (self.objects) |d| {
+                pub fn new(alloc: std.mem.Allocator, handler: *const Self.Handler, parent: *T) std.mem.Allocator.Error!*UserData {
                     const userdata = try alloc.create(UserData);
                     userdata.* = .{
                         .alloc = alloc,
-                        .handler = self,
+                        .handler = handler,
                         .parent = parent.ref(),
                     };
+                    return userdata;
+                }
+
+                pub fn deinit(self: *UserData) void {
+                    const alloc = self.alloc;
+                    self.parent.unref();
+                    alloc.destroy(self);
+                }
+            };
+
+            pub fn register(self: *const Self.Handler, alloc: std.mem.Allocator, parent: *T, dbus: *gio.DBusConnection) std.mem.Allocator.Error![]c_uint {
+                const registration_ids = try alloc.alloc(c_uint, self.objects.len);
+                errdefer alloc.free(registration_ids);
+
+                for (self.objects, 0..) |*d, i| {
+                    registration_ids[i] = 0;
+                    const userdata: *UserData = try .new(alloc, self, parent);
                     var err_: ?*glib.Error = null;
-                    if (dbus.registerObject(
+                    const registration_id = dbus.registerObject(
                         d.object_path,
                         @constCast(&d.interface_info),
                         @constCast(&dbus_vtable),
                         userdata,
-                        dbusUserDataFree,
+                        userDataFree,
                         &err_,
-                    ) == 0) {
+                    );
+                    registration_ids[i] = registration_id;
+                    if (registration_id == 0) {
                         if (err_) |err| {
                             defer err.free();
                             log.warn(
@@ -198,30 +243,28 @@ pub fn Object(comptime T: type) type {
                                 .{err.f_message orelse "«unknown»"},
                             );
                         }
+                        continue;
                     }
                     assert(err_ == null);
                 }
+
+                return registration_ids;
             }
 
-            fn dbusUserDataFree(ud: ?*anyopaque) callconv(.c) void {
-                const userdata: *UserData = @ptrCast(@alignCast(ud orelse return));
-                const alloc = userdata.alloc;
-                userdata.parent.unref();
-                alloc.destroy(userdata);
+            fn userDataFree(ud: ?*anyopaque) callconv(.c) void {
+                log.warn("user data free", .{});
+                const userdata: *Self.Handler.UserData = @ptrCast(@alignCast(ud orelse return));
+                userdata.deinit();
             }
-
-            const ObjectNameMap = std.StaticStringMap(*const InterfaceNameMap);
-            const InterfaceNameMap = std.StaticStringMap(*const MethodHandlerMap);
-            const MethodHandlerMap = std.StaticStringMap(*const MethodHandler);
 
             pub const dbus_vtable: gio.DBusInterfaceVTable = .{
-                .f_method_call = dbusMethodCall,
+                .f_method_call = Self.Handler.methodCall,
                 .f_get_property = null,
                 .f_set_property = null,
                 .f_padding = undefined,
             };
 
-            fn dbusMethodCall(
+            fn methodCall(
                 _: *gio.DBusConnection,
                 sender_: ?[*:0]const u8,
                 object_path_: ?[*:0]const u8,
@@ -231,7 +274,7 @@ pub fn Object(comptime T: type) type {
                 invocation: *gio.DBusMethodInvocation,
                 ud: ?*anyopaque,
             ) callconv(.c) void {
-                const userdata: *UserData = @ptrCast(@alignCast(ud orelse return));
+                const userdata: *Self.Handler.UserData = @ptrCast(@alignCast(ud orelse return));
 
                 const sender = std.mem.span(
                     sender_ orelse {
@@ -248,24 +291,13 @@ pub fn Object(comptime T: type) type {
                     },
                 );
                 log.warn("dbus object path: {s}", .{object_path});
-
-                const object_path_map = userdata.handler.map.get(object_path) orelse {
-                    invocation.returnDbusError("InvalidObjectPath", "invalid object path");
-                    return;
-                };
-
                 const interface_name = std.mem.span(
                     interface_name_ orelse {
                         invocation.returnDbusError("NoInterfaceName", "no interface name");
                         return;
                     },
                 );
-
-                const interface_name_map = object_path_map.get(interface_name) orelse {
-                    invocation.returnDbusError("InvalidInterfaceName", "invalid interface name");
-                    return;
-                };
-
+                log.warn("dbus interface name: {s}", .{interface_name});
                 const method_name = std.mem.span(
                     method_name_ orelse {
                         invocation.returnDbusError("NoMethodName", "no method name");
@@ -273,6 +305,16 @@ pub fn Object(comptime T: type) type {
                     },
                 );
                 log.warn("dbus method name: {s}", .{method_name});
+
+                const object_path_map = userdata.handler.map.get(object_path) orelse {
+                    invocation.returnDbusError("InvalidObjectPath", "invalid object path");
+                    return;
+                };
+
+                const interface_name_map = object_path_map.get(interface_name) orelse {
+                    invocation.returnDbusError("InvalidInterfaceName", "invalid interface name");
+                    return;
+                };
 
                 const handler = interface_name_map.get(method_name) orelse {
                     invocation.returnDbusError("InvalidInterfaceName", "invalid interface name");

@@ -218,6 +218,8 @@ pub const Application = extern struct {
 
         open_uri: OpenURI = undefined,
 
+        dbus_registration_ids: ?[]c_uint = null,
+
         pub var offset: c_int = 0;
     };
 
@@ -402,6 +404,7 @@ pub const Application = extern struct {
             .global_shortcuts = gobject.ext.newInstance(GlobalShortcuts, .{}),
             .saved_language = saved_language,
             .open_uri = .init(rt_app),
+            .dbus_registration_ids = null,
         };
 
         // Signals
@@ -434,6 +437,9 @@ pub const Application = extern struct {
     /// ensures that our memory is cleaned up properly.
     pub fn deinit(self: *Self) void {
         const alloc = self.allocator();
+
+        self.unregisterDBusObjects(alloc);
+
         const priv: *Private = self.private();
         priv.config.unref();
         priv.winproto.deinit();
@@ -1301,8 +1307,10 @@ pub const Application = extern struct {
 
         // The D-Bus connection is only valid after GApplication startup.
         if (self.as(gio.Application).getDbusConnection()) |dbus| {
-            self.registerDBusObjects(self.core().alloc, dbus);
+            self.registerDBusObjects(self.core().alloc);
             self.openUri().setDbusConnection(dbus);
+        } else {
+            log.warn("unable to get dbus connection!", .{});
         }
 
         // Setup our event loop
@@ -1931,10 +1939,34 @@ pub const Application = extern struct {
 
     const dbus_handler: DBusObject.Handler = .init(dbus_objects);
 
-    fn registerDBusObjects(self: *Self, alloc: Allocator, dbus_: ?*gio.DBusConnection) void {
-        dbus_handler.register(alloc, self, dbus_) catch |err| {
-            log.warn("unable to register dbus objects err={t}", .{err});
+    fn registerDBusObjects(self: *Self, alloc: Allocator) void {
+        const dbus = self.as(gio.Application).getDbusConnection() orelse {
+            log.warn("unable to get dbus connection", .{});
+            return;
         };
+
+        const priv: *Private = self.private();
+
+        const dbus_registration_ids = dbus_handler.register(alloc, self, dbus) catch |err| {
+            log.warn("unable to register dbus objects err={t}", .{err});
+            return;
+        };
+        priv.dbus_registration_ids = dbus_registration_ids;
+
+        for (dbus_registration_ids) |id| {
+            log.warn("registration_id: {}", .{id});
+        }
+    }
+
+    fn unregisterDBusObjects(self: *Self, alloc: Allocator) void {
+        const dbus = self.as(gio.Application).getDbusConnection() orelse return;
+        const priv: *Private = self.private();
+        const dbus_registration_ids = priv.dbus_registration_ids orelse return;
+        for (dbus_registration_ids) |dbus_registration_id| {
+            _ = dbus.unregisterObject(dbus_registration_id);
+        }
+        alloc.free(dbus_registration_ids);
+        priv.dbus_registration_ids = null;
     }
 
     fn dbusHandleListTerminals(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
