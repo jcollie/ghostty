@@ -8,6 +8,8 @@ const glib = @import("glib");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
+const zf = @import("zf");
+
 const build_config = @import("../../../build_config.zig");
 const build_info = @import("../build/info.zig");
 const state = &@import("../../../global.zig").state;
@@ -1934,6 +1936,95 @@ pub const Application = extern struct {
                         },
                     },
                 },
+                .{
+                    .name = "org.gnome.Shell.SearchProvider2",
+                    .methods = &.{
+                        .{
+                            .name = "GetInitialResultSet",
+                            .in_args = &.{
+                                .{
+                                    .name = "terms",
+                                    .signature = "as",
+                                },
+                            },
+                            .out_args = &.{
+                                .{
+                                    .name = "results",
+                                    .signature = "as",
+                                },
+                            },
+                            .handler = searchGetInitialResultSet,
+                        },
+                        .{
+                            .name = "GetSubsearchResultSet",
+                            .in_args = &.{
+                                .{
+                                    .name = "previous_results",
+                                    .signature = "as",
+                                },
+                                .{
+                                    .name = "terms",
+                                    .signature = "as",
+                                },
+                            },
+                            .out_args = &.{
+                                .name = "results",
+                                .signature = "as",
+                            },
+                            .handler = searchGetSubserachResultSet,
+                        },
+                        .{
+                            .name = "GetResultMetas",
+                            .in_args = &.{
+                                .{
+                                    .name = "identifiers",
+                                    .signature = "as",
+                                },
+                            },
+                            .out_args = &.{
+                                .{
+                                    .name = "metas",
+                                    .signature = "aa{sv}",
+                                },
+                            },
+                            .handler = searchGetResultMetas,
+                        },
+                        .{
+                            .name = "ActivateResult",
+                            .in_args = &.{
+                                .{
+                                    .name = "identifier",
+                                    .signature = "s",
+                                },
+                                .{
+                                    .name = "terms",
+                                    .signature = "as",
+                                },
+                                .{
+                                    .name = "timestamp",
+                                    .signature = "u",
+                                },
+                            },
+                            .out_args = &.{},
+                            .handler = searchActivateResult,
+                        },
+                        .{
+                            .name = "LaunchSearch",
+                            .in_args = &.{
+                                .{
+                                    .name = "terms",
+                                    .signature = "as",
+                                },
+                                .{
+                                    .name = "timestamp",
+                                    .signature = "u",
+                                },
+                            },
+                            .out_args = &.{},
+                            .handler = searchLaunchSearch,
+                        },
+                    },
+                },
             },
         },
     };
@@ -2015,6 +2106,98 @@ pub const Application = extern struct {
         }
 
         invocation.returnValue(returnbuilder.end());
+    }
+
+    fn searchGetInitialResultSet(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        var arena: std.heap.ArenaAllocator = .init(self.core().alloc);
+        defer arena.deinit();
+        const alloc = arena.allocator();
+
+        const as_variant_type = glib.VariantType.new("(as)");
+        defer as_variant_type.free();
+
+        if (glib.Variant.isOfType(parameters, as_variant_type) == 0) {
+            log.warn("parameter is of type '{s}', not '{s}'", .{
+                parameters.getTypeString(),
+                as_variant_type.peekString()[0..as_variant_type.getStringLength()],
+            });
+            return;
+        }
+
+        var terms: std.ArrayList([]const u8) = .empty;
+
+        var terms_it_: ?*glib.VariantIter = null;
+        defer if (terms_it_) |arguments_it| arguments_it.free();
+        parameters.get("(as)", &terms_it_);
+
+        const terms_it = terms_it_ orelse {
+            invocation.returnDbusError("NoTerms", "no terms supplied");
+            return;
+        };
+
+        while (terms_it.nextValue()) |value| {
+            defer value.unref();
+            const len: usize = undefined;
+            const buf = value.getString(&len);
+            const term = alloc.dupe(u8, buf[0..len]) catch return;
+            terms.append(alloc, term) catch return;
+        }
+
+        const return_variant_type = glib.VariantType.new("(as)");
+        defer return_variant_type.free();
+
+        var returnbuilder: glib.VariantBuilder = undefined;
+        errdefer returnbuilder.clear();
+        returnbuilder.init(return_variant_type);
+
+        const result_variant_type = glib.VariantType.new("as");
+        defer result_variant_type.free();
+
+        var resultbuilder: glib.VariantBuilder = undefined;
+        errdefer resultbuilder.clear();
+        resultbuilder.init(return_variant_type);
+
+        {
+            for (self.core().surfaces) |rt_surface| {
+                const core_surface = rt_surface.core();
+                const match = match: {
+                    const title = rt_surface.getTitle();
+                    if (zf.rank(title, terms.items, .{ .to_lower = true, .plain = true })) |_| break :match true;
+
+                    const pwd = rt_surface.getPwd();
+                    if (zf.rank(pwd, terms.items, .{ .to_lower = true, .plain = true })) |_| break :match true;
+                };
+
+                if (!match) continue;
+
+                var buf: [18]u8 = undefined;
+                std.fmt.bufPrint(&buf, "0x{x:0>16}", .{core_surface.id});
+            }
+        }
+    }
+
+    fn searchGetSubsearchResultSet(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        _ = self;
+        _ = parameters;
+        _ = invocation;
+    }
+
+    fn searchGetResultMetas(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        _ = self;
+        _ = parameters;
+        _ = invocation;
+    }
+
+    fn searchActivateResult(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        _ = self;
+        _ = parameters;
+        _ = invocation;
+    }
+
+    fn searchLaunchSearch(self: *Self, parameters: *glib.Variant, invocation: *gio.DBusMethodInvocation) void {
+        _ = self;
+        _ = parameters;
+        _ = invocation;
     }
 };
 
