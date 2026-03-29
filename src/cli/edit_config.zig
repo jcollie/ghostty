@@ -84,7 +84,7 @@ fn runInner(alloc: Allocator, stderr: *std.Io.Writer) !u8 {
             \\
             \\
         ,
-            .{path},
+            .{},
         );
         // Output the path using the OSC8 sequence so that it is linked.
         try stderr.print(
