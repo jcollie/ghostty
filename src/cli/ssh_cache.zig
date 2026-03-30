@@ -6,6 +6,7 @@ const Action = @import("ghostty.zig").Action;
 const Duration = @import("../config.zig").Config.Duration;
 pub const Entry = @import("ssh-cache/Entry.zig");
 pub const DiskCache = @import("ssh-cache/DiskCache.zig");
+const global_state = &(@import("../global.zig")).state;
 
 pub const Options = struct {
     clear: bool = false,
@@ -62,6 +63,12 @@ pub fn run(alloc_gpa: Allocator) !u8 {
 
     var opts: Options = .{};
     defer opts.deinit();
+
+    {
+        var iter = try args.argsIterator(alloc_gpa, global_state.results.args);
+        defer iter.deinit();
+        try args.parse(Options, alloc_gpa, &opts, &iter);
+    }
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_file: std.fs.File = .stdout();

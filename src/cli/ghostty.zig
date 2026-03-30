@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const help_strings = @import("help_strings");
 const actionpkg = @import("action.zig");
-const SpecialCase = actionpkg.SpecialCase;
+const ActionParser = actionpkg.ActionParser;
 
 const list_fonts = @import("list_fonts.zig");
 const help = @import("help.zig");
@@ -81,13 +81,13 @@ pub const Action = enum {
     // Use IPC to tell the running Ghostty to toggle the quick terminal.
     @"toggle-quick-terminal",
 
-    pub fn detectSpecialCase(arg: []const u8) ?SpecialCase(Action) {
+    pub const ParseResult = ActionParser(@This());
+
+    pub fn detectSpecialCase(arg: []const u8) ?ParseResult.SpecialCase {
         // If we see a "-e" and we haven't seen a command yet, then
         // we are done looking for commands. This special case enables
-        // `ghostty -e ghostty +command`. If we've seen a command we
-        // still want to keep looking because
-        // `ghostty +command -e +command` is invalid.
-        if (std.mem.eql(u8, arg, "-e")) return .abort_if_no_action;
+        // `ghostty -e ghostty +command`.
+        if (std.mem.eql(u8, arg, "-e")) return .abort;
 
         // Special case, --version always outputs the version no
         // matter what, no matter what other args exist.
@@ -218,8 +218,13 @@ test "parse action none" {
         "--a=42 --b --b-f=false",
     );
     defer iter.deinit();
-    const action = try actionpkg.detectIter(Action, &iter);
-    try testing.expect(action == null);
+    const result: Action.ParseResult = try .parse(alloc, &iter);
+    defer result.deinit(alloc);
+    try testing.expect(result.action == null);
+    try testing.expectEqual(3, result.args.len);
+    try testing.expectEqualStrings("--a=42", result.args[0]);
+    try testing.expectEqualStrings("--b", result.args[1]);
+    try testing.expectEqualStrings("--b-f=false", result.args[2]);
 }
 
 test "parse action version" {
@@ -232,8 +237,13 @@ test "parse action version" {
             "--a=42 --b --b-f=false --version",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("--b", result.args[1]);
+        try testing.expectEqualStrings("--b-f=false", result.args[2]);
     }
 
     {
@@ -242,18 +252,35 @@ test "parse action version" {
             "--version --a=42 --b --b-f=false",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("--b", result.args[1]);
+        try testing.expectEqualStrings("--b-f=false", result.args[2]);
     }
 
     {
+        var args: std.ArrayList([:0]const u8) = .empty;
+        defer {
+            for (args.items) |arg| alloc.free(arg);
+            args.deinit(alloc);
+        }
         var iter = try std.process.ArgIteratorGeneral(.{}).init(
             alloc,
             "--c=84 --d --version --a=42 --b --b-f=false",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(5, result.args.len);
+        try testing.expectEqualStrings("--c=84", result.args[0]);
+        try testing.expectEqualStrings("--d", result.args[1]);
+        try testing.expectEqualStrings("--a=42", result.args[2]);
+        try testing.expectEqualStrings("--b", result.args[3]);
+        try testing.expectEqualStrings("--b-f=false", result.args[4]);
     }
 }
 
@@ -267,8 +294,13 @@ test "parse action plus" {
             "--a=42 --b --b-f=false +version",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("--b", result.args[1]);
+        try testing.expectEqualStrings("--b-f=false", result.args[2]);
     }
 
     {
@@ -277,8 +309,13 @@ test "parse action plus" {
             "+version --a=42 --b --b-f=false",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("--b", result.args[1]);
+        try testing.expectEqualStrings("--b-f=false", result.args[2]);
     }
 
     {
@@ -287,8 +324,15 @@ test "parse action plus" {
             "--c=84 --d +version --a=42 --b --b-f=false",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action.? == .version);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action.? == .version);
+        try testing.expectEqual(5, result.args.len);
+        try testing.expectEqualStrings("--c=84", result.args[0]);
+        try testing.expectEqualStrings("--d", result.args[1]);
+        try testing.expectEqualStrings("--a=42", result.args[2]);
+        try testing.expectEqualStrings("--b", result.args[3]);
+        try testing.expectEqualStrings("--b-f=false", result.args[4]);
     }
 }
 
@@ -302,8 +346,13 @@ test "parse action plus ignores -e" {
             "--a=42 -e +version",
         );
         defer iter.deinit();
-        const action = try actionpkg.detectIter(Action, &iter);
-        try testing.expect(action == null);
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expect(result.action == null);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("-e", result.args[1]);
+        try testing.expectEqualStrings("+version", result.args[2]);
     }
 
     {
@@ -312,9 +361,69 @@ test "parse action plus ignores -e" {
             "+list-fonts --a=42 -e +version",
         );
         defer iter.deinit();
-        try testing.expectError(
-            actionpkg.DetectError.MultipleActions,
-            actionpkg.detectIter(Action, &iter),
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expectEqual(Action.@"list-fonts", result.action.?);
+        try testing.expectEqual(3, result.args.len);
+        try testing.expectEqualStrings("--a=42", result.args[0]);
+        try testing.expectEqualStrings("-e", result.args[1]);
+        try testing.expectEqualStrings("+version", result.args[2]);
+    }
+
+    {
+        var iter = try std.process.ArgIteratorGeneral(.{}).init(
+            alloc,
+            "+list-fonts --a=42 +version -e hello",
         );
+        defer iter.deinit();
+        try testing.expectError(error.MultipleActions, Action.ParseResult.parse(alloc, &iter));
+    }
+}
+
+test "parse action help" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    {
+        var iter = try std.process.ArgIteratorGeneral(.{}).init(
+            alloc,
+            "--help",
+        );
+        defer iter.deinit();
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expectEqual(Action.help, result.action.?);
+        try testing.expectEqual(0, result.args.len);
+    }
+
+    {
+        var iter = try std.process.ArgIteratorGeneral(.{}).init(
+            alloc,
+            "+list-fonts --help",
+        );
+        defer iter.deinit();
+        const result: Action.ParseResult = try .parse(alloc, &iter);
+        defer result.deinit(alloc);
+        try testing.expectEqual(Action.@"list-fonts", result.action.?);
+        try testing.expectEqual(1, result.args.len);
+        try testing.expectEqualStrings("--help", result.args[0]);
+    }
+
+    {
+        var iter = try std.process.ArgIteratorGeneral(.{}).init(
+            alloc,
+            "+list-fonts --help +version",
+        );
+        defer iter.deinit();
+        try testing.expectError(error.MultipleActions, Action.ParseResult.parse(alloc, &iter));
+    }
+
+    {
+        var iter = try std.process.ArgIteratorGeneral(.{}).init(
+            alloc,
+            "+list-fonts --help --help",
+        );
+        defer iter.deinit();
+        try testing.expectError(error.MultipleFallbackActions, Action.ParseResult.parse(alloc, &iter));
     }
 }
