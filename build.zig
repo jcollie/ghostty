@@ -3,6 +3,8 @@ const assert = std.debug.assert;
 const builtin = @import("builtin");
 const buildpkg = @import("src/build/main.zig");
 
+const c_deps = @import("src/build/c_deps.zig");
+
 /// App version from build.zig.zon.
 const app_zon_version = @import("build.zig.zon").version;
 
@@ -325,12 +327,20 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt,
             .filters = test_filters,
         });
+        try c_deps.add(b, .ghostty_vt_h, mod.vt, &config, .{
+            .target = config.baselineTarget(),
+            .optimize = .Debug,
+        });
         const mod_vt_test_run = b.addRunArtifact(mod_vt_test);
         test_lib_vt_step.dependOn(&mod_vt_test_run.step);
 
         const mod_vt_c_test = b.addTest(.{
             .root_module = mod.vt_c,
             .filters = test_filters,
+        });
+        try c_deps.add(b, .ghostty_vt_h, mod.vt_c, &config, .{
+            .target = config.baselineTarget(),
+            .optimize = .Debug,
         });
         const mod_vt_c_test_run = b.addRunArtifact(mod_vt_c_test);
         test_lib_vt_step.dependOn(&mod_vt_c_test_run.step);
