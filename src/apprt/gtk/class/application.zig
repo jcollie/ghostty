@@ -1798,7 +1798,7 @@ pub const Application = extern struct {
         };
 
         if (surface_) |surface| {
-            if (Action.newTab(
+            if (!Action.newTab(
                 .{
                     .surface = surface,
                 },
