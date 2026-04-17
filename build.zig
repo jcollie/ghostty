@@ -327,7 +327,7 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt,
             .filters = test_filters,
         });
-        try c_deps.add(b, .ghostty_vt_h, mod.vt, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", mod.vt, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });
@@ -338,7 +338,7 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt_c,
             .filters = test_filters,
         });
-        try c_deps.add(b, .ghostty_vt_h, mod.vt_c, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", mod.vt_c, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });

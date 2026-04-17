@@ -3,8 +3,8 @@ const std = @import("std");
 const Config = @import("Config.zig");
 
 pub const CDeps = enum {
-    ghostty_h,
-    ghostty_vt_h,
+    @"ghostty-h",
+    @"ghostty-vt-h",
 };
 
 const Key = struct {
@@ -61,7 +61,7 @@ pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const 
 
     const value = modules.get(key) orelse value: {
         const value = switch (dep) {
-            .ghostty_h => v: {
+            .@"ghostty-h" => v: {
                 // Verify our internal libghostty header.
                 const ghostty_h = b.addTranslateC(.{
                     .root_source_file = b.path("include/ghostty.h"),
@@ -71,7 +71,7 @@ pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const 
                 break :v ghostty_h.createModule();
             },
 
-            .ghostty_vt_h => v: {
+            .@"ghostty-vt-h" => v: {
                 // Verify our libghostty-vt header.
                 const ghostty_vt_h = b.addTranslateC(.{
                     .root_source_file = b.path("include/ghostty/vt.h"),
