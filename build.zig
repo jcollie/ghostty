@@ -320,7 +320,7 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt,
             .filters = test_filters,
         });
-        try c_deps.add(b, .ghostty_vt_h, mod.vt, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", mod.vt, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });
@@ -331,7 +331,7 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt_c,
             .filters = test_filters,
         });
-        try c_deps.add(b, .ghostty_vt_h, mod.vt_c, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", mod.vt_c, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });
@@ -359,11 +359,11 @@ pub fn build(b: *std.Build) !void {
         if (config.emit_test_exe) b.installArtifact(test_exe);
         _ = try deps.add(test_exe);
 
-        try c_deps.add(b, .ghostty_h, test_exe.root_module, &config, .{
+        try c_deps.add(b, .@"ghostty-h", test_exe.root_module, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });
-        try c_deps.add(b, .ghostty_vt_h, test_exe.root_module, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", test_exe.root_module, &config, .{
             .target = config.baselineTarget(),
             .optimize = .Debug,
         });
