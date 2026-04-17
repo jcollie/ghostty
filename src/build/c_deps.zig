@@ -87,8 +87,5 @@ pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const 
         break :value value;
     };
 
-    module.addImport(switch (dep) {
-        .ghostty_h => "ghostty-h",
-        .ghostty_vt_h => "ghostty-vt-h",
-    }, value);
+    module.addImport(@tagName(dep), value);
 }
