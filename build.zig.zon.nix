@@ -360,6 +360,7 @@ in
         name = "xdg-sound-theme";
         url = "git+https://gitlab.freedesktop.org/xdg/xdg-sound-theme.git#5bf2359c5e72408567310b7d7d31e88cf165247d";
         hash = "sha256-2ashujcBXPJSM7F7v8S3QgJKblV1tee8MjLq9Bh4GWo=";
+        unpack = true;
       };
     }
     {
@@ -377,6 +378,7 @@ in
         name = "zeit";
         url = "git+https://github.com/rockorager/zeit#7ac64d72dbfb1a4ad549102e7d4e232a687d32d8";
         hash = "sha256-CDYwSqx0xA3Xx7/eDCtP0lHbheIScPwnffV2nxzJ/mU=";
+        unpack = true;
       };
     }
     {
