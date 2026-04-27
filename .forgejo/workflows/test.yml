@@ -99,7 +99,7 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
-      - uses: https://git.ocjtech.us/jeff/attic-cache.git@f974d0570032700234d5da27850e2d4404dd8591
+      - uses: https://git.ocjtech.us/jeff/attic-cache.git@c3a5912e61d7ab87a578d711d254c5b77b64e5d5
         with:
           server: ${{ vars.ATTIC_SERVER }}
           endpoint: ${{ vars.ATTIC_ENDPOINT }}
@@ -135,7 +135,7 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
-      - uses: https://git.ocjtech.us/jeff/attic-cache.git@f974d0570032700234d5da27850e2d4404dd8591
+      - uses: https://git.ocjtech.us/jeff/attic-cache.git@c3a5912e61d7ab87a578d711d254c5b77b64e5d5
         with:
           server: ${{ vars.ATTIC_SERVER }}
           endpoint: ${{ vars.ATTIC_ENDPOINT }}
