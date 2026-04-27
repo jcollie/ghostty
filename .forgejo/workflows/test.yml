@@ -1,0 +1,78 @@
+on:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
+
+name: Test
+
+# We only want the latest commit to test for any non-main ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name != 'main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Determines whether other jobs should be skipped. Modify this if there
+  # are other fast skip conditions, and add it as an output. Then modify
+  # other tests `needs/if` to check them. Document the outputs.
+  skip:
+    if: github.repository == 'jeff/ghostty'
+    runs-on: ubuntu-latest
+    outputs:
+      # 'true' when all changed files are non-code (e.g. only VOUCHED.td),
+      # signaling that all other jobs can be skipped entirely.
+      skip: ${{ steps.determine.outputs.skip }}
+      # Path-based filters to gate specific linter/formatter jobs.
+      actions_pins: ${{ steps.filter_any.outputs.actions_pins }}
+      blueprints: ${{ steps.filter_any.outputs.blueprints }}
+      macos: ${{ steps.filter_any.outputs.macos }}
+      nix: ${{ steps.filter_any.outputs.nix }}
+      shell: ${{ steps.filter_any.outputs.shell }}
+      zig: ${{ steps.filter_any.outputs.zig }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter_every
+        with:
+          token: ""
+          predicate-quantifier: "every"
+          filters: |
+            code:
+              - '**'
+              - '!.github/VOUCHED.td'
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter_any
+        with:
+          token: ""
+          filters: |
+            macos:
+              - '.swiftlint.yml'
+              - 'macos/**'
+            actions_pins:
+              - '.github/workflows/**'
+              - '.github/pinact.yml'
+            shell:
+              - '**/*.sh'
+              - '**/*.bash'
+            nix:
+              - 'nix/**'
+              - '*.nix'
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'default.nix'
+              - 'shell.nix'
+            zig:
+              - '**/*.zig'
+              - 'build.zig*'
+            blueprints:
+              - 'src/apprt/gtk/**/*.blp'
+              - 'nix/build-support/check-blueprints.sh'
+
+      - id: determine
+        name: Determine skip
+        run: |
+          if [ "${{ steps.filter_every.outputs.code }}" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
