@@ -77,6 +77,50 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+  test:
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    needs: skip
+    runs-on: ubuntu-latest
+    outputs:
+      zig_version: ${{ steps.zig.outputs.version }}
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Get required Zig version
+        id: zig
+        run: |
+          echo "version=$(sed -n -E 's/^\s*\.?minimum_zig_version\s*=\s*"([^"]+)".*/\1/p' build.zig.zon)" >> $GITHUB_OUTPUT
+
+      # - name: Setup Cache
+      #   uses: namespacelabs/nscloud-cache-action@15799a6b54e5765f85b2aac25b3f0df43ed571c0 # v1.4.3
+      #   with:
+      #     path: |
+      #       /nix
+      #       /zig
+
+      # Install Nix and use that to run our tests so our environment matches exactly.
+      - uses: https://github.com/cachix/install-nix-action@ab739621df7a23f52766f9ccc97f38da6b7af14f # v31.10.5
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      # - uses: cachix/cachix-action@1eb2ef646ac0255473d23a5907ad7b04ce94065c # v17
+      #   with:
+      #     name: ghostty
+      #     authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: test
+        run: nix develop -c zig build -Dapp-runtime=none test
+
+      - name: Test GTK Build
+        run: nix develop -c zig build -Dapp-runtime=gtk -Demit-docs -Demit-webdata
+
+      # This relies on the cache being populated by the commands above.
+      - name: Test System Build
+        run: nix develop -c zig build --system ${ZIG_GLOBAL_CACHE_DIR}/p
+
   build-linux:
     strategy:
       fail-fast: false
