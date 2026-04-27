@@ -78,8 +78,8 @@ jobs:
           fi
 
   test:
-    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
-    needs: skip
+    # if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    # needs: skip
     runs-on: ubuntu-latest
     outputs:
       zig_version: ${{ steps.zig.outputs.version }}
