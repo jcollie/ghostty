@@ -7,6 +7,7 @@ const Action = @import("ghostty.zig").Action;
 const DiskCache = @import("ssh_cache.zig").DiskCache;
 const internal_os = @import("../os/main.zig");
 const ghostty_terminfo = @import("../terminfo/main.zig").ghostty;
+const global_state = &(@import("../global.zig")).state;
 
 const log = std.log.scoped(.ssh);
 
@@ -181,7 +182,7 @@ pub fn run(alloc_gpa: Allocator) !u8 {
     defer opts.deinit();
 
     {
-        var iter = try cli_args.argsIterator(alloc_gpa);
+        var iter = try cli_args.argsIterator(alloc_gpa, global_state.results.args);
         defer iter.deinit();
         try cli_args.parse(Options, alloc_gpa, &opts, &iter);
     }
