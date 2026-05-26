@@ -2110,10 +2110,10 @@ pub const Window = extern struct {
 
         if (alert) {
             // Play a "camera shutter" sound.
-            const resource = build_info.resource_path ++ "/camera-shutter.oga";
+            // const resource = build_info.resource_path ++ "/camera-shutter.oga";
 
-            const media_file = media.fromResource(resource) orelse return;
-            media.playMediaFile(media_file, 1.0, true);
+            // const media_file = media.fromResource(resource) orelse return;
+            // media.playMediaFile(media_file, 1.0, true);
         }
     }
 
