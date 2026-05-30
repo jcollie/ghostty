@@ -88,7 +88,7 @@ pub fn run(alloc_gpa: Allocator) !u8 {
     var query: ?[]const u8 = null;
     var flags: std.ArrayList([]const u8) = .empty;
     {
-        var iter = try args.argsIterator(alloc_gpa);
+        var iter = try args.argsIterator(alloc_gpa, global_state.results.args);
         defer iter.deinit();
         while (iter.next()) |arg| {
             const is_host_flag = std.mem.startsWith(u8, arg, "--host=");
