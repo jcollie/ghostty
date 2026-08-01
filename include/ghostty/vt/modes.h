@@ -59,7 +59,7 @@ extern "C" {
  * @{
  */
 #define GHOSTTY_MODE_DECCKM           (ghostty_mode_new(1, false))   /**< Cursor keys */
-#define GHOSTTY_MODE_CURSOR_KEYS GHOSTTY_MODE_DECCCKM
+#define GHOSTTY_MODE_CURSOR_KEYS GHOSTTY_MODE_DECCKM
 #define GHOSTTY_MODE_132_COLUMN       (ghostty_mode_new(3, false))   /**< 132/80 column mode */
 #define GHOSTTY_MODE_SLOW_SCROLL      (ghostty_mode_new(4, false))   /**< Slow scroll */
 #define GHOSTTY_MODE_REVERSE_COLORS   (ghostty_mode_new(5, false))   /**< Reverse video */
@@ -104,7 +104,7 @@ extern "C" {
 #define GHOSTTY_MODE_ALT_SCREEN       (ghostty_mode_new(1047, false)) /**< Alternate screen */
 #define GHOSTTY_MODE_SAVE_CURSOR      (ghostty_mode_new(1048, false)) /**< Save cursor (DECSC) */
 #define GHOSTTY_MODE_ALT_SCREEN_SAVE  (ghostty_mode_new(1049, false)) /**< Alt screen + save cursor + clear */
-#define GHOSTTY_MODE_ALT_SCREEN_SAVE_CURSOR_CLEAR_ENTER GHOSTTY_ALT_SCREEN_SAVE
+#define GHOSTTY_MODE_ALT_SCREEN_SAVE_CURSOR_CLEAR_ENTER GHOSTTY_MODE_ALT_SCREEN_SAVE
 #define GHOSTTY_MODE_BRACKETED_PASTE  (ghostty_mode_new(2004, false)) /**< Bracketed paste mode */
 #define GHOSTTY_MODE_SYNC_OUTPUT      (ghostty_mode_new(2026, false)) /**< Synchronized output */
 #define GHOSTTY_MODE_SYNCHRONIZED_OUTPUT GHOSTTY_MODE_SYNC_OUTPUT
