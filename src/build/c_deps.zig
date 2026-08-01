@@ -44,8 +44,18 @@ pub const Options = struct {
     optimize: ?std.builtin.OptimizeMode = null,
 };
 
+var _translate_c_dep: ?*std.Build.Dependency = null;
+
 /// Add the specified C dependency to the given module.
 pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const Config, options: Options) !void {
+    const translate_c = b.lazyImport(@This(), "translate_c") orelse return;
+    const translate_c_dep = d1: {
+        if (_translate_c_dep) |d2| break :d1 d2;
+        const d3 = b.lazyDependency("translate_c", .{}) orelse return;
+        _translate_c_dep = d3;
+        break :d1 d3;
+    };
+
     const target = options.target orelse config.target;
     const optimize = options.optimize orelse config.optimize;
 
@@ -63,23 +73,34 @@ pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const 
         const value = switch (dep) {
             .@"ghostty-h" => v: {
                 // Verify our internal libghostty header.
-                const ghostty_h = b.addTranslateC(.{
-                    .root_source_file = b.path("include/ghostty.h"),
+                const translated: translate_c.Translator = .init(translate_c_dep, .{
+                    .c_source_file = b.addWriteFiles().add(
+                        "ghostty_h_c.h",
+                        \\#include <ghostty.h>
+                        ,
+                    ),
                     .target = target,
                     .optimize = optimize,
+                    .link_libc = true,
                 });
-                break :v ghostty_h.createModule();
+                translated.addSystemIncludePath(b.path("include"));
+                break :v translated.mod;
             },
 
             .@"ghostty-vt-h" => v: {
                 // Verify our libghostty-vt header.
-                const ghostty_vt_h = b.addTranslateC(.{
-                    .root_source_file = b.path("include/ghostty/vt.h"),
+                const translated: translate_c.Translator = .init(translate_c_dep, .{
+                    .c_source_file = b.addWriteFiles().add(
+                        "ghostty_vt_h_c.h",
+                        \\#include <ghostty/vt.h>
+                        ,
+                    ),
                     .target = target,
                     .optimize = optimize,
+                    .link_libc = true,
                 });
-                ghostty_vt_h.addIncludePath(b.path("include"));
-                break :v ghostty_vt_h.createModule();
+                translated.addSystemIncludePath(b.path("include"));
+                break :v translated.mod;
             },
         };
 
