@@ -27,7 +27,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_config);
-        internal.add(webgen_config);
+        internal.add(webgen_config.root_module);
 
         {
             const buildconfig = config: {
@@ -59,7 +59,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_actions);
-        internal.add(webgen_actions);
+        internal.add(webgen_actions.root_module);
 
         {
             const buildconfig = config: {
@@ -91,7 +91,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_commands);
-        internal.add(webgen_commands);
+        internal.add(webgen_commands.root_module);
 
         {
             const buildconfig = config: {
