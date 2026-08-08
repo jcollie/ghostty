@@ -4,6 +4,7 @@ const GhosttyWebdata = @This();
 
 const std = @import("std");
 const SharedDeps = @import("SharedDeps.zig");
+const internal = @import("internal.zig");
 
 steps: []*std.Build.Step,
 
@@ -26,6 +27,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_config);
+        internal.add(webgen_config);
 
         {
             const buildconfig = config: {
@@ -57,6 +59,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_actions);
+        internal.add(webgen_actions);
 
         {
             const buildconfig = config: {
@@ -88,6 +91,7 @@ pub fn init(
             }),
         });
         deps.help_strings.addImport(webgen_commands);
+        internal.add(webgen_commands);
 
         {
             const buildconfig = config: {
