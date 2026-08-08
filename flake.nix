@@ -9,7 +9,8 @@
     # We are currently on nixpkgs-unstable to get Zig 0.16 for our package.nix,
     # Gnome 50/Gtk 4.22, and fontconfig 2.18.
     #
-    nixpkgs.url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.zst";
+    # nixpkgs.url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.zst";
+    nixpkgs.url = "github:NixOS/nixpkgs/staging-next";
 
     # Used for shell.nix
     flake-compat = {
