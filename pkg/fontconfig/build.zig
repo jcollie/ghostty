@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_zon = @import("build.zig.zon");
 const NativeTargetInfo = std.zig.system.NativeTargetInfo;
 
 pub fn build(b: *std.Build) !void {
@@ -87,6 +88,14 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
 
     var flags: std.ArrayList([]const u8) = .empty;
     defer flags.deinit(b.allocator);
+
+    const version = try std.SemanticVersion.parse(build_zon.version);
+    try flags.appendSlice(b.allocator, &.{
+        b.fmt("-DFC_VERSION_MAJOR={d}", .{version.major}),
+        b.fmt("-DFC_VERSION_MINOR={d}", .{version.minor}),
+        b.fmt("-DFC_VERSION_MICRO={d}", .{version.patch}),
+    });
+
     try flags.appendSlice(b.allocator, &.{
         "-DHAVE_DIRENT_H",
         "-DHAVE_FCNTL_H",
@@ -101,6 +110,7 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
         "-DHAVE_RAND",
         //"-DHAVE_RANDOM_R",
         "-DHAVE_VPRINTF",
+        "-DHAVE_VSNPRINTF",
 
         "-DHAVE_FT_GET_BDF_PROPERTY",
         "-DHAVE_FT_GET_PS_FONT_INFO",
@@ -165,9 +175,11 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
             "-DHAVE__MKTEMP_S",
             "-DHAVE_MMAP",
             "-DHAVE_PTHREAD",
+            "-DHAVE_NEWLOCALE",
             "-DHAVE_RANDOM",
             "-DHAVE_RAND_R",
             "-DHAVE_READLINK",
+            "-DHAVE_USELOCALE",
             "-DHAVE_SYS_MOUNT_H",
             "-DHAVE_SYS_STATVFS_H",
 
@@ -200,6 +212,8 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
     // Freetype2
     _ = b.systemIntegrationOption("freetype", .{}); // So it shows up in help
     if (freetype_enabled) {
+        // Value-tested (#if/#elif) by upstream so it must be =1.
+        try flags.append(b.allocator, "-DENABLE_FREETYPE=1");
         if (b.systemIntegrationOption("freetype", .{})) {
             lib.root_module.linkSystemLibrary("freetype2", dynamic_link_opts);
         } else {
@@ -254,6 +268,13 @@ fn buildLib(b: *std.Build, module: *std.Build.Module, options: anytype) !*std.Bu
             "fontconfig",
             .{ .include_extensions = &.{".h"} },
         );
+
+        // Upstream only ships fontconfig.h.in; we generate fontconfig.h
+        // into our override directory.
+        lib.installHeader(
+            b.path("override/include/fontconfig/fontconfig.h"),
+            "fontconfig/fontconfig.h",
+        );
     }
 
     b.installArtifact(lib);
@@ -272,6 +293,7 @@ const srcs: []const []const u8 = &.{
     "src/fccache.c",
     "src/fccfg.c",
     "src/fccharset.c",
+    "src/fcconffile.c",
     "src/fccompat.c",
     "src/fcdbg.c",
     "src/fcdefault.c",
@@ -279,6 +301,7 @@ const srcs: []const []const u8 = &.{
     "src/fcformat.c",
     "src/fcfreetype.c",
     "src/fcfs.c",
+    "src/fcgenericalias.c",
     "src/fcptrlist.c",
     "src/fchash.c",
     "src/fcinit.c",
