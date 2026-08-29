@@ -1929,11 +1929,11 @@ pub const Surface = extern struct {
 
         // Initialize our GLArea. We only set the values we can't set
         // in our blueprint file.
-        const gl_area = priv.gl_area;
-        gl_area.setRequiredVersion(
-            renderer.OpenGL.MIN_VERSION_MAJOR,
-            renderer.OpenGL.MIN_VERSION_MINOR,
-        );
+        // const gl_area = priv.gl_area;
+        // gl_area.setRequiredVersion(
+        //     renderer.OpenGL.MIN_VERSION_MAJOR,
+        //     renderer.OpenGL.MIN_VERSION_MINOR,
+        // );
 
         // Initialize our config
         self.propConfig(undefined, null);
@@ -4928,7 +4928,7 @@ const Clipboard = struct {
             // attached.
             .kitty_read => |kitty| {
                 const clipboard = get(
-                    self.private().gl_area.as(gtk.Widget),
+                    self.private().render_surface.as(gtk.Widget),
                     kitty.location,
                 ) orelse {
                     surface.denyClipboardRequest(req.*);
