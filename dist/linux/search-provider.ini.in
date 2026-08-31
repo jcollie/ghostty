@@ -1,0 +1,10 @@
+[Shell Search Provider]
+DesktopId=@APPID@.desktop
+BusName=@APPID@
+ObjectPath=@OBJPATH@/SearchProvider
+Version=2
+# Ghostty's search results are the terminals that are currently open, so
+# there is nothing to show if we aren't already running. Setting this to
+# false stops GNOME Shell from D-Bus activating us just because someone
+# started typing in the overview.
+AutoStart=false
