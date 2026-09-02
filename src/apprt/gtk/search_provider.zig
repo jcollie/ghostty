@@ -15,6 +15,29 @@
 //! behavior we want: there are no terminals to find if we're not running,
 //! and typing in the overview shouldn't launch a terminal in the background.
 //!
+//! ## Focus stealing prevention
+//!
+//! `ActivateResult` and `LaunchSearch` are handed the timestamp of the
+//! interaction that picked the result, and we pass it down to
+//! `gtk_window_present_with_time` so that the window manager can tell that
+//! the focus change was asked for by the user. Without it the request
+//! looks unsolicited and gets refused.
+//!
+//! On Wayland that timestamp is unfortunately useless. GTK's Wayland
+//! backend ignores the timestamp entirely and instead asks the compositor
+//! to mint an xdg-activation token, using the seat's last implicit grab
+//! serial to prove that we're acting on a user interaction. We don't have
+//! one: the interaction that ran the search went to GNOME Shell, not to
+//! us. Mutter therefore refuses to move the focus and flags the window as
+//! demanding attention instead, which surfaces as a "Ghostty is ready"
+//! notification that the user has to click.
+//!
+//! There is no way around this from inside the app. `SearchProvider2` has
+//! no way to pass an activation token, which is what a Wayland compositor
+//! wants, and the timestamp it does pass predates Wayland. So on GNOME
+//! Wayland activating a result raises a notification rather than the
+//! terminal.
+//!
 //! ## Testing
 //!
 //! The interface can be exercised with `gdbus` without involving GNOME
@@ -55,7 +78,9 @@
 //! ```
 //!
 //! Activate a result, which should focus that surface. The final argument
-//! is the timestamp, which we ignore:
+//! is the timestamp of the interaction that picked the result; a zero here
+//! means "no timestamp", which is what makes a hand-rolled call like this
+//! one look unsolicited to the window manager:
 //!
 //! ```
 //! gdbus call --session \
@@ -272,7 +297,10 @@ fn methodCall(
     if (std.mem.eql(u8, method, "ActivateResult")) {
         const identifier = parameters.getChildValue(0);
         defer identifier.unref();
-        if (parseId(identifier)) |id| presentSurface(id);
+        const timestamp = parameters.getChildValue(2);
+        defer timestamp.unref();
+
+        if (parseId(identifier)) |id| presentSurface(id, @intCast(timestamp.getUint32()));
         invocation.returnValue(null);
         return;
     }
@@ -282,9 +310,14 @@ fn methodCall(
         // do is focus the first thing we would have matched.
         const terms = parameters.getChildValue(0);
         defer terms.unref();
+        const timestamp = parameters.getChildValue(1);
+        defer timestamp.unref();
 
         var results: [max_results]u64 = undefined;
-        if (search(terms, &results) > 0) presentSurface(results[0]);
+        if (search(terms, &results) > 0) presentSurface(
+            results[0],
+            @intCast(timestamp.getUint32()),
+        );
         invocation.returnValue(null);
         return;
     }
@@ -391,8 +424,8 @@ fn returnResultSet(
         array.init(as);
 
         for (results[0..count]) |id| {
-            var buf: [32]u8 = undefined;
-            const str = std.fmt.bufPrintZ(&buf, "{d}", .{id}) catch continue;
+            var buf: [17]u8 = undefined;
+            const str = std.fmt.bufPrintZ(&buf, "{x:0>16}", .{id}) catch continue;
             array.addValue(glib.Variant.newString(str.ptr));
         }
 
@@ -489,24 +522,30 @@ fn addDictEntry(
     builder.close();
 }
 
-/// Parse a result ID (a surface ID rendered as decimal) back into a
-/// surface ID. Returns null if it isn't one of ours.
+/// Parse a result ID (a surface ID rendered as hex) back into a surface
+/// ID. Returns null if it isn't one of ours.
 fn parseId(identifier: *glib.Variant) ?u64 {
     const str = std.mem.span(identifier.getString(null));
-    return std.fmt.parseInt(u64, str, 10) catch null;
+    return std.fmt.parseInt(u64, str, 16) catch null;
 }
 
-/// Focus the given surface by reusing the application action that desktop
-/// notifications already use.
-fn presentSurface(id: u64) void {
-    const parameter = glib.Variant.newUint64(id);
-    _ = parameter.refSink();
-    defer parameter.unref();
-
-    Application.default().as(gio.ActionGroup).activateAction(
-        "present-surface",
-        parameter,
-    );
+/// Focus the surface with the given ID. Does nothing if the surface has
+/// been closed since we handed out its ID.
+///
+/// `timestamp` is the one GNOME Shell gave us for the interaction that
+/// picked this result. We can't go through the `present-surface` action
+/// that desktop notifications use because that action has no way to carry
+/// it, and without it a window manager is within its rights to refuse to
+/// change the focus. See `Surface.present`.
+fn presentSurface(id: u64, timestamp: c_uint) void {
+    const app = Application.default();
+    for (app.core().surfaces.items) |rt_surface| {
+        const surface = rt_surface.gobj();
+        const core_surface = surface.core() orelse continue;
+        if (core_surface.id != id) continue;
+        surface.present(timestamp);
+        return;
+    }
 }
 
 //---------------------------------------------------------------

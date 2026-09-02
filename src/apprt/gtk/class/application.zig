@@ -2974,7 +2974,7 @@ const Action = struct {
         return switch (target) {
             .app => false,
             .surface => |v| surface: {
-                v.rt_surface.surface.present();
+                v.rt_surface.surface.present(0);
                 break :surface true;
             },
         };
