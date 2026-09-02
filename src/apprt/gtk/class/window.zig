@@ -1848,6 +1848,7 @@ pub const Window = extern struct {
 
     fn surfacePresentRequest(
         surface: *Surface,
+        timestamp: c_uint,
         self: *Self,
     ) callconv(.c) void {
         // Verify that this surface is actually in this window.
@@ -1889,8 +1890,11 @@ pub const Window = extern struct {
         // Grab focus
         surface.grabFocus();
 
-        // Bring the window to the front.
-        self.as(gtk.Window).present();
+        // Bring the window to the front. A zero timestamp is
+        // `GDK_CURRENT_TIME`, which is what `gtk_window_present` uses, so
+        // this is only different from that call when we were given a real
+        // timestamp to hand to the window manager.
+        self.as(gtk.Window).presentWithTime(@intCast(timestamp));
     }
 
     fn surfaceToggleFullscreen(
