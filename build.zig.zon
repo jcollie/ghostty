@@ -74,6 +74,7 @@
         // C libs
         .dcimgui = .{ .path = "./pkg/dcimgui", .lazy = true },
         .fontconfig = .{ .path = "./pkg/fontconfig", .lazy = true },
+        .gbm = .{ .path = "./pkg/gbm", .lazy = true },
         .freetype = .{ .path = "./pkg/freetype", .lazy = true },
         .gtk4_layer_shell = .{ .path = "./pkg/gtk4-layer-shell", .lazy = true },
         .harfbuzz = .{ .path = "./pkg/harfbuzz", .lazy = true },
