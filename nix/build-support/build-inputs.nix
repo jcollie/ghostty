@@ -24,6 +24,7 @@
   pkgs.spirv-cross
 
   pkgs.libxkbcommon
+  pkgs.libgbm
 
   pkgs.glib
   pkgs.gobject-introspection
