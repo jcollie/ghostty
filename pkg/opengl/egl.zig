@@ -8,7 +8,9 @@
 //! Call `load()` once before using any EGL extension functions.
 
 const std = @import("std");
+
 pub const c = @import("c");
+const errors = @import("errors.zig");
 
 const log = std.log.scoped(.opengl_egl);
 
@@ -116,6 +118,7 @@ pub const Display = opaque {
         var major: c.EGLint = undefined;
         var minor: c.EGLint = undefined;
         if (c.eglInitialize(display, &major, &minor) != c.EGL_TRUE) {
+            _ = c.eglTerminate(display);
             return mustError();
         }
         log.debug("EGL initialized {}.{}", .{ major, minor });
@@ -287,36 +290,21 @@ pub const Image = opaque {
         }
     }
 
-    pub fn exportDmabufQuery(self: *Image, display: *Display) Error!DmabufQuery {
-        var query: DmabufQuery = undefined;
-        if (c.eglExportDMABUFImageQueryMESA(
-            display,
-            self,
-            &query.fourcc,
-            &query.num_planes,
-            &query.modifier,
-        ) != c.EGL_TRUE) {
-            return mustError();
-        }
-        return query;
-    }
+    /// Binds the image to the currently bound `GL_TEXTURE_2D` via
+    /// `glEGLImageTargetTexture2DOES` from `GL_OES_EGL_image`, making
+    /// the texture use the image's memory as its storage.
+    ///
+    /// The extension is GLES-only and absent from the GL registry our
+    /// bindings are generated from, so it's resolved via `eglGetProcAddress`
+    /// rather than being a direct glad function.
+    pub fn bindToTexture2D(self: *Image) (error{Unsupported} || errors.Error)!void {
+        const proc = getProcAddress("glEGLImageTargetTexture2DOES") orelse
+            return error.Unsupported;
+        const func: *const fn (c.GLenum, ?*const anyopaque) callconv(.c) void =
+            @ptrCast(@alignCast(proc));
 
-    pub fn exportDmabuf(
-        self: *Image,
-        display: *Display,
-        fds: []c_int,
-        strides: []c_int,
-        offsets: []c_int,
-    ) Error!void {
-        if (c.eglExportDMABUFImageMESA(
-            display,
-            self,
-            fds.ptr,
-            strides.ptr,
-            offsets.ptr,
-        ) != c.EGL_TRUE) {
-            return mustError();
-        }
+        func(c.GL_TEXTURE_2D, @ptrCast(self));
+        try errors.getError();
     }
 };
 
@@ -329,6 +317,10 @@ pub const ImageTarget = union(ImageTarget.Tag) {
     linux_dma_buf,
 
     // Many other variants, add when needed
+    pub const Tag = enum(c.EGLenum) {
+        texture_2d = c.EGL_GL_TEXTURE_2D,
+        linux_dma_buf = c.EGL_LINUX_DMA_BUF_EXT,
+    };
 
     pub fn toClientBuffer(self: ImageTarget) c.EGLClientBuffer {
         return switch (self) {

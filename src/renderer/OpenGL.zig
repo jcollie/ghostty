@@ -10,6 +10,7 @@ const apprt = @import("../apprt.zig");
 const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
 const rendererpkg = @import("../renderer.zig");
+const global = @import("../global.zig");
 const Renderer = rendererpkg.GenericRenderer(OpenGL);
 const Dmabuf = @import("Dmabuf.zig");
 
@@ -23,6 +24,8 @@ pub const Buffer = bufferpkg.Buffer;
 pub const Sampler = @import("opengl/Sampler.zig");
 pub const Texture = @import("opengl/Texture.zig");
 pub const shaders = @import("opengl/shaders.zig");
+const Presenter = @import("opengl/Presenter.zig");
+pub const ExportedFrame = Presenter.ExportedFrame;
 
 pub const custom_shader_target: shadertoy.Target = .glsl;
 // The fragCoord for OpenGL shaders is +Y = up.
@@ -54,10 +57,75 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !OpenGL {
     // Load EGL extension function pointers via GLAD.
     try egl.load();
 
-    // Initialize the EGL context on the main thread before the
-    // renderer thread starts, so that the generic renderer
-    // can eagerly create swap chain GPU resources.
-    const display: *egl.Display = try .init(egl.c.EGL_DEFAULT_DISPLAY);
+    const device = try Device.choose();
+    errdefer if (device) |d| d.display.terminate();
+
+    if (device) |d| d: {
+        return initWithDevice(alloc, opts, d) catch |err| {
+            log.warn(
+                "failed to initialize OpenGL with chosen display, retrying with default err={}",
+                .{err},
+            );
+            break :d;
+        };
+    } else {
+        log.warn("unable to select an EGL device, using the default display", .{});
+    }
+
+    return try initWithDevice(alloc, opts, .{
+        .display = try .init(egl.c.EGL_DEFAULT_DISPLAY),
+        .drm_node = null,
+    });
+}
+
+const Device = struct {
+    display: *egl.Display,
+
+    /// The DRM device node of the chosen device.
+    /// Used to set up GBM for DMA-BUF allocation.
+    /// Null if falling back to the default display.
+    drm_node: ?[:0]const u8,
+
+    fn choose() !?Device {
+        var devices: [16]*egl.DeviceEXT = undefined;
+        const device_count = try egl.DeviceEXT.queryDevicesEXT(&devices);
+
+        for (devices[0..device_count]) |device| {
+            // Devices without a DRM node are software renderers.
+            // Do not use those unless absolutely necessary.
+            const drm_node = device.queryDeviceString(
+                egl.c.EGL_DRM_DEVICE_FILE_EXT,
+            ) orelse continue;
+
+            const display = egl.Display.initPlatformDisplay(
+                egl.c.EGL_PLATFORM_DEVICE_EXT,
+                device,
+                null,
+            ) catch |err| {
+                log.warn("failed to init EGL display for device node={s} err={}", .{
+                    drm_node,
+                    err,
+                });
+                continue;
+            };
+
+            return .{
+                .display = display,
+                .drm_node = std.mem.span(drm_node),
+            };
+        }
+
+        return null;
+    }
+};
+
+fn initWithDevice(
+    alloc: Allocator,
+    opts: rendererpkg.Options,
+    device: Device,
+) !OpenGL {
+    log.info("EGL vendor={s}", .{device.display.queryString(.vendor) orelse "(unknown)"});
+    log.info("EGL extensions={s}", .{device.display.queryString(.extensions) orelse "(unknown)"});
 
     try egl.bindApi(egl.c.EGL_OPENGL_API);
 
@@ -235,6 +303,7 @@ pub fn threadEnter(self: *OpenGL, surface: *apprt.Surface) !void {
 /// thread; unbinds the context from this thread so it can be destroyed on
 /// the main thread.
 pub fn threadExit(self: *OpenGL) void {
+    self.presenter.deinit();
     self.egl_display.releaseCurrent();
     gl.glad.unload();
 }
@@ -296,46 +365,28 @@ pub fn initTarget(self: *const OpenGL, width: usize, height: usize) !Target {
     });
 }
 
-/// Export a rendered target as a DMABUF. The caller takes
-/// ownership of the returned DMABUF's FDs and is responsible for
-/// either compositing it or releasing it.
+/// Export a rendered target as a frame for the apprt to composite.
+/// The caller takes ownership of the returned frame.
 ///
 /// This runs on the render thread.
-pub fn present(self: *OpenGL, target: Target) !ExportedFrame {
-    // In order to present a target we blit it to the export framebuffer,
-    // and export it as a DMABUF.
+pub fn present(self: *OpenGL, target: *Target) !ExportedFrame {
+    // Happy path :)
+    // Blit the target into a freshly allocated GBM-backed buffer
+    // and export it as a DMA-BUF. If we encounter any problem with
+    // exporting, we flag the problem and fallback to CPU reads
+    // for subsequent frames.
+    if (self.presenter.present(target)) |dmabuf| {
+        return .{ .dmabuf = dmabuf };
+    } else |_| {}
 
-    // We disable GL_FRAMEBUFFER_SRGB while doing this blit, otherwise the
-    // values may be linearized as they're copied, but even though the draw
-    // framebuffer has a linear internal format, the values in it should be
-    // sRGB, not linear!
-    try gl.disable(gl.c.GL_FRAMEBUFFER_SRGB);
-    defer gl.enable(gl.c.GL_FRAMEBUFFER_SRGB) catch |err| {
-        log.err("Error re-enabling GL_FRAMEBUFFER_SRGB, err={}", .{err});
-    };
-
-    // Bind the render FBO as read, the export FBO as draw.
-    const read_bind = try target.framebuffer.bind(.read);
-    defer read_bind.unbind();
-
-    const draw_bind = try target.export_framebuffer.bind(.draw);
-    defer draw_bind.unbind();
-
-    // Blit
-    try gl.blitFramebuffer(
-        0,
-        0,
-        @intCast(target.width),
-        @intCast(target.height),
-        0,
-        0,
-        @intCast(target.width),
-        @intCast(target.height),
-        .{ .color_buffer_bit = true },
-        .nearest,
-    );
-
-    return target.exportDmabuf(self.egl_display, self.egl_context);
+    // CPU readback fallback for environments
+    // that can't present via DMA-BUFs.
+    return .{ .memory = .{
+        .width = @intCast(target.width),
+        .height = @intCast(target.height),
+        .pixels = try target.readPixelsAlloc(self.alloc),
+        .alloc = self.alloc,
+    } };
 }
 
 /// Returns the options to use when constructing buffers.
