@@ -509,6 +509,12 @@ pub fn add(
     if (b.lazyDependency("opengl", .{})) |dep| {
         step.root_module.addImport("opengl", dep.module("opengl"));
     }
+
+    if (b.lazyDependency("gbm", .{})) |dep| {
+        step.root_module.addImport("gbm", dep.module("gbm"));
+    }
+    step.root_module.linkSystemLibrary("gbm", dynamic_link_opts);
+
     if (b.lazyDependency("vaxis", .{
         .target = target,
         .optimize = optimize,
@@ -659,15 +665,6 @@ pub fn add(
             .file = b.path("vendor/glad/src/gl.c"),
             .flags = &.{},
         });
-
-        // Link EGL for GTK.
-        if (self.config.app_runtime == .gtk) {
-            step.root_module.addCSourceFile(.{
-                .file = b.path("vendor/glad/src/glad_egl.c"),
-                .flags = &.{},
-            });
-            step.root_module.linkSystemLibrary("egl", dynamic_link_opts);
-        }
 
         // When we're targeting flatpak we ALWAYS link GTK so we
         // get access to glib for dbus.
@@ -899,6 +896,13 @@ fn addGtkNg(
         translated.mod.addCSourceFile(.{ .file = dist.resources_c.path(b), .flags = &.{} });
         step.root_module.addImport("ghostty_gtk_resources", translated.mod);
     }
+
+    // Add EGL.
+    step.root_module.addCSourceFile(.{
+        .file = b.path("vendor/glad/src/glad_egl.c"),
+        .flags = &.{},
+    });
+    step.root_module.linkSystemLibrary("egl", dynamic_link_opts);
 }
 
 /// Add only the dependencies required for `Config.simd` enabled. This also
