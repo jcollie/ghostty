@@ -4720,7 +4720,7 @@ const Clipboard = struct {
             // attached.
             .kitty_read => |kitty| {
                 const clipboard = get(
-                    self.private().gl_area.as(gtk.Widget),
+                    self.private().render_surface.as(gtk.Widget),
                     kitty.location,
                 ) orelse {
                     surface.denyClipboardRequest(req.*);
