@@ -1051,8 +1051,9 @@ fn gtkDistResourcesUncached(b: *std.Build) GtkResources {
             .link_system_libs = &.{"libadwaita-1"},
         }) catch unreachable;
 
-        // The headers have to satisfy the newest blueprint.
-        var required: struct { major: u16, minor: u16 } = .{ .major = 0, .minor = 0 };
+        // The headers have to satisfy the newest blueprint, and never
+        // less than the oldest libadwaita we support.
+        var required = gresource.minimum_adwaita;
         for (gresource.blueprints) |bp| {
             if (bp.major > required.major or
                 (bp.major == required.major and bp.minor > required.minor))

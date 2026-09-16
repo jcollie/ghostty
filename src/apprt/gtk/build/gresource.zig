@@ -22,6 +22,14 @@ pub const css_path = "src/apprt/gtk/css";
 /// able to error when they don't exist that way.
 pub const icon_sizes: []const comptime_int = &.{ 16, 32, 128, 256, 512, 1024 };
 
+/// The oldest libadwaita Ghostty supports. Individual blueprints can
+/// require newer than this, never older, so the build checks the headers
+/// against whichever of the two is higher.
+pub const minimum_adwaita: struct { major: u16, minor: u16 } = .{
+    .major = 1,
+    .minor = 7,
+};
+
 /// The blueprint files that we will embed into the gresource file.
 /// We can't look these up at runtime [easily] because we require the
 /// compiled UI files as input. We can refactor this lator to maybe do

@@ -16,7 +16,6 @@ const input = @import("../../../input.zig");
 const CoreSurface = @import("../../../Surface.zig");
 const ext = @import("../ext.zig");
 const gtk_version = @import("../gtk_version.zig");
-const adw_version = @import("../adw_version.zig");
 const gresource = @import("../build/gresource.zig");
 const winprotopkg = @import("../winproto.zig");
 const Common = @import("../class.zig").Common;
@@ -1945,39 +1944,22 @@ pub const Window = extern struct {
         const icon = "com.mitchellh.ghostty";
         const website = "https://ghostty.org";
 
-        if (adw_version.supportsDialogs()) {
-            adw.showAboutDialog(
-                self.as(gtk.Widget),
-                "application-name",
-                name,
-                "developer-name",
-                i18n._("Ghostty Developers"),
-                "application-icon",
-                icon,
-                "version",
-                build_config.version_string.ptr,
-                "issue-url",
-                "https://github.com/ghostty-org/ghostty/issues",
-                "website",
-                website,
-                @as(?*anyopaque, null),
-            );
-        } else {
-            gtk.showAboutDialog(
-                self.as(gtk.Window),
-                "program-name",
-                name,
-                "logo-icon-name",
-                icon,
-                "title",
-                i18n._("About Ghostty"),
-                "version",
-                build_config.version_string.ptr,
-                "website",
-                website,
-                @as(?*anyopaque, null),
-            );
-        }
+        adw.showAboutDialog(
+            self.as(gtk.Widget),
+            "application-name",
+            name,
+            "developer-name",
+            i18n._("Ghostty Developers"),
+            "application-icon",
+            icon,
+            "version",
+            build_config.version_string.ptr,
+            "issue-url",
+            "https://github.com/ghostty-org/ghostty/issues",
+            "website",
+            website,
+            @as(?*anyopaque, null),
+        );
     }
 
     fn actionClose(

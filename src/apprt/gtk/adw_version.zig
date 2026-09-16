@@ -112,20 +112,3 @@ test "versionAtLeast" {
         try testing.expect(fun(adw_c.ADW_MAJOR_VERSION, adw_c.ADW_MINOR_VERSION - 1, adw_c.ADW_MICRO_VERSION + 1));
     }
 }
-
-// Whether AdwDialog, AdwAlertDialog, etc. are supported (1.5+)
-pub inline fn supportsDialogs() bool {
-    return atLeast(1, 5, 0);
-}
-
-pub inline fn supportsTabOverview() bool {
-    return atLeast(1, 4, 0);
-}
-
-pub inline fn supportsToolbarView() bool {
-    return atLeast(1, 4, 0);
-}
-
-pub inline fn supportsBanner() bool {
-    return atLeast(1, 3, 0);
-}
