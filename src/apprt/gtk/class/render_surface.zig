@@ -2,7 +2,6 @@ const std = @import("std");
 
 const glib = @import("glib");
 const gobject = @import("gobject");
-const graphene = @import("graphene");
 const gdk = @import("gdk");
 const gtk = @import("gtk");
 
@@ -178,20 +177,10 @@ pub const RenderSurface = extern struct {
     }
 
     fn snapshotOrigin(self: *Self, scale: f64) struct { x: f32, y: f32 } {
-        const widget = self.as(gtk.Widget);
-        const native = widget.getNative() orelse return .{ .x = 0, .y = 0 };
-        const native_widget = gobject.ext.cast(gtk.Widget, native) orelse return .{ .x = 0, .y = 0 };
-
-        var surface_origin: graphene.Point = undefined;
-        if (widget.computePoint(
-            native_widget,
-            &.{ .f_x = 0, .f_y = 0 },
-            &surface_origin,
-        ) == 0) return .{ .x = 0, .y = 0 };
-
+        const origin = scale_util.widgetSurfaceOrigin(self.as(gtk.Widget));
         return .{
-            .x = @floatCast(scale_util.snapOffset(surface_origin.f_x, scale)),
-            .y = @floatCast(scale_util.snapOffset(surface_origin.f_y, scale)),
+            .x = @floatCast(scale_util.snapOffset(origin.x, scale)),
+            .y = @floatCast(scale_util.snapOffset(origin.y, scale)),
         };
     }
 
@@ -206,10 +195,14 @@ pub const RenderSurface = extern struct {
     }
 
     fn emitDeviceResize(self: *Self, css_w: c_int, css_h: c_int) void {
-        const size = scale_util.deviceSize(
+        const widget = self.as(gtk.Widget);
+        const origin = scale_util.widgetSurfaceOrigin(widget);
+        const size = scale_util.snappedDeviceSize(
+            origin.x,
+            origin.y,
             css_w,
             css_h,
-            scale_util.widgetSurfaceScale(self.as(gtk.Widget)),
+            scale_util.widgetSurfaceScale(widget),
         );
         if (size.width == 0 or size.height == 0) return;
         signals.resize.impl.emit(
@@ -274,7 +267,14 @@ pub const RenderSurface = extern struct {
         const native = widget.getNative() orelse return;
         const surface = native.getSurface() orelse return;
         const effective_scale = scale_util.widgetSurfaceScale(widget);
-        const device_size = scale_util.deviceSize(css_width, css_height, effective_scale);
+        const origin = scale_util.widgetSurfaceOrigin(widget);
+        const device_size = scale_util.snappedDeviceSize(
+            origin.x,
+            origin.y,
+            css_width,
+            css_height,
+            effective_scale,
+        );
 
         log.info(
             "surface scale {s}: css={}x{} device={}x{} surface={d} effective={d} surface_factor={} widget_factor={}",
