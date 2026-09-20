@@ -81,10 +81,6 @@ pub fn widgetLayoutForSize(widget: *gtk.Widget, css_width: c_int, css_height: c_
     };
 }
 
-pub fn widgetDeviceSize(widget: *gtk.Widget) DeviceSize {
-    return widgetLayout(widget).size;
-}
-
 pub fn deviceSize(css_width: c_int, css_height: c_int, scale: f64) DeviceSize {
     return snappedDeviceSize(0, 0, css_width, css_height, scale);
 }

@@ -62,8 +62,14 @@ pub const RenderSurface = extern struct {
 
         /// The GDK Texture currently being displayed.
         texture: ?*gdk.Texture = null,
+
+        /// `notify::scale` handler id on `scale_surface`.
         scale_notify_id: c_ulong = 0,
+
+        /// GdkSurface we connected; ref'd so a replacement cannot dangle the handler.
         scale_surface: ?*gdk.Surface = null,
+
+        /// One-shot so we log the first real allocation, not every size-allocate.
         scale_logged_size: bool = false,
 
         pub var offset: c_int = 0;
@@ -164,24 +170,16 @@ pub const RenderSurface = extern struct {
         // Map one texture texel to one device pixel. Widget CSS size would
         // stretch a fractionally scaled buffer. Snap the surface-relative
         // origin so parent chrome cannot place the texture between pixels.
-        const surface_scale = scale_util.widgetSurfaceScale(widget);
-        if (!(surface_scale > 0)) return;
-        const css_w: f32 = @as(f32, @floatFromInt(texture.getWidth())) / @as(f32, @floatCast(surface_scale));
-        const css_h: f32 = @as(f32, @floatFromInt(texture.getHeight())) / @as(f32, @floatCast(surface_scale));
-        const origin = self.snapshotOrigin(surface_scale);
+        const layout = scale_util.widgetLayout(widget);
+        const origin = layout.snapOrigin();
+        const scale: f32 = @floatCast(layout.scale);
+        const css_w: f32 = @as(f32, @floatFromInt(texture.getWidth())) / scale;
+        const css_h: f32 = @as(f32, @floatFromInt(texture.getHeight())) / scale;
 
         snap.appendTexture(texture, &.{
-            .f_origin = .{ .f_x = origin.x, .f_y = origin.y },
+            .f_origin = .{ .f_x = @floatCast(origin.x), .f_y = @floatCast(origin.y) },
             .f_size = .{ .f_width = css_w, .f_height = css_h },
         });
-    }
-
-    fn snapshotOrigin(self: *Self, scale: f64) struct { x: f32, y: f32 } {
-        const origin = scale_util.widgetSurfaceOrigin(self.as(gtk.Widget));
-        return .{
-            .x = @floatCast(scale_util.snapOffset(origin.x, scale)),
-            .y = @floatCast(scale_util.snapOffset(origin.y, scale)),
-        };
     }
 
     //---------------------------------------------------------------
@@ -190,20 +188,12 @@ pub const RenderSurface = extern struct {
     /// Return the size of this surface in device pixels. Used by the
     /// apprt surface to report the size to the renderer.
     pub fn deviceSize(self: *Self) struct { width: u32, height: u32 } {
-        const size = scale_util.widgetDeviceSize(self.as(gtk.Widget));
+        const size = scale_util.widgetLayout(self.as(gtk.Widget)).size;
         return .{ .width = size.width, .height = size.height };
     }
 
     fn emitDeviceResize(self: *Self, css_w: c_int, css_h: c_int) void {
-        const widget = self.as(gtk.Widget);
-        const origin = scale_util.widgetSurfaceOrigin(widget);
-        const size = scale_util.snappedDeviceSize(
-            origin.x,
-            origin.y,
-            css_w,
-            css_h,
-            scale_util.widgetSurfaceScale(widget),
-        );
+        const size = scale_util.widgetLayoutForSize(self.as(gtk.Widget), css_w, css_h).size;
         if (size.width == 0 or size.height == 0) return;
         signals.resize.impl.emit(
             self,
@@ -266,15 +256,7 @@ pub const RenderSurface = extern struct {
         const widget = self.as(gtk.Widget);
         const native = widget.getNative() orelse return;
         const surface = native.getSurface() orelse return;
-        const effective_scale = scale_util.widgetSurfaceScale(widget);
-        const origin = scale_util.widgetSurfaceOrigin(widget);
-        const device_size = scale_util.snappedDeviceSize(
-            origin.x,
-            origin.y,
-            css_width,
-            css_height,
-            effective_scale,
-        );
+        const layout = scale_util.widgetLayoutForSize(widget, css_width, css_height);
 
         log.info(
             "surface scale {s}: css={}x{} device={}x{} surface={d} effective={d} surface_factor={} widget_factor={}",
@@ -282,10 +264,10 @@ pub const RenderSurface = extern struct {
                 event,
                 css_width,
                 css_height,
-                device_size.width,
-                device_size.height,
+                layout.size.width,
+                layout.size.height,
                 surface.getScale(),
-                effective_scale,
+                layout.scale,
                 surface.getScaleFactor(),
                 widget.getScaleFactor(),
             },
