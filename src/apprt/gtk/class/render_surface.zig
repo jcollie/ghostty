@@ -2,6 +2,7 @@ const std = @import("std");
 
 const glib = @import("glib");
 const gobject = @import("gobject");
+const graphene = @import("graphene");
 const gdk = @import("gdk");
 const gtk = @import("gtk");
 
@@ -162,16 +163,36 @@ pub const RenderSurface = extern struct {
         if (widget.getWidth() == 0 or widget.getHeight() == 0) return;
 
         // Map one texture texel to one device pixel. Widget CSS size would
-        // stretch a fractionally scaled buffer.
+        // stretch a fractionally scaled buffer. Snap the surface-relative
+        // origin so parent chrome cannot place the texture between pixels.
         const surface_scale = scale_util.widgetSurfaceScale(widget);
         if (!(surface_scale > 0)) return;
         const css_w: f32 = @as(f32, @floatFromInt(texture.getWidth())) / @as(f32, @floatCast(surface_scale));
         const css_h: f32 = @as(f32, @floatFromInt(texture.getHeight())) / @as(f32, @floatCast(surface_scale));
+        const origin = self.snapshotOrigin(surface_scale);
 
         snap.appendTexture(texture, &.{
-            .f_origin = .{ .f_x = 0, .f_y = 0 },
+            .f_origin = .{ .f_x = origin.x, .f_y = origin.y },
             .f_size = .{ .f_width = css_w, .f_height = css_h },
         });
+    }
+
+    fn snapshotOrigin(self: *Self, scale: f64) struct { x: f32, y: f32 } {
+        const widget = self.as(gtk.Widget);
+        const native = widget.getNative() orelse return .{ .x = 0, .y = 0 };
+        const native_widget = gobject.ext.cast(gtk.Widget, native) orelse return .{ .x = 0, .y = 0 };
+
+        var surface_origin: graphene.Point = undefined;
+        if (widget.computePoint(
+            native_widget,
+            &.{ .f_x = 0, .f_y = 0 },
+            &surface_origin,
+        ) == 0) return .{ .x = 0, .y = 0 };
+
+        return .{
+            .x = @floatCast(scale_util.snapOffset(surface_origin.f_x, scale)),
+            .y = @floatCast(scale_util.snapOffset(surface_origin.f_y, scale)),
+        };
     }
 
     //---------------------------------------------------------------
