@@ -13,6 +13,21 @@ pub const CssPoint = struct {
     y: f64,
 };
 
+/// Scale, GdkSurface-space origin, and snapped device size for one widget.
+pub const Layout = struct {
+    scale: f64,
+    origin: CssPoint,
+    size: DeviceSize,
+
+    /// CSS offset that moves widget (0,0) onto the nearest device pixel.
+    pub fn snapOrigin(self: Layout) CssPoint {
+        return .{
+            .x = snapOffset(self.origin.x, self.scale),
+            .y = snapOffset(self.origin.y, self.scale),
+        };
+    }
+};
+
 pub fn widgetSurfaceScale(widget: *gtk.Widget) f64 {
     if (widget.getNative()) |native| {
         if (native.getSurface()) |surface| {
@@ -26,7 +41,11 @@ pub fn widgetSurfaceScale(widget: *gtk.Widget) f64 {
     return @floatFromInt(scale);
 }
 
-/// Widget (0,0) in GdkSurface CSS coordinates, including CSD transform.
+/// Widget (0,0) in GdkSurface CSS coordinates.
+///
+/// `computePoint` to the native widget is CSS inside the window. CSD shadows
+/// live outside that, so add `gtk_native_get_surface_transform` to get the
+/// origin on the GdkSurface.
 pub fn widgetSurfaceOrigin(widget: *gtk.Widget) CssPoint {
     const native = widget.getNative() orelse return .{ .x = 0, .y = 0 };
     const native_widget = gobject.ext.cast(gtk.Widget, native) orelse return .{ .x = 0, .y = 0 };
@@ -48,15 +67,22 @@ pub fn widgetSurfaceOrigin(widget: *gtk.Widget) CssPoint {
     };
 }
 
-pub fn widgetDeviceSize(widget: *gtk.Widget) DeviceSize {
+pub fn widgetLayout(widget: *gtk.Widget) Layout {
+    return widgetLayoutForSize(widget, widget.getWidth(), widget.getHeight());
+}
+
+pub fn widgetLayoutForSize(widget: *gtk.Widget, css_width: c_int, css_height: c_int) Layout {
+    const scale = widgetSurfaceScale(widget);
     const origin = widgetSurfaceOrigin(widget);
-    return snappedDeviceSize(
-        origin.x,
-        origin.y,
-        widget.getWidth(),
-        widget.getHeight(),
-        widgetSurfaceScale(widget),
-    );
+    return .{
+        .scale = scale,
+        .origin = origin,
+        .size = snappedDeviceSize(origin.x, origin.y, css_width, css_height, scale),
+    };
+}
+
+pub fn widgetDeviceSize(widget: *gtk.Widget) DeviceSize {
+    return widgetLayout(widget).size;
 }
 
 pub fn deviceSize(css_width: c_int, css_height: c_int, scale: f64) DeviceSize {
@@ -76,14 +102,21 @@ pub fn snappedDeviceSize(
     };
 }
 
-/// Offset a surface-relative CSS coordinate so it lands on the nearest
-/// device pixel without changing the size of the rendered content.
+/// CSS delta that lands a surface-relative origin on the nearest device pixel.
+///
+/// Tab chrome can put widget (0,0) on a fractional device coordinate, so GTK
+/// linearly samples every texel. Shift by less than 0.5 device px without
+/// changing content size.
 pub fn snapOffset(css_origin: f64, scale: f64) f64 {
     if (!(scale > 0)) return 0;
     const device_origin = css_origin * scale;
     return (@round(device_origin) - device_origin) / scale;
 }
 
+/// Device coverage of one axis after snapping both edges.
+///
+/// `round(end) - round(start)`, not `ceil(css × scale)`, so the buffer spans
+/// the same snapped pixels the texture is drawn into.
 fn snappedAxis(css_origin: f64, css: c_int, scale: f64) u32 {
     if (css <= 0 or !(scale > 0)) return 0;
     const css_size: f64 = @floatFromInt(css);
@@ -121,6 +154,12 @@ test "snapOffset aligns fractional device origins" {
     try testing.expectApproxEqAbs(@as(f64, 0.25), snapOffset(47, 4.0 / 3.0), 0.000001);
 }
 
+test "snapOffset rejects non-positive scale" {
+    const testing = std.testing;
+    try testing.expectEqual(@as(f64, 0), snapOffset(47, 0));
+    try testing.expectEqual(@as(f64, 0), snapOffset(47, -1.25));
+}
+
 test "snappedDeviceSize uses origin-aware device spans" {
     const testing = std.testing;
     const scale_4_3 = 4.0 / 3.0;
@@ -135,5 +174,17 @@ test "snappedDeviceSize uses origin-aware device spans" {
     try testing.expectEqual(
         DeviceSize{ .width = 126, .height = 126 },
         snappedDeviceSize(0, 0, 101, 101, 1.25),
+    );
+}
+
+test "snappedDeviceSize integer scale with origin" {
+    const testing = std.testing;
+    try testing.expectEqual(
+        DeviceSize{ .width = 800, .height = 600 },
+        snappedDeviceSize(47, 11, 800, 600, 1.0),
+    );
+    try testing.expectEqual(
+        DeviceSize{ .width = 1600, .height = 1200 },
+        snappedDeviceSize(0.25, 0.75, 800, 600, 2.0),
     );
 }
