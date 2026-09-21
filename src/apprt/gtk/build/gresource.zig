@@ -38,25 +38,25 @@ pub const minimum_adwaita: struct { major: u16, minor: u16 } = .{
 ///
 /// These will be asserted to exist at runtime.
 pub const blueprints: []const Blueprint = &.{
-    .{ .major = 1, .minor = 5, .name = "clipboard-confirmation-dialog" },
-    .{ .major = 1, .minor = 5, .name = "close-confirmation-dialog" },
-    .{ .major = 1, .minor = 5, .name = "config-errors-dialog" },
-    .{ .major = 1, .minor = 3, .name = "debug-warning" },
     .{ .major = 1, .minor = 0, .name = "imgui-widget" },
     .{ .major = 1, .minor = 0, .name = "inspector-widget" },
-    .{ .major = 1, .minor = 4, .name = "inspector-window" },
+    .{ .major = 1, .minor = 0, .name = "key-state-overlay" },
     .{ .major = 1, .minor = 0, .name = "resize-overlay" },
     .{ .major = 1, .minor = 0, .name = "search-overlay" },
-    .{ .major = 1, .minor = 0, .name = "key-state-overlay" },
     .{ .major = 1, .minor = 0, .name = "split-tree" },
     .{ .major = 1, .minor = 0, .name = "split-tree-split" },
     .{ .major = 1, .minor = 0, .name = "surface" },
     .{ .major = 1, .minor = 0, .name = "surface-scrolled-window" },
-    .{ .major = 1, .minor = 3, .name = "surface-child-exited" },
     .{ .major = 1, .minor = 0, .name = "tab" },
-    .{ .major = 1, .minor = 5, .name = "title-dialog" },
+    .{ .major = 1, .minor = 3, .name = "debug-warning" },
+    .{ .major = 1, .minor = 3, .name = "surface-child-exited" },
+    .{ .major = 1, .minor = 4, .name = "inspector-window" },
     .{ .major = 1, .minor = 4, .name = "window" },
+    .{ .major = 1, .minor = 5, .name = "clipboard-confirmation-dialog" },
+    .{ .major = 1, .minor = 5, .name = "close-confirmation-dialog" },
     .{ .major = 1, .minor = 5, .name = "command-palette" },
+    .{ .major = 1, .minor = 5, .name = "config-errors-dialog" },
+    .{ .major = 1, .minor = 5, .name = "title-dialog" },
 };
 
 /// CSS files in css_path
