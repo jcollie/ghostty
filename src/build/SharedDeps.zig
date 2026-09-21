@@ -710,25 +710,23 @@ fn addGtk(
     const target = step.root_module.resolved_target.?;
     const optimize = step.root_module.optimize.?;
 
-    const gobject_ = b.lazyDependency("gobject", .{
+    const gobject = b.lazyDependency("gobject", .{
         .target = target,
         .optimize = optimize,
-    });
-    if (gobject_) |gobject| {
-        const gobject_imports = .{
-            .{ "adw", "adw1" },
-            .{ "gdk", "gdk4" },
-            .{ "gio", "gio2" },
-            .{ "glib", "glib2" },
-            .{ "glibunix", "glibunix2" },
-            .{ "gobject", "gobject2" },
-            .{ "gtk", "gtk4" },
-            .{ "xlib", "xlib2" },
-        };
-        inline for (gobject_imports) |import| {
-            const name, const module = import;
-            step.root_module.addImport(name, gobject.module(module));
-        }
+    }) orelse return;
+    const gobject_imports = .{
+        .{ "adw", "adw1" },
+        .{ "gdk", "gdk4" },
+        .{ "gio", "gio2" },
+        .{ "glib", "glib2" },
+        .{ "glibunix", "glibunix2" },
+        .{ "gobject", "gobject2" },
+        .{ "gtk", "gtk4" },
+        .{ "xlib", "xlib2" },
+    };
+    inline for (gobject_imports) |import| {
+        const name, const module = import;
+        step.root_module.addImport(name, gobject.module(module));
     }
 
     // GTK C translation
@@ -760,12 +758,10 @@ fn addGtk(
             .link_system_libs = &.{"X11"},
         });
 
-        if (gobject_) |gobject| {
-            step.root_module.addImport(
-                "gdk_x11",
-                gobject.module("gdkx114"),
-            );
-        }
+        step.root_module.addImport(
+            "gdk_x11",
+            gobject.module("gdkx114"),
+        );
     }
 
     if (self.config.wayland) wayland: {
@@ -827,7 +823,7 @@ fn addGtk(
         step.root_module.addImport("wayland", b.createModule(.{
             .root_source_file = scanner.result,
         }));
-        if (gobject_) |gobject| step.root_module.addImport(
+        step.root_module.addImport(
             "gdk_wayland",
             gobject.module("gdkwayland4"),
         );
@@ -837,10 +833,8 @@ fn addGtk(
             .optimize = optimize,
         })) |gtk4_layer_shell| {
             const layer_shell_module = gtk4_layer_shell.module("gtk4-layer-shell");
-            if (gobject_) |gobject| {
-                layer_shell_module.addImport("gtk", gobject.module("gtk4"));
-                layer_shell_module.addImport("gdk", gobject.module("gdk4"));
-            }
+            layer_shell_module.addImport("gtk", gobject.module("gtk4"));
+            layer_shell_module.addImport("gdk", gobject.module("gdk4"));
             step.root_module.addImport(
                 "gtk4-layer-shell",
                 layer_shell_module,
