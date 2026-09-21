@@ -690,7 +690,7 @@ pub fn add(
 
         switch (self.config.app_runtime) {
             .none => {},
-            .gtk => try self.addGtkNg(step),
+            .gtk => try self.addGtk(step),
         }
     }
 
@@ -702,7 +702,7 @@ pub fn add(
 }
 
 /// Setup the dependencies for the GTK apprt build.
-fn addGtkNg(
+fn addGtk(
     self: *const SharedDeps,
     step: *std.Build.Step.Compile,
 ) !void {
@@ -864,7 +864,7 @@ fn addGtkNg(
 
     {
         // Get our gresource c/h files and add them to our build.
-        const dist = gtkNgDistResources(b);
+        const dist = gtkDistResources(b);
         const translated = try translate_c.init(b, .{
             .source = .{ .includes = .{
                 .generated_name = "ghostty_gtk_resources_c.h",
@@ -998,14 +998,14 @@ pub fn addSimd(
     }
 }
 
-pub const GtkNgResources = struct {
+pub const GtkResources = struct {
     resources_c: DistResource,
     resources_h: DistResource,
 };
 
-/// Memoized result of `gtkNgDistResources`, keyed on the `*std.Build`.
+/// Memoized result of `gtkDistResources`, keyed on the `*std.Build`.
 /// The configure pass is single-threaded, so a file-scope map is enough.
-var gtk_ng_resources: std.AutoHashMapUnmanaged(*std.Build, GtkNgResources) = .empty;
+var gtk_ng_resources: std.AutoHashMapUnmanaged(*std.Build, GtkResources) = .empty;
 
 /// Creates the resources that can be prebuilt for our dist build.
 ///
@@ -1013,14 +1013,14 @@ var gtk_ng_resources: std.AutoHashMapUnmanaged(*std.Build, GtkNgResources) = .em
 /// `GhosttyDist` calls it too. Each call used to build its own copy of the
 /// whole pipeline, and since Zig's cache hashes input *paths* as well as
 /// contents, the copies did not share results downstream.
-pub fn gtkNgDistResources(b: *std.Build) GtkNgResources {
+pub fn gtkDistResources(b: *std.Build) GtkResources {
     if (gtk_ng_resources.get(b)) |cached| return cached;
-    const resources = gtkNgDistResourcesUncached(b);
+    const resources = gtkDistResourcesUncached(b);
     gtk_ng_resources.put(b.allocator, b, resources) catch @panic("OOM");
     return resources;
 }
 
-fn gtkNgDistResourcesUncached(b: *std.Build) GtkNgResources {
+fn gtkDistResourcesUncached(b: *std.Build) GtkResources {
     const gresource = @import("../apprt/gtk/build/gresource.zig");
     const gresource_file_inputs = gresource.file_inputs;
 
