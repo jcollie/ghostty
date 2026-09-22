@@ -503,6 +503,16 @@ pub const panic: type = if (debug_machinery)
 else
     std.debug.FullPanic(tinyPanicImpl);
 
+/// Initializes the C runtime and runs global constructors when
+/// libghostty-vt is built as a Windows DLL. See `lib/windows_dll.zig`;
+/// without it simdutf dispatches through a null kernel pointer on the
+/// first multi-byte UTF-8 sequence.
+pub const DllMain = if (builtin.os.tag == .windows and
+    builtin.output_mode == .Lib and
+    builtin.link_mode == .dynamic)
+    @import("lib/windows_dll.zig").DllMain
+else {};
+
 /// Guards release builds against accidentally reintroducing the std
 /// debug Io machinery.
 ///
