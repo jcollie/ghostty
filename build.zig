@@ -78,6 +78,10 @@ pub fn build(b: *std.Build) !void {
         "test-lib-vt-schema",
         "Validate the libghostty-vt ABI type manifest",
     );
+    const test_lib_vt_shared_step = b.step(
+        "test-lib-vt-shared",
+        "Drive the libghostty-vt C ABI through the shared library",
+    );
     const test_valgrind_step = b.step(
         "test-valgrind",
         "Run tests under valgrind",
@@ -150,9 +154,33 @@ pub fn build(b: *std.Build) !void {
         type_schema_test.addFileArg(b.path("src/terminal/c/types.schema.json"));
         type_schema_test.addFileArg(shared.output);
         test_lib_vt_schema_step.dependOn(&type_schema_test.step);
+
+        // Load the shared library at runtime and drive the C ABI through
+        // it. The unit tests link the terminal into a test executable,
+        // which never exercises a dynamic library's load-time setup.
+        const smoke_exe = b.addExecutable(.{
+            .name = "lib_vt_shared_smoke",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/build/lib_vt_shared_smoke.zig"),
+                .target = config.target,
+                .optimize = .Debug,
+            }),
+        });
+        const smoke_run = b.addRunArtifact(smoke_exe);
+        smoke_run.addFileArg(shared.output);
+
+        // A cross-compiled build can't run its own output. That isn't a
+        // failure, it just means this check doesn't apply here.
+        smoke_run.failing_to_execute_foreign_is_an_error = false;
+        test_lib_vt_shared_step.dependOn(&smoke_run.step);
+        test_lib_vt_step.dependOn(&smoke_run.step);
     } else {
         try test_lib_vt_schema_step.addError(
             "cannot execute the ABI manifest for a native freestanding target",
+            .{},
+        );
+        try test_lib_vt_shared_step.addError(
+            "cannot run the shared library smoke test for a native freestanding target",
             .{},
         );
     }

@@ -3151,6 +3151,77 @@ test "simd: complete incomplete utf-8" {
     try testing.expectEqual(@as(u21, 0x800), s.handler.c.?);
 }
 
+/// Collects every printed codepoint so a whole write can be checked at once.
+const CollectPrints = struct {
+    buf: [256]u21 = undefined,
+    len: usize = 0,
+
+    pub fn vt(
+        self: *@This(),
+        comptime action: Action.Tag,
+        value: Action.Value(action),
+    ) void {
+        switch (action) {
+            .print => {
+                self.buf[self.len] = value.cp;
+                self.len += 1;
+            },
+            .print_slice => for (value.cps) |cp| {
+                self.buf[self.len] = @intCast(cp);
+                self.len += 1;
+            },
+            else => {},
+        }
+    }
+
+    fn printed(self: *const @This()) []const u21 {
+        return self.buf[0..self.len];
+    }
+};
+
+test "simd: print complete multibyte utf-8 in a single write" {
+    // A sequence that arrives whole in one write must decode, not just
+    // one that is split across writes (see "simd: complete incomplete
+    // utf-8" above). This is the shape embedders hit first: a single
+    // ghostty_terminal_vt_write() carrying one non-ASCII character.
+    var s: Stream(CollectPrints) = .init(.{ .handler = .{} });
+    s.nextSlice("é"); // 2 bytes: 0xC3 0xA9
+    try testing.expectEqualSlices(u21, &.{0xE9}, s.handler.printed());
+}
+
+test "simd: print multibyte utf-8 of every length in a single write" {
+    var s: Stream(CollectPrints) = .init(.{ .handler = .{} });
+    s.nextSlice("aé€😀"); // 1, 2, 3 and 4 byte sequences
+    try testing.expectEqualSlices(
+        u21,
+        &.{ 'a', 0xE9, 0x20AC, 0x1F600 },
+        s.handler.printed(),
+    );
+}
+
+test "simd: print multibyte utf-8 after a full simd chunk of ascii" {
+    // The decoder scans ASCII a vector at a time and only falls back to
+    // the full UTF-8 decoder once it sees a non-ASCII byte. Push the
+    // multibyte sequence past at least one whole chunk so the fallback
+    // happens mid-scan rather than at offset zero.
+    const ascii = "a" ** 128;
+    var s: Stream(CollectPrints) = .init(.{ .handler = .{} });
+    s.nextSlice(ascii ++ "é");
+
+    const printed = s.handler.printed();
+    try testing.expectEqual(ascii.len + 1, printed.len);
+    for (printed[0..ascii.len]) |cp| try testing.expectEqual(@as(u21, 'a'), cp);
+    try testing.expectEqual(@as(u21, 0xE9), printed[ascii.len]);
+}
+
+test "simd: print multibyte utf-8 followed by an escape in one write" {
+    // Decoding stops at the escape, so the multibyte sequence before it
+    // has to be flushed on the way out of the scan.
+    var s: Stream(CollectPrints) = .init(.{ .handler = .{} });
+    s.nextSlice("é\x1b[0m€");
+    try testing.expectEqualSlices(u21, &.{ 0xE9, 0x20AC }, s.handler.printed());
+}
+
 test "stream: ground state C0 controls are executed, not printed" {
     const H = struct {
         buf: [128]u21 = undefined,
