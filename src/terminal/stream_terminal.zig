@@ -173,6 +173,13 @@ pub const Handler = struct {
         /// Called when the running program reports progress via OSC 9;4.
         progress_report: ?*const fn (*Handler, osc.Command.ProgressReport) void,
 
+        /// Called when the running program asks to resize the window's
+        /// text area with CSI 8 ; rows ; columns t. A zero means the
+        /// program asked to keep that dimension. The terminal isn't
+        /// resized by this; it's up to the embedder whether to allow the
+        /// request, and if so to resize the terminal itself.
+        resize_window: ?*const fn (*Handler, Action.ResizeWindow) void,
+
         /// Called when the running program writes to a clipboard.
         clipboard_write: ?*const fn (*Handler, clipboard.Write) void,
 
@@ -248,6 +255,7 @@ pub const Handler = struct {
             .drag_and_drop = null,
             .enquiry = null,
             .progress_report = null,
+            .resize_window = null,
             .size = null,
             .render_hold = null,
             .title_changed = null,
@@ -548,6 +556,7 @@ pub const Handler = struct {
             .window_title => try self.windowTitle(value.title),
             .report_pwd => try self.reportPwd(value.url),
             .progress_report => self.progressReport(value),
+            .resize_window => self.resizeWindow(value),
             .xtversion => self.reportXtversion(),
             .request_checksum => self.reportChecksum(value),
             .clipboard_contents => self.clipboardContents(
@@ -572,7 +581,6 @@ pub const Handler = struct {
             // Have no terminal-modifying effect
             .title_push,
             .title_pop,
-            .resize_window,
             => {},
         }
     }
@@ -678,6 +686,11 @@ pub const Handler = struct {
     fn progressReport(self: *Handler, report: osc.Command.ProgressReport) void {
         const func = self.effects.progress_report orelse return;
         func(self, report);
+    }
+
+    fn resizeWindow(self: *Handler, size: Action.ResizeWindow) void {
+        const func = self.effects.resize_window orelse return;
+        func(self, size);
     }
 
     fn clipboardContents(
@@ -3463,6 +3476,53 @@ test "desktop_notification effect callback" {
     try testing.expectEqual(@as(usize, 2), S.count);
     try testing.expectEqualStrings("Codex", S.last_title);
     try testing.expectEqualStrings("Needs attention", S.last_body);
+}
+
+test "resize_window effect callback" {
+    var t: Terminal = try .init(testing.io, testing.allocator, .{ .cols = 80, .rows = 24 });
+    defer t.deinit(testing.allocator);
+
+    const S = struct {
+        var calls: usize = 0;
+        var last: Action.ResizeWindow = .{ .rows = 0, .columns = 0 };
+
+        fn resizeWindow(_: *Handler, size: Action.ResizeWindow) void {
+            calls += 1;
+            last = size;
+        }
+    };
+    S.calls = 0;
+
+    var handler: Handler = .init(&t);
+    handler.effects.resize_window = &S.resizeWindow;
+
+    var s: Stream = .init(.{ .allocator = testing.allocator, .handler = handler });
+    defer s.deinit();
+
+    s.nextSlice("\x1b[8;30;100t");
+    try testing.expectEqual(1, S.calls);
+    try testing.expectEqual(Action.ResizeWindow{ .rows = 30, .columns = 100 }, S.last);
+
+    // An omitted dimension is reported as zero.
+    s.nextSlice("\x1b[8;;120t");
+    try testing.expectEqual(2, S.calls);
+    try testing.expectEqual(Action.ResizeWindow{ .rows = 0, .columns = 120 }, S.last);
+
+    // The request alone doesn't resize the terminal.
+    try testing.expectEqual(80, t.cols);
+    try testing.expectEqual(24, t.rows);
+}
+
+test "resize_window without effect" {
+    var t: Terminal = try .init(testing.io, testing.allocator, .{ .cols = 80, .rows = 24 });
+    defer t.deinit(testing.allocator);
+
+    var s: Stream = .init(.{ .allocator = testing.allocator, .handler = .init(&t) });
+    defer s.deinit();
+
+    s.nextSlice("\x1b[8;30;100t");
+    try testing.expectEqual(80, t.cols);
+    try testing.expectEqual(24, t.rows);
 }
 
 test "progress_report effect callback" {

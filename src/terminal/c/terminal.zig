@@ -191,6 +191,15 @@ pub const ProgressReport = extern struct {
     progress: i8,
 };
 
+/// A request from the running program to resize the window's text area.
+///
+/// C: GhosttyTerminalResizeWindow
+pub const ResizeWindow = extern struct {
+    size: usize,
+    rows: u16,
+    columns: u16,
+};
+
 /// A borrowed unsupported string sequence.
 ///
 /// C: GhosttyTerminalUnknownStringSequence
@@ -259,6 +268,7 @@ const Effects = struct {
     clipboard_read: ?ClipboardReadFn = null,
     unknown_sequence: ?UnknownSequenceFn = null,
     render_hold: ?RenderHoldFn = null,
+    resize_window: ?ResizeWindowFn = null,
 
     /// Scratch buffer for DA1 feature codes. The device attributes
     /// trampoline converts C feature codes into this buffer and returns
@@ -308,6 +318,9 @@ const Effects = struct {
 
     /// C function pointer type for the render_hold callback.
     pub const RenderHoldFn = *const fn (Terminal, ?*anyopaque, bool) callconv(lib.calling_conv) void;
+
+    /// C function pointer type for the resize_window callback.
+    pub const ResizeWindowFn = *const fn (Terminal, ?*anyopaque, *const ResizeWindow) callconv(lib.calling_conv) void;
 
     /// C function pointer type for the pwd_changed callback.
     pub const PwdChangedFn = *const fn (Terminal, ?*anyopaque) callconv(lib.calling_conv) void;
@@ -619,6 +632,20 @@ const Effects = struct {
         func(@ptrCast(wrapper), wrapper.effects.userdata, &c_report);
     }
 
+    fn resizeWindowTrampoline(
+        handler: *Handler,
+        request: Action.ResizeWindow,
+    ) void {
+        const wrapper = TerminalWrapper.fromHandler(handler);
+        const func = wrapper.effects.resize_window orelse return;
+        const c_request: ResizeWindow = .{
+            .size = @sizeOf(ResizeWindow),
+            .rows = request.rows,
+            .columns = request.columns,
+        };
+        func(@ptrCast(wrapper), wrapper.effects.userdata, &c_request);
+    }
+
     fn unknownSequenceTrampoline(
         handler: *Handler,
         sequence: Handler.UnknownSequence,
@@ -686,6 +713,7 @@ fn wrap(
         .progress_report = &Effects.progressReportTrampoline,
         .size = &Effects.sizeTrampoline,
         .render_hold = &Effects.renderHoldTrampoline,
+        .resize_window = &Effects.resizeWindowTrampoline,
 
         // Installed dynamically when the callback is set; see Effects.
         .clipboard_write = null,
@@ -1190,6 +1218,7 @@ pub const Option = enum(c_int) {
     render_hold = 41,
     checksum_report = 42,
     checksum_extension = 43,
+    resize_window = 44,
 
     /// Input type expected for setting the option.
     pub fn InType(comptime self: Option) type {
@@ -1210,6 +1239,7 @@ pub const Option = enum(c_int) {
             .clipboard_read => ?Effects.ClipboardReadFn,
             .unknown_sequence => ?Effects.UnknownSequenceFn,
             .render_hold => ?Effects.RenderHoldFn,
+            .resize_window => ?Effects.ResizeWindowFn,
             .title, .pwd, .terminfo_name => ?*const lib.String,
             .color_foreground, .color_background, .color_cursor => ?*const color.RGB.C,
             .color_palette => ?*const color.PaletteC,
@@ -1279,6 +1309,7 @@ fn setTyped(
         .title_changed => wrapper.effects.title_changed = value,
         .pwd_changed => wrapper.effects.pwd_changed = value,
         .progress_report => wrapper.effects.progress_report = value,
+        .resize_window => wrapper.effects.resize_window = value,
         .size_cb => wrapper.effects.size_cb = value,
         .render_hold => wrapper.effects.render_hold = value,
         .clipboard_write => {
@@ -4539,6 +4570,56 @@ test "set desktop_notification callback" {
     try testing.expectEqual(Result.success, set(t, .desktop_notification, null));
     vt_write(t, seq_c, seq_c.len);
     try testing.expectEqual(@as(usize, 2), S.count);
+}
+
+test "set resize_window callback" {
+    var t: Terminal = null;
+    try testing.expectEqual(Result.success, new(
+        &lib.alloc.test_allocator,
+        &t,
+        80,
+        24,
+    ));
+    defer free(t);
+
+    const S = struct {
+        var count: usize = 0;
+        var last_userdata: ?*anyopaque = null;
+        var last: ResizeWindow = .{ .size = 0, .rows = 0, .columns = 0 };
+
+        fn resizeWindow(
+            _: Terminal,
+            ud: ?*anyopaque,
+            request: *const ResizeWindow,
+        ) callconv(lib.calling_conv) void {
+            count += 1;
+            last_userdata = ud;
+            last = request.*;
+        }
+    };
+    S.count = 0;
+    S.last_userdata = null;
+
+    var sentinel: u8 = 44;
+    try testing.expectEqual(Result.success, set(t, .userdata, @ptrCast(&sentinel)));
+    try testing.expectEqual(Result.success, set(
+        t,
+        .resize_window,
+        @ptrCast(&S.resizeWindow),
+    ));
+
+    const seq = "\x1B[8;30;100t";
+    vt_write(t, seq, seq.len);
+    try testing.expectEqual(@as(usize, 1), S.count);
+    try testing.expectEqual(@as(?*anyopaque, @ptrCast(&sentinel)), S.last_userdata);
+    try testing.expectEqual(@sizeOf(ResizeWindow), S.last.size);
+    try testing.expectEqual(@as(u16, 30), S.last.rows);
+    try testing.expectEqual(@as(u16, 100), S.last.columns);
+
+    // Removing the callback takes effect immediately.
+    try testing.expectEqual(Result.success, set(t, .resize_window, null));
+    vt_write(t, seq, seq.len);
+    try testing.expectEqual(@as(usize, 1), S.count);
 }
 
 test "set progress_report callback" {
