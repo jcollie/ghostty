@@ -1188,6 +1188,7 @@ pub const Option = enum(c_int) {
     clipboard_write_max_bytes = 39,
     resize_pull_scrollback = 40,
     render_hold = 41,
+    checksum_report = 42,
 
     /// Input type expected for setting the option.
     pub fn InType(comptime self: Option) type {
@@ -1216,6 +1217,7 @@ pub const Option = enum(c_int) {
             .kitty_image_medium_shared_mem,
             .glyph_protocol,
             .title_report,
+            .checksum_report,
             .resize_pull_scrollback,
             => ?*const bool,
             .kitty_image_medium_temp_file => ?*const lib.String,
@@ -1299,6 +1301,10 @@ fn setTyped(
                 null;
         },
         .title_report => wrapper.stream.handler.title_report = if (value) |ptr|
+            ptr.*
+        else
+            false,
+        .checksum_report => wrapper.stream.handler.checksum_report = if (value) |ptr|
             ptr.*
         else
             false,
@@ -5883,6 +5889,62 @@ test "title report requires explicit opt in" {
     S.deinit();
     try testing.expectEqual(Result.success, set(t, .title_report, null));
     vt_write(t, query_title, query_title.len);
+    try testing.expect(S.last_data == null);
+}
+
+test "checksum report requires explicit opt in" {
+    var t: Terminal = null;
+    try testing.expectEqual(Result.success, new(
+        &lib.alloc.test_allocator,
+        &t,
+        80,
+        24,
+    ));
+    defer free(t);
+
+    const S = struct {
+        var last_data: ?[]u8 = null;
+
+        fn deinit() void {
+            if (last_data) |data| testing.allocator.free(data);
+            last_data = null;
+        }
+
+        fn writePty(
+            _: Terminal,
+            _: ?*anyopaque,
+            ptr: [*]const u8,
+            len: usize,
+        ) callconv(lib.calling_conv) void {
+            if (last_data) |data| testing.allocator.free(data);
+            last_data = testing.allocator.dupe(u8, ptr[0..len]) catch @panic("OOM");
+        }
+    };
+    S.last_data = null;
+    defer S.deinit();
+
+    try testing.expectEqual(
+        Result.success,
+        set(t, .write_pty, @ptrCast(&S.writePty)),
+    );
+
+    const text = "hello";
+    const query = "\x1B[1;1;1;1;1;5*y";
+    vt_write(t, text, text.len);
+
+    // WRITE_PTY alone must not enable the security-sensitive response.
+    vt_write(t, query, query.len);
+    try testing.expect(S.last_data == null);
+
+    const enabled = true;
+    try testing.expectEqual(Result.success, set(t, .checksum_report, &enabled));
+    vt_write(t, query, query.len);
+    try testing.expectEqualStrings("\x1bP1!~FDEC\x1b\\", S.last_data.?);
+
+    // NULL restores the secure default.
+    S.deinit();
+    try testing.expectEqual(Result.success, set(t, .checksum_report, null));
+    vt_write(t, query, query.len);
     try testing.expect(S.last_data == null);
 }
 

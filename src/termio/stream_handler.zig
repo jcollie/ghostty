@@ -55,6 +55,9 @@ pub const StreamHandler = struct {
     /// (OSC 5522) write transaction; exceeding it aborts with EFBIG.
     clipboard_write_limit: usize,
 
+    /// Whether DECRQCRA may report the checksum of an area of the screen.
+    checksum_report: bool,
+
     //---------------------------------------------------------------
     // Internal state
 
@@ -120,6 +123,7 @@ pub const StreamHandler = struct {
         self.clipboard_write = config.clipboard_write;
         self.clipboard_write_limit = config.clipboard_write_limit;
         self.enquiry_response = config.enquiry_response;
+        self.checksum_report = config.checksum_report;
         self.terminal.setDefaultCursorStyle(config.cursor_style);
         self.terminal.setDefaultCursorBlink(config.cursor_blink);
 
@@ -303,6 +307,8 @@ pub const StreamHandler = struct {
             .protected_mode_iso => self.terminal.setProtectedMode(.iso),
             .protected_mode_dec => self.terminal.setProtectedMode(.dec),
             .mouse_shift_capture => self.terminal.flags.mouse_shift_capture = if (value) .true else .false,
+            .checksum_extension => self.terminal.flags.checksum = value.flags,
+            .request_checksum => self.reportChecksum(value),
             .size_report => self.sendSizeReport(value),
             .resize_window => self.surfaceMessageWriter(.{ .resize_window = value }),
             .xtversion => try self.reportXtversion(),
@@ -585,6 +591,24 @@ pub const StreamHandler = struct {
 
     fn requestModeUnknown(self: *StreamHandler, mode_raw: u16, ansi: bool) !void {
         self.sendModeReport(self.terminal.modes.getReport(.{ .value = mode_raw, .ansi = ansi }));
+    }
+
+    fn reportChecksum(self: *StreamHandler, req: terminal.checksum.Request) void {
+        if (!self.checksum_report) return;
+        var data: termio.Message.WriteReq.Small.Array = undefined;
+        var writer: std.Io.Writer = .fixed(&data);
+        terminal.checksum.encode(
+            &writer,
+            req.id,
+            self.terminal.rectChecksum(req),
+        ) catch |err| {
+            log.err("error encoding checksum report err={}", .{err});
+            return;
+        };
+        self.messageWriter(.{ .write_small = .{
+            .data = data,
+            .len = @intCast(writer.buffered().len),
+        } });
     }
 
     fn sendModeReport(self: *StreamHandler, report: terminal.modes.Report) void {

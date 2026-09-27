@@ -1703,6 +1703,19 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Input type: GhosttyTerminalRenderHoldFn
    */
   GHOSTTY_TERMINAL_OPT_RENDER_HOLD = 41,
+
+  /**
+   * Enable checksum reports in response to DECRQCRA (CSI Pi ; Pg ; Pt ; Pl ;
+   * Pb ; Pr * y).
+   *
+   * This is disabled by default because a running program can checksum the
+   * screen one cell at a time and so read back everything on it, including
+   * output from other programs. Passing NULL or a pointer to false disables
+   * checksum reporting.
+   *
+   * Input type: bool*
+   */
+  GHOSTTY_TERMINAL_OPT_CHECKSUM_REPORT = 42,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 
