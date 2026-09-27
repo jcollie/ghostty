@@ -1716,6 +1716,27 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Input type: bool*
    */
   GHOSTTY_TERMINAL_OPT_CHECKSUM_REPORT = 42,
+
+  /**
+   * Set how the DECRQCRA checksum is calculated after a full reset (RIS)
+   * or soft reset (DECSTR). This also changes the current calculation.
+   *
+   * The value holds the same bits as XTCHECKSUM (CSI Ps # y) and xterm's
+   * checksumExtension resource, which a running program can still use to
+   * change the calculation until the next reset:
+   *
+   *   - 1: don't negate the result
+   *   - 2: don't add the video attributes of each cell
+   *   - 4: don't omit blanks
+   *   - 8: count cells that were never written to as spaces
+   *   - 16: use full codepoints instead of the DEC 8-bit values
+   *
+   * Zero, or passing NULL, is the calculation of a real DEC terminal.
+   * Values above 31 return GHOSTTY_INVALID_VALUE.
+   *
+   * Input type: uint8_t*
+   */
+  GHOSTTY_TERMINAL_OPT_CHECKSUM_EXTENSION = 43,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 
