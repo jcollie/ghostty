@@ -11,7 +11,8 @@ const ghostty_vt = @import("ghostty-vt");
 
 const Handler = @FieldType(ghostty_vt.TerminalStream, "handler");
 
-/// The size esctest resets the terminal to before every test.
+/// The size esctest resets the terminal to before every test, and so the
+/// size it starts at.
 const rows = 25;
 const cols = 80;
 
@@ -189,6 +190,7 @@ fn run(init: std.process.Init) !void {
     stream.handler.effects.write_pty = &writePty;
     stream.handler.effects.size = &size;
     stream.handler.effects.device_attributes = &deviceAttributes;
+    stream.handler.effects.resize_window = &resizeWindow;
 
     var buf: [4096]u8 = undefined;
     while (true) {
@@ -230,6 +232,21 @@ fn size(h: *Handler) ?ghostty_vt.size_report.Size {
         .cell_width = 10,
         .cell_height = 20,
     };
+}
+
+/// Resize as xterm does when esctest asks with CSI 8 t, keeping a
+/// dimension it gives as zero, and tell esctest's side of the pty.
+fn resizeWindow(h: *Handler, req: ghostty_vt.StreamAction.ResizeWindow) void {
+    const t = h.terminal;
+    const new_rows = if (req.rows == 0) t.rows else req.rows;
+    const new_cols = if (req.columns == 0) t.cols else req.columns;
+    t.resize(t.gpa(), .{ .cols = new_cols, .rows = new_rows }) catch |err| {
+        std.log.err("resizing to {d}x{d} failed: {t}", .{ new_cols, new_rows, err });
+        return;
+    };
+
+    const ws: std.c.winsize = .{ .row = new_rows, .col = new_cols, .xpixel = 0, .ypixel = 0 };
+    _ = std.c.ioctl(pty, std.c.T.IOCSWINSZ, &ws);
 }
 
 /// Answer as a VT520, the terminal esctest's highest VT level tests.
