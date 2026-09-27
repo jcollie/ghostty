@@ -126,6 +126,7 @@ pub const StreamHandler = struct {
         self.checksum_report = config.checksum_report;
         self.terminal.setDefaultCursorStyle(config.cursor_style);
         self.terminal.setDefaultCursorBlink(config.cursor_blink);
+        self.terminal.setDefaultChecksum(config.checksum_extension);
 
         // The config could have changed any of our colors so update mode 2031
         self.messageWriter(.{ .color_scheme_report = .{ .force = false } });

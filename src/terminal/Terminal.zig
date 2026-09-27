@@ -86,6 +86,10 @@ modes: modespkg.ModeState = .{},
 /// Terminal-level cursor state.
 cursor: Cursor = .{},
 
+/// The checksum variant DECRQCRA computes after RIS and DECSTR. The
+/// current variant is in `flags.checksum`.
+default_checksum: checksum.Flags = .{},
+
 /// The most recently set mouse shape for the terminal.
 mouse_shape: mouse.Shape = .text,
 
@@ -297,6 +301,9 @@ pub const Options = struct {
     default_cursor_style: Screen.CursorStyle = .block,
     default_cursor_blink: ?bool = false,
 
+    /// The checksum variant DECRQCRA computes after RIS and DECSTR.
+    default_checksum: checksum.Flags = .{},
+
     /// The total storage limit for Kitty images in bytes. Has no effect
     /// if kitty images are disabled at build-time.
     kitty_image_storage_limit: usize = switch (build_options.artifact) {
@@ -359,7 +366,9 @@ pub fn init(
             .default_style = opts.default_cursor_style,
             .default_blink = opts.default_cursor_blink,
         },
+        .default_checksum = opts.default_checksum,
     };
+    result.flags.checksum = opts.default_checksum;
     result.setCursorStyle(.default);
     return result;
 }
@@ -399,6 +408,13 @@ pub fn vtStream(self: *Terminal) Stream {
 /// This is the handler-side only for vtStream.
 pub fn vtHandler(self: *Terminal) Stream.Handler {
     return .init(self);
+}
+
+/// Set the checksum variant restored by RIS and DECSTR. Like
+/// `ModeState.setDefault`, this also changes the current variant.
+pub fn setDefaultChecksum(self: *Terminal, flags: checksum.Flags) void {
+    self.default_checksum = flags;
+    self.flags.checksum = flags;
 }
 
 /// Compute the DECRQCRA checksum of a rectangle of the active area,
@@ -4969,6 +4985,8 @@ pub fn fullReset(self: *Terminal) void {
         // This is configuration based on the pty rather than terminal
         // state, so a terminal reset must not change it.
         .resize_pull_scrollback = resize_pull_scrollback,
+
+        .checksum = self.default_checksum,
     };
     self.tabstops.reset(TABSTOP_INTERVAL);
     self.previous_char = null;
@@ -5030,7 +5048,7 @@ pub fn softReset(self: *Terminal) void {
 
     self.status_display = .main;
     self.flags.modify_other_keys_2 = false;
-    self.flags.checksum = .{};
+    self.flags.checksum = self.default_checksum;
     self.setCursorStyle(.default);
 }
 
@@ -16063,6 +16081,29 @@ test "Terminal: softReset status display and checksum" {
 
     try testing.expectEqual(.main, t.status_display);
     try testing.expectEqual(checksum.Flags{}, t.flags.checksum);
+}
+
+test "Terminal: default checksum survives resets" {
+    var t = try init(testing.io, testing.allocator, .{
+        .cols = 10,
+        .rows = 10,
+        .default_checksum = .{ .positive = true },
+    });
+    defer t.deinit(testing.allocator);
+    try testing.expectEqual(checksum.Flags{ .positive = true }, t.flags.checksum);
+
+    t.flags.checksum = .{ .full = true };
+    t.softReset();
+    try testing.expectEqual(checksum.Flags{ .positive = true }, t.flags.checksum);
+
+    t.flags.checksum = .{ .full = true };
+    t.fullReset();
+    try testing.expectEqual(checksum.Flags{ .positive = true }, t.flags.checksum);
+
+    t.setDefaultChecksum(.{ .no_trim = true });
+    try testing.expectEqual(checksum.Flags{ .no_trim = true }, t.flags.checksum);
+    t.fullReset();
+    try testing.expectEqual(checksum.Flags{ .no_trim = true }, t.flags.checksum);
 }
 
 // https://github.com/mitchellh/ghostty/issues/272
