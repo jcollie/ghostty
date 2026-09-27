@@ -41,8 +41,8 @@ zig fetch --save=esctest2 https://github.com/ThomasDickey/esctest2/archive/<comm
 ## How the terminal is set up
 
 esctest can only check a terminal that answers like some real one, so the
-runner passes it `--expected-terminal=xterm --xterm-checksum=411`, and sets
-up the terminal to match:
+runner passes it `--expected-terminal=xterm --xterm-checksum=411
+--xterm-reverse-wrap=411`, and sets up the terminal to match:
 
 - An 80x25 screen, the size esctest resets to before each test.
 - DECRQCRA enabled, with xterm's `checksumExtension: 23` calculation, which

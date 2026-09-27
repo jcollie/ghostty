@@ -31,6 +31,7 @@ const checksum: ghostty_vt.checksum.Flags = .{
 const esctest_args = [_][:0]const u8{
     "--expected-terminal=xterm",
     "--xterm-checksum=411",
+    "--xterm-reverse-wrap=411",
     "--timeout=0.2",
 };
 
