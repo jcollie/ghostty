@@ -1297,3 +1297,28 @@ test "dnd drag: kitten 0.49 conversation replay" {
     try h.drag().report(testing.allocator, h.writer(), .{ .finished = false });
     try h.expectOutput("\x1b]72;t=e:x=4:y=0\x1b\\");
 }
+
+test "dnd drag: unpadded pre-sent data and images end at start" {
+    var h: Harness = .init();
+    defer h.deinit();
+
+    // Pre-sent data and images have no end-of-data message, so a tail
+    // sent without padding, as kitty's clients do, is decoded when the
+    // drag starts.
+    try h.setupOffer("text/plain");
+    _ = try h.command("t=p:x=0", "aGVsbG8gd29ybA");
+    _ = try h.command("t=p:x=-1:y=32:X=1:Y=1", "AAAM/w");
+    try h.expectEvents("t=P:x=-1", null, &.{.drag_start});
+    try h.expectOutput("");
+    try testing.expectEqualStrings("hello worl", h.drag().preSent(0).?);
+    try testing.expectEqualSlices(u8, "\x00\x00\x0c\xff", h.drag().image(0).?.data);
+
+    // A single leftover character can't be decoded.
+    try h.expectEvents("t=E:y=-1", null, &.{.drag_cancel});
+    try h.setupOffer("text/plain");
+    _ = try h.command("t=p:x=0", "aGVsb");
+    try h.expectEvents("t=P:x=-1", null, &.{});
+    try h.expectOutput(
+        "\x1b]72;t=E:m=0;EINVAL:error while decoding base64 pre-sent data\x1b\\",
+    );
+}

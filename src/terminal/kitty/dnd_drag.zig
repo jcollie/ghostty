@@ -6,6 +6,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const assert = @import("../../quirks.zig").inlineAssert;
+const simd = @import("../../simd/main.zig");
 const osc = @import("../osc.zig");
 const command = @import("dnd_command.zig");
 const response = @import("dnd_response.zig");
@@ -29,69 +30,6 @@ pub const max_buffered_bytes = 64 * 1024 * 1024;
 /// The number of drag image slots. Matches kitty, which uses image
 /// numbers 1 through 14 (`x=-1` to `x=-14`).
 pub const image_slots = 16;
-
-/// A streaming base64 decoder that emits each byte as soon as its bits
-/// have arrived, like the decoder kitty uses: a stream may end without
-/// padding (kitten's final chunks do), and since the protocol has no end
-/// marker for pre-sent data, waiting for complete groups would lose the
-/// tail. Padding ends the current group, so chunks padded independently
-/// also decode.
-const Base64 = struct {
-    bits: u32 = 0,
-    nbits: u5 = 0,
-
-    /// Decode input into output, which must hold at least
-    /// `input.len / 4 * 3 + 3` bytes. Returns the bytes written.
-    fn feed(self: *Base64, input: []const u8, output: []u8) error{Invalid}!usize {
-        var n: usize = 0;
-        for (input) |c| {
-            const v: u32 = switch (c) {
-                'A'...'Z' => c - 'A',
-                'a'...'z' => c - 'a' + 26,
-                '0'...'9' => c - '0' + 52,
-                '+' => 62,
-                '/' => 63,
-                '=' => {
-                    self.* = .{};
-                    continue;
-                },
-                else => return error.Invalid,
-            };
-            self.bits = (self.bits << 6) | v;
-            self.nbits += 6;
-            if (self.nbits >= 8) {
-                self.nbits -= 8;
-                output[n] = @truncate(self.bits >> self.nbits);
-                n += 1;
-                self.bits &= (@as(u32, 1) << self.nbits) - 1;
-            }
-        }
-        return n;
-    }
-};
-
-test "Base64: eager decoding" {
-    const testing = std.testing;
-    var buf: [32]u8 = undefined;
-
-    // Unpadded tails decode immediately.
-    var d: Base64 = .{};
-    var n = try d.feed("ZHJhZ2dlZCBmcm9tIGtpdHRl", &buf);
-    n += try d.feed("bgo", buf[n..]);
-    try testing.expectEqualStrings("dragged from kitten\n", buf[0..n]);
-
-    // Arbitrary splits and independently padded chunks.
-    d = .{};
-    n = try d.feed("aGVs", &buf);
-    n += try d.feed("bG8=", buf[n..]);
-    n += try d.feed("IHdv", buf[n..]);
-    n += try d.feed("cm", buf[n..]);
-    n += try d.feed("xk", buf[n..]);
-    try testing.expectEqualStrings("hello world", buf[0..n]);
-
-    d = .{};
-    try testing.expectError(error.Invalid, d.feed("!@#$", &buf));
-}
 
 /// A position on the terminal, as sent when the user starts a drag.
 pub const Position = struct {
@@ -255,7 +193,7 @@ pub const DragSource = struct {
         /// starting at `read`.
         data: std.ArrayListUnmanaged(u8) = .empty,
         read: usize = 0,
-        decoder: Base64 = .{},
+        decoder: simd.base64.Streaming = .{},
 
         /// After the drag starts: the request sent to the client and
         /// the state of its reply.
@@ -281,7 +219,7 @@ pub const DragSource = struct {
         height: u32 = 0,
         opacity: u32 = 0,
         data: std.ArrayListUnmanaged(u8) = .empty,
-        decoder: Base64 = .{},
+        decoder: simd.base64.Streaming = .{},
     };
 
     pub fn deinit(self: *DragSource, alloc: Allocator) void {
@@ -309,7 +247,9 @@ pub const DragSource = struct {
     }
 
     /// The data pre-sent for an offered MIME type, or null if none was.
-    /// Only available until the drag starts.
+    /// Complete once the `drag_start` event is delivered (the protocol
+    /// has no end-of-data message for it) and only available until the
+    /// drag starts.
     pub fn preSent(self: *const DragSource, index: usize) ?[]const u8 {
         if (self.phase != .building and self.phase != .starting) return null;
         if (index >= self.items.len) return null;
@@ -327,8 +267,8 @@ pub const DragSource = struct {
         return n;
     }
 
-    /// A drag image, in number order. Only available until the drag
-    /// starts.
+    /// A drag image, in number order. Complete once the `drag_start`
+    /// event is delivered and only available until the drag starts.
     pub fn image(self: *const DragSource, index: usize) ?Image {
         var n: usize = 0;
         for (&self.images) |*slot| {
@@ -626,6 +566,27 @@ pub const DragSource = struct {
             terminator,
         );
 
+        // Pre-sent data and images have no end-of-data message, so their
+        // streams end here, possibly unpadded as kitty's clients send.
+        for (self.items) |*item| {
+            if (!try finishInto(alloc, &item.decoder, &item.data)) return try self.abort(
+                alloc,
+                writer,
+                .EINVAL,
+                "error while decoding base64 pre-sent data",
+                terminator,
+            );
+        }
+        for (&self.images) |*slot| {
+            if (!try finishInto(alloc, &slot.decoder, &slot.data)) return try self.abort(
+                alloc,
+                writer,
+                .EINVAL,
+                "could not base64 decode drag thumbnail data",
+                terminator,
+            );
+        }
+
         var total: usize = 0;
         for (&self.images) |*slot| {
             if (slot.data.items.len == 0) continue;
@@ -874,8 +835,16 @@ pub const DragSource = struct {
             return .data;
         }
 
-        // An empty final chunk ends the data.
+        // An empty final chunk ends the data, which kitty's clients may
+        // leave unpadded.
         if (!meta.more and payload.len == 0) {
+            if (!try finishInto(alloc, &item.decoder, &item.data)) return try self.abort(
+                alloc,
+                writer,
+                .EINVAL,
+                "failed to base64 decode drag source item data",
+                terminator,
+            );
             item.complete = true;
             return .data;
         }
@@ -924,13 +893,31 @@ pub const DragSource = struct {
     /// output. Returns false on invalid base64.
     fn decodeInto(
         alloc: Allocator,
-        decoder: *Base64,
+        decoder: *simd.base64.Streaming,
         list: *std.ArrayListUnmanaged(u8),
         payload: []const u8,
     ) Allocator.Error!bool {
-        try list.ensureUnusedCapacity(alloc, payload.len / 4 * 3 + 3);
-        const n = decoder.feed(payload, list.unusedCapacitySlice()) catch return false;
-        list.items.len += n;
+        try list.ensureUnusedCapacity(alloc, decoder.maxLen(payload));
+        const decoded = decoder.feed(
+            payload,
+            list.unusedCapacitySlice(),
+        ) catch return false;
+        list.items.len += decoded.len;
+        return true;
+    }
+
+    /// Finish a streaming decoder whose stream may end unpadded,
+    /// appending any remaining output. Returns false on invalid base64.
+    fn finishInto(
+        alloc: Allocator,
+        decoder: *simd.base64.Streaming,
+        list: *std.ArrayListUnmanaged(u8),
+    ) Allocator.Error!bool {
+        try list.ensureUnusedCapacity(alloc, 3);
+        const decoded = decoder.finishUnpadded(
+            list.unusedCapacitySlice(),
+        ) catch return false;
+        list.items.len += decoded.len;
         return true;
     }
 
