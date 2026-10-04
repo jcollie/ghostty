@@ -174,6 +174,8 @@ ghostty_terminal_compression_activity
 ghostty_terminal_continuation_alloc
 ghostty_terminal_continuation_buf
 ghostty_terminal_continuation_write
+ghostty_terminal_drag
+ghostty_terminal_drop
 ghostty_terminal_free
 ghostty_terminal_get
 ghostty_terminal_get_multi

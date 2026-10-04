@@ -10,6 +10,8 @@ not which functions do it, start here.
   lock, redraw only what changed, and respect render holds.
 - @subpage guide-input - Encode keys, mouse events, focus changes and pastes,
   and keep the encoders in step with the terminal's modes.
+- @subpage guide-dnd - Connect drops onto the terminal and drags out of it to
+  the operating system's drag and drop.
 - @subpage guide-colors - Set a theme, read colors back, parse color strings,
   and report light or dark mode.
 - @subpage guide-grid - Name a position in the grid, read its cells, and hold

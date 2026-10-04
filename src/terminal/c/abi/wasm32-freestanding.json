@@ -507,6 +507,563 @@
         }
       }
     },
+    "GhosttyDndPosition": {
+      "kind": "struct",
+      "size": 16,
+      "align": 4,
+      "fields": {
+        "cell_x": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "cell_y": {
+          "offset": 4,
+          "size": 4,
+          "type": "u32"
+        },
+        "pixel_x": {
+          "offset": 8,
+          "size": 4,
+          "type": "i32"
+        },
+        "pixel_y": {
+          "offset": 12,
+          "size": 4,
+          "type": "i32"
+        }
+      }
+    },
+    "GhosttyDragData": {
+      "kind": "struct",
+      "size": 16,
+      "align": 4,
+      "fields": {
+        "index": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "bytes": {
+          "offset": 4,
+          "size": 8,
+          "type": "GhosttyString"
+        },
+        "status": {
+          "offset": 12,
+          "size": 4,
+          "type": "GhosttyDragDataStatus"
+        }
+      }
+    },
+    "GhosttyDragEvent": {
+      "kind": "struct",
+      "size": 72,
+      "align": 8,
+      "fields": {
+        "tag": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDragEventTag"
+        },
+        "value": {
+          "offset": 8,
+          "size": 64,
+          "type": "GhosttyDragEventValue",
+          "tag": "tag",
+          "arms": {
+            "OFFERS": "enabled",
+            "START": "start",
+            "IMAGE": "image",
+            "DATA": "data",
+            "CANCEL": null
+          }
+        }
+      }
+    },
+    "GhosttyDragEventValue": {
+      "kind": "union",
+      "size": 64,
+      "align": 8,
+      "fields": {
+        "enabled": {
+          "offset": 0,
+          "size": 1,
+          "type": "bool"
+        },
+        "start": {
+          "offset": 0,
+          "size": 28,
+          "type": "GhosttyDragOffer"
+        },
+        "image": {
+          "offset": 0,
+          "size": 8,
+          "type": "GhosttyDragImageChange"
+        },
+        "data": {
+          "offset": 0,
+          "size": 16,
+          "type": "GhosttyDragData"
+        },
+        "_padding": {
+          "offset": 0,
+          "size": 64,
+          "type": "array",
+          "elem": "u64",
+          "count": 8
+        }
+      }
+    },
+    "GhosttyDragImage": {
+      "kind": "struct",
+      "size": 24,
+      "align": 4,
+      "fields": {
+        "format": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDragImageFormat"
+        },
+        "width": {
+          "offset": 4,
+          "size": 4,
+          "type": "u32"
+        },
+        "height": {
+          "offset": 8,
+          "size": 4,
+          "type": "u32"
+        },
+        "opacity": {
+          "offset": 12,
+          "size": 4,
+          "type": "u32"
+        },
+        "data": {
+          "offset": 16,
+          "size": 8,
+          "type": "GhosttyString"
+        }
+      }
+    },
+    "GhosttyDragImageChange": {
+      "kind": "struct",
+      "size": 8,
+      "align": 4,
+      "fields": {
+        "has_image": {
+          "offset": 0,
+          "size": 1,
+          "type": "bool"
+        },
+        "image": {
+          "offset": 4,
+          "size": 4,
+          "type": "u32"
+        }
+      }
+    },
+    "GhosttyDragInput": {
+      "kind": "struct",
+      "size": 72,
+      "align": 8,
+      "fields": {
+        "tag": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDragInputTag"
+        },
+        "value": {
+          "offset": 8,
+          "size": 64,
+          "type": "GhosttyDragInputValue",
+          "tag": "tag",
+          "arms": {
+            "GESTURE": "position",
+            "START_RESULT": "start_result",
+            "ACCEPTED": "mime_index",
+            "OPERATION": "operation",
+            "DROPPED": null,
+            "FINISHED": "canceled",
+            "REQUEST_DATA": "index"
+          }
+        }
+      }
+    },
+    "GhosttyDragInputValue": {
+      "kind": "union",
+      "size": 64,
+      "align": 8,
+      "fields": {
+        "position": {
+          "offset": 0,
+          "size": 16,
+          "type": "GhosttyDndPosition"
+        },
+        "start_result": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDragStartResult"
+        },
+        "mime_index": {
+          "offset": 0,
+          "size": 4,
+          "type": "i32"
+        },
+        "operation": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDndOperation"
+        },
+        "canceled": {
+          "offset": 0,
+          "size": 1,
+          "type": "bool"
+        },
+        "index": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "_padding": {
+          "offset": 0,
+          "size": 64,
+          "type": "array",
+          "elem": "u64",
+          "count": 8
+        }
+      }
+    },
+    "GhosttyDragItem": {
+      "kind": "struct",
+      "size": 20,
+      "align": 4,
+      "fields": {
+        "mime": {
+          "offset": 0,
+          "size": 8,
+          "type": "GhosttyString"
+        },
+        "has_pre_sent": {
+          "offset": 8,
+          "size": 1,
+          "type": "bool"
+        },
+        "pre_sent": {
+          "offset": 12,
+          "size": 8,
+          "type": "GhosttyString"
+        }
+      }
+    },
+    "GhosttyDragOffer": {
+      "kind": "struct",
+      "size": 28,
+      "align": 4,
+      "fields": {
+        "operations": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "items": {
+          "offset": 4,
+          "size": 4,
+          "type": "pointer",
+          "elem": "GhosttyDragItem",
+          "const": true,
+          "nullable": true
+        },
+        "items_len": {
+          "offset": 8,
+          "size": 4,
+          "type": "u32"
+        },
+        "images": {
+          "offset": 12,
+          "size": 4,
+          "type": "pointer",
+          "elem": "GhosttyDragImage",
+          "const": true,
+          "nullable": true
+        },
+        "images_len": {
+          "offset": 16,
+          "size": 4,
+          "type": "u32"
+        },
+        "has_image": {
+          "offset": 20,
+          "size": 1,
+          "type": "bool"
+        },
+        "image": {
+          "offset": 24,
+          "size": 4,
+          "type": "u32"
+        }
+      }
+    },
+    "GhosttyDropAcceptance": {
+      "kind": "struct",
+      "size": 12,
+      "align": 4,
+      "fields": {
+        "operation": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDndOperation"
+        },
+        "mimes": {
+          "offset": 4,
+          "size": 4,
+          "type": "pointer",
+          "elem": "GhosttyString",
+          "const": true,
+          "nullable": true
+        },
+        "mimes_len": {
+          "offset": 8,
+          "size": 4,
+          "type": "u32"
+        }
+      }
+    },
+    "GhosttyDropData": {
+      "kind": "struct",
+      "size": 12,
+      "align": 4,
+      "fields": {
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "data": {
+          "offset": 4,
+          "size": 8,
+          "type": "GhosttyString"
+        }
+      }
+    },
+    "GhosttyDropDataRequest": {
+      "kind": "struct",
+      "size": 16,
+      "align": 4,
+      "fields": {
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "mime_index": {
+          "offset": 4,
+          "size": 4,
+          "type": "u32"
+        },
+        "mime": {
+          "offset": 8,
+          "size": 8,
+          "type": "GhosttyString"
+        }
+      }
+    },
+    "GhosttyDropEvent": {
+      "kind": "struct",
+      "size": 72,
+      "align": 8,
+      "fields": {
+        "tag": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDropEventTag"
+        },
+        "value": {
+          "offset": 8,
+          "size": 64,
+          "type": "GhosttyDropEventValue",
+          "tag": "tag",
+          "arms": {
+            "REGISTRATION": "registration",
+            "ACCEPTANCE": "acceptance",
+            "DATA_REQUEST": "data_request",
+            "CONCLUDED": "concluded"
+          }
+        }
+      }
+    },
+    "GhosttyDropEventValue": {
+      "kind": "union",
+      "size": 64,
+      "align": 8,
+      "fields": {
+        "registration": {
+          "offset": 0,
+          "size": 12,
+          "type": "GhosttyDropRegistration"
+        },
+        "acceptance": {
+          "offset": 0,
+          "size": 12,
+          "type": "GhosttyDropAcceptance"
+        },
+        "data_request": {
+          "offset": 0,
+          "size": 16,
+          "type": "GhosttyDropDataRequest"
+        },
+        "concluded": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDndOperation"
+        },
+        "_padding": {
+          "offset": 0,
+          "size": 64,
+          "type": "array",
+          "elem": "u64",
+          "count": 8
+        }
+      }
+    },
+    "GhosttyDropFailure": {
+      "kind": "struct",
+      "size": 8,
+      "align": 4,
+      "fields": {
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "reason": {
+          "offset": 4,
+          "size": 4,
+          "type": "GhosttyDropError"
+        }
+      }
+    },
+    "GhosttyDropInput": {
+      "kind": "struct",
+      "size": 72,
+      "align": 8,
+      "fields": {
+        "tag": {
+          "offset": 0,
+          "size": 4,
+          "type": "GhosttyDropInputTag"
+        },
+        "value": {
+          "offset": 8,
+          "size": 64,
+          "type": "GhosttyDropInputValue",
+          "tag": "tag",
+          "arms": {
+            "MOVE": "move",
+            "LEAVE": null,
+            "DROP": "drop",
+            "DATA": "data",
+            "END": "id",
+            "FAIL": "fail"
+          }
+        }
+      }
+    },
+    "GhosttyDropInputValue": {
+      "kind": "union",
+      "size": 64,
+      "align": 8,
+      "fields": {
+        "move": {
+          "offset": 0,
+          "size": 28,
+          "type": "GhosttyDropMotion"
+        },
+        "drop": {
+          "offset": 0,
+          "size": 28,
+          "type": "GhosttyDropMotion"
+        },
+        "data": {
+          "offset": 0,
+          "size": 12,
+          "type": "GhosttyDropData"
+        },
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "fail": {
+          "offset": 0,
+          "size": 8,
+          "type": "GhosttyDropFailure"
+        },
+        "_padding": {
+          "offset": 0,
+          "size": 64,
+          "type": "array",
+          "elem": "u64",
+          "count": 8
+        }
+      }
+    },
+    "GhosttyDropMotion": {
+      "kind": "struct",
+      "size": 28,
+      "align": 4,
+      "fields": {
+        "position": {
+          "offset": 0,
+          "size": 16,
+          "type": "GhosttyDndPosition"
+        },
+        "operations": {
+          "offset": 16,
+          "size": 4,
+          "type": "u32"
+        },
+        "mimes": {
+          "offset": 20,
+          "size": 4,
+          "type": "pointer",
+          "elem": "GhosttyString",
+          "const": true,
+          "nullable": true
+        },
+        "mimes_len": {
+          "offset": 24,
+          "size": 4,
+          "type": "u32"
+        }
+      }
+    },
+    "GhosttyDropRegistration": {
+      "kind": "struct",
+      "size": 12,
+      "align": 4,
+      "fields": {
+        "accepting": {
+          "offset": 0,
+          "size": 1,
+          "type": "bool"
+        },
+        "mimes": {
+          "offset": 4,
+          "size": 4,
+          "type": "pointer",
+          "elem": "GhosttyString",
+          "const": true,
+          "nullable": true
+        },
+        "mimes_len": {
+          "offset": 8,
+          "size": 4,
+          "type": "u32"
+        }
+      }
+    },
     "GhosttyGridRef": {
       "kind": "struct",
       "size": 8,
@@ -2287,6 +2844,135 @@
       "values": {
         "LIGHT": 0,
         "DARK": 1,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDndOperation": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DND_OPERATION_",
+      "values": {
+        "NONE": 0,
+        "COPY": 1,
+        "MOVE": 2,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDragDataStatus": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DRAG_DATA_STATUS_",
+      "values": {
+        "PENDING": 0,
+        "COMPLETE": 1,
+        "FAILED": 2,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDragEventTag": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DRAG_EVENT_",
+      "values": {
+        "OFFERS": 0,
+        "START": 1,
+        "IMAGE": 2,
+        "DATA": 3,
+        "CANCEL": 4,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDragImageFormat": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DRAG_IMAGE_FORMAT_",
+      "values": {
+        "RGBA": 0,
+        "PNG": 1,
+        "TEXT": 2,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDragInputTag": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DRAG_INPUT_",
+      "values": {
+        "GESTURE": 0,
+        "START_RESULT": 1,
+        "ACCEPTED": 2,
+        "OPERATION": 3,
+        "DROPPED": 4,
+        "FINISHED": 5,
+        "REQUEST_DATA": 6,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDragStartResult": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DRAG_START_",
+      "values": {
+        "STARTED": 0,
+        "DENIED": 1,
+        "FAILED": 2,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDropError": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DROP_ERROR_",
+      "values": {
+        "IO": 0,
+        "NOT_FOUND": 1,
+        "DENIED": 2,
+        "TOO_LARGE": 3,
+        "OUT_OF_MEMORY": 4,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDropEventTag": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DROP_EVENT_",
+      "values": {
+        "REGISTRATION": 0,
+        "ACCEPTANCE": 1,
+        "DATA_REQUEST": 2,
+        "CONCLUDED": 3,
+        "MAX_VALUE": 2147483647
+      }
+    },
+    "GhosttyDropInputTag": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DROP_INPUT_",
+      "values": {
+        "MOVE": 0,
+        "LEAVE": 1,
+        "DROP": 2,
+        "DATA": 3,
+        "END": 4,
+        "FAIL": 5,
         "MAX_VALUE": 2147483647
       }
     },
@@ -4551,6 +5237,8 @@
         "XT_CHECKSUM_EXTENSION": 46,
         "PROGRAM_STATUS": 47,
         "RESIZE_WINDOW": 48,
+        "DROP": 49,
+        "DRAG": 50,
         "MAX_VALUE": 2147483647
       },
       "keys": {
@@ -4747,6 +5435,14 @@
         "RESIZE_WINDOW": {
           "direction": "in",
           "type": "GhosttyTerminalResizeWindowFn"
+        },
+        "DROP": {
+          "direction": "in",
+          "type": "GhosttyTerminalDropFn"
+        },
+        "DRAG": {
+          "direction": "in",
+          "type": "GhosttyTerminalDragFn"
         }
       }
     },
@@ -5603,6 +6299,54 @@
       ],
       "return": {
         "type": "bool"
+      }
+    },
+    "GhosttyTerminalDragFn": {
+      "kind": "callback",
+      "size": 4,
+      "align": 4,
+      "params": [
+        {
+          "type": "GhosttyTerminal"
+        },
+        {
+          "type": "pointer",
+          "elem": "opaque",
+          "const": false,
+          "nullable": true
+        },
+        {
+          "type": "pointer",
+          "elem": "GhosttyDragEvent",
+          "const": true
+        }
+      ],
+      "return": {
+        "type": "void"
+      }
+    },
+    "GhosttyTerminalDropFn": {
+      "kind": "callback",
+      "size": 4,
+      "align": 4,
+      "params": [
+        {
+          "type": "GhosttyTerminal"
+        },
+        {
+          "type": "pointer",
+          "elem": "opaque",
+          "const": false,
+          "nullable": true
+        },
+        {
+          "type": "pointer",
+          "elem": "GhosttyDropEvent",
+          "const": true
+        }
+      ],
+      "return": {
+        "type": "void"
       }
     },
     "GhosttyTerminalEnquiryFn": {

@@ -62,6 +62,11 @@
  * you render the terminal yourself.
  */
 
+/** @example c-vt-dnd/src/main.c
+ * Connect drag and drop to the OS: forward a drop to a program and serve its
+ * data requests, then start a drag the program offers.
+ */
+
 /** @example c-vt-search/src/main.c
  * Search the terminal for a string, step through the matches like a find bar,
  * and read the viewport matches to draw highlights.
@@ -170,6 +175,7 @@ extern "C" {
 #include <ghostty/vt/color.h>
 #include <ghostty/vt/color_scheme.h>
 #include <ghostty/vt/device.h>
+#include <ghostty/vt/dnd.h>
 #include <ghostty/vt/focus.h>
 #include <ghostty/vt/formatter.h>
 #include <ghostty/vt/render.h>

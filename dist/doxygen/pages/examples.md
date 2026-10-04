@@ -2,7 +2,7 @@
 
 Every example is a complete program you can build and run. Each one lives in its
 own directory under `example/`, with a README that says how to run it. Most of
-them are one `zig build run`. CI compiles all 29 C examples, so they can't fall
+them are one `zig build run`. CI compiles all 30 C examples, so they can't fall
 behind the API.
 
 If you want to see everything working together, start with
@@ -38,12 +38,13 @@ c-vt-stream/src/main.c "c-vt-stream".
 
 ## Input
 
-| Example                                               | What it does                                                                                                                                                                                                                            | Guide                    |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| @ref c-vt-encode-key/src/main.c "c-vt-encode-key"     | Encode Ctrl+C as an escape sequence with the Kitty keyboard protocol.                                                                                                                                                                   | @ref guide-input "Input" |
-| @ref c-vt-encode-mouse/src/main.c "c-vt-encode-mouse" | Encode a left button press at a pixel position as an SGR mouse sequence.                                                                                                                                                                | @ref guide-input "Input" |
-| @ref c-vt-encode-focus/src/main.c "c-vt-encode-focus" | Encode a focus gained event as CSI I, for programs that turn on focus reporting (mode 1004).                                                                                                                                            | @ref guide-input "Input" |
-| @ref c-vt-paste/src/main.c "c-vt-paste"               | Paste into a terminal with ghostty_terminal_paste(): plain text, bracketed paste (mode 2004), the unsafe-paste confirmation, and Kitty paste events (mode 5522). It also checks paste safety and encodes paste data without a terminal. | @ref guide-input "Input" |
+| Example                                               | What it does                                                                                                                                                                                                                            | Guide                          |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| @ref c-vt-encode-key/src/main.c "c-vt-encode-key"     | Encode Ctrl+C as an escape sequence with the Kitty keyboard protocol.                                                                                                                                                                   | @ref guide-input "Input"       |
+| @ref c-vt-encode-mouse/src/main.c "c-vt-encode-mouse" | Encode a left button press at a pixel position as an SGR mouse sequence.                                                                                                                                                                | @ref guide-input "Input"       |
+| @ref c-vt-encode-focus/src/main.c "c-vt-encode-focus" | Encode a focus gained event as CSI I, for programs that turn on focus reporting (mode 1004).                                                                                                                                            | @ref guide-input "Input"       |
+| @ref c-vt-paste/src/main.c "c-vt-paste"               | Paste into a terminal with ghostty_terminal_paste(): plain text, bracketed paste (mode 2004), the unsafe-paste confirmation, and Kitty paste events (mode 5522). It also checks paste safety and encodes paste data without a terminal. | @ref guide-input "Input"       |
+| @ref c-vt-dnd/src/main.c "c-vt-dnd"                   | Connect drag and drop to the OS: forward a drop to a program and serve its data requests, then start a drag the program offers.                                                                                                         | @ref guide-dnd "Drag and Drop" |
 
 ## Building Blocks
 
