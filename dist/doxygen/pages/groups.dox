@@ -156,6 +156,13 @@
  */
 
 /**
+ * @defgroup dnd Drag and Drop
+ * @ingroup api_input
+ * @brief Connect drops onto the terminal and drags out of it to the
+ * operating system.
+ */
+
+/**
  * @defgroup api_building_blocks Building Blocks
  * @brief Parsers and encoders that work without a terminal.
  *

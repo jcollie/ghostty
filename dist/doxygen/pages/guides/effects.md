@@ -59,7 +59,7 @@ borrowed, and they're only valid until it returns.
 
 ## The effects {#guide-effects-table}
 
-There are 19 effects:
+There are 21 effects:
 
 | Option                                     | Callback type                        | Trigger                                                                 |
 | ------------------------------------------ | ------------------------------------ | ----------------------------------------------------------------------- |
@@ -82,6 +82,8 @@ There are 19 effects:
 | #GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT      | GhosttyTerminalSemanticPromptFn      | Shell reports a prompt or command step via OSC 133                      |
 | #GHOSTTY_TERMINAL_OPT_RESET                | GhosttyTerminalResetFn               | Full reset (RIS, `ESC c`)                                               |
 | #GHOSTTY_TERMINAL_OPT_RESIZE_WINDOW        | GhosttyTerminalResizeWindowFn        | Window resize request (`CSI 8 t`)                                       |
+| #GHOSTTY_TERMINAL_OPT_DROP                 | GhosttyTerminalDropFn                | Program accepts drops or wants dropped data. See @ref guide-dnd         |
+| #GHOSTTY_TERMINAL_OPT_DRAG                 | GhosttyTerminalDragFn                | Program offers or starts a drag. See @ref guide-dnd                     |
 
 ## Common callbacks {#guide-effects-common}
 
