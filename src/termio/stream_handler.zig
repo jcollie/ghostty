@@ -62,7 +62,7 @@ pub const StreamHandler = struct {
 
     /// The sides of drag and drop (OSC 72) programs can take part in,
     /// from the runtime's support and the configuration.
-    dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = false, .drag = false },
+    dnd_sides: terminal.kitty.dnd.Options = .{ .drop = false, .drag = false },
 
     //---------------------------------------------------------------
     // Internal state

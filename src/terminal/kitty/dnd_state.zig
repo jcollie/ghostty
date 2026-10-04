@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const assert = @import("../../quirks.zig").inlineAssert;
 const osc = @import("../osc.zig");
+const dnd = @import("../dnd.zig");
 const command = @import("dnd_command.zig");
 const response = @import("dnd_response.zig");
 const dnd_drop = @import("dnd_drop.zig");
@@ -100,14 +101,19 @@ pub const Events = struct {
     }
 };
 
-/// The sides of the protocol the embedder connects to the OS.
-pub const Sides = struct {
+/// How the embedder connects the protocol to the OS.
+pub const Options = struct {
     /// Drops onto the terminal. Without it, drop commands are ignored.
     drop: bool = true,
 
     /// Drags out of the terminal. Without it, drag commands are refused
     /// as kitty refuses them when it can't start drags.
     drag: bool = true,
+
+    /// This machine's ID, for telling whether a client is on another
+    /// machine (e.g. over ssh), which must copy dropped files with file
+    /// requests. Without it, every client is treated as local.
+    machine_id: ?*const dnd.MachineId = null,
 };
 
 /// The per-terminal drag and drop state.
@@ -162,7 +168,7 @@ pub fn handleCommand(
     slot: *?*State,
     alloc: Allocator,
     writer: *std.Io.Writer,
-    sides: Sides,
+    options: Options,
     v: osc.Command.KittyDndProtocol,
 ) (Allocator.Error || std.Io.Writer.Error)!Events {
     var events: Events = .{};
@@ -174,8 +180,8 @@ pub fn handleCommand(
     // Commands for a side the embedder doesn't support never reach the
     // state, so they can't activate it.
     if (raw.type) |t| switch (t) {
-        .register, .unregister, .status, .request => if (!sides.drop) return events,
-        .offer, .present, .start_drag, .drag_event, .drag_error, .remote_data => if (!sides.drag) {
+        .register, .unregister, .status, .request => if (!options.drop) return events,
+        .offer, .present, .start_drag, .drag_event, .drag_error, .remote_data => if (!options.drag) {
             try refuseDrag(writer, t, raw, v.terminator);
             return events;
         },
@@ -219,6 +225,7 @@ pub fn handleCommand(
         payload,
         continuation,
         v.terminator,
+        options,
         &events,
     );
 
@@ -240,14 +247,20 @@ fn dispatch(
     payload: []const u8,
     continuation: bool,
     terminator: osc.Terminator,
+    options: Options,
     events: *Events,
 ) (Allocator.Error || std.Io.Writer.Error)!void {
     switch (t) {
         .register => {
-            // x=1 declares the client's machine ID for remote drop
-            // support. We don't support remote drop yet, so accept and
-            // ignore.
-            if (meta.cell_x == 1) return;
+            // x=1 declares the client's machine ID, so a client on
+            // another machine can copy dropped files. It must follow the
+            // registration, which forgets it.
+            if (meta.cell_x == 1) {
+                if (state.drop.registered and !meta.more) {
+                    state.drop.declareMachine(payload, options.machine_id);
+                }
+                return;
+            }
             if (try state.drop.register(
                 alloc,
                 meta.client_id,
@@ -268,7 +281,17 @@ fn dispatch(
             if (try state.drop.acceptStatus(alloc, meta, payload)) events.add(.acceptance);
         },
 
-        .request => switch (try state.drop.dataRequest(alloc, writer, meta, terminator)) {
+        .request => switch (try state.drop.dataRequest(
+            alloc,
+            writer,
+            meta,
+            terminator,
+            // Only a drag in progress, not one being built.
+            switch (state.drag.phase) {
+                .starting, .started, .dropped => true,
+                .none, .building => false,
+            },
+        )) {
             .none => {},
             .serve => events.add(.data_request),
             .concluded => |op| events.add(.concluded(op)),

@@ -32,10 +32,6 @@ ghostty_terminal_drop() and ghostty_terminal_drag() must be called from
 the thread that calls ghostty_terminal_vt_write(), and may be called
 from within the effect callbacks.
 
-Every program is treated as being on the local machine: transferring
-files from a remote machine is not supported, though remote programs
-can exchange text and other data.
-
 ## Accepting Drops {#guide-dnd-drops}
 
 1. The program registers to accept drops, yielding
@@ -69,6 +65,28 @@ can exchange text and other data.
 @snippet c-vt-dnd/src/main.c dnd-drop
 
 Full program: @ref c-vt-dnd/src/main.c
+
+## Accepting Drops from Remote Programs {#guide-dnd-remote-drops}
+
+A program on another machine (e.g. over ssh) can't open the files a
+drop names, so it copies them through the terminal. Set
+@ref GHOSTTY_TERMINAL_OPT_DND_MACHINE_ID to this machine's ID so the
+terminal can tell such programs apart; without it, every program is
+treated as local, which is safe but leaves remote programs only the
+dropped text.
+
+A remote program reads the drop's `text/uri-list` as usual, then asks
+for the files it names, and for the entries of directories among them.
+Each arrives as @ref GHOSTTY_DROP_EVENT_DATA_REQUEST with `has_path`
+set: a file request. Look at the path without following symbolic
+links, report what it is with @ref GHOSTTY_DROP_INPUT_KIND, then send
+its data like any other request: a regular file's contents, a symbolic
+link's target, or a directory's entries that are regular files,
+directories or symbolic links, each name followed by a NUL byte. Fail
+anything else with @ref GHOSTTY_DROP_ERROR_UNSUPPORTED. The terminal
+only asks for files the drop's own `text/uri-list` named and what is
+inside the directories among them, and never for a drop of the
+program's own drag.
 
 ## Offering Drags {#guide-dnd-drags}
 

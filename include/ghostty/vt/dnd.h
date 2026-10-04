@@ -35,7 +35,8 @@ extern "C" {
  *
  * Full program: @ref c-vt-dnd/src/main.c
  *
- * The @ref guide-dnd "Drag and Drop guide" walks through both directions.
+ * The @ref guide-dnd "Drag and Drop guide" walks through both directions,
+ * including programs on another machine.
  *
  * Drag and drop was added in libghostty-vt 1.1. Use
  * `GHOSTTY_VT_VERSION_AT_LEAST(1, 1, 0)` to check the headers.
@@ -124,8 +125,15 @@ typedef struct {
   uint32_t id;
   /** Index into the MIME types given with @ref GHOSTTY_DROP_INPUT_DROP. */
   uint32_t mime_index;
-  /** The MIME type to read from the native drop. */
+  /** The MIME type to read from the native drop. Empty for a file request. */
   GhosttyString mime;
+  /** Whether this is a file request, for a program on another machine. */
+  bool has_path;
+  /**
+   * For a file request, the absolute path to read, without following
+   * symbolic links. See @ref guide-dnd-remote-drops.
+   */
+  GhosttyString path;
 } GhosttyDropDataRequest;
 
 /** Value of a GhosttyDropEvent, selected by its tag. */
@@ -173,6 +181,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
   GHOSTTY_DROP_INPUT_END = 4,
   /** The data request being served failed. */
   GHOSTTY_DROP_INPUT_FAIL = 5,
+  /** What the file of the file request being served is, before its data. */
+  GHOSTTY_DROP_INPUT_KIND = 6,
   GHOSTTY_DROP_INPUT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyDropInputTag;
 
@@ -203,8 +213,35 @@ typedef enum GHOSTTY_ENUM_TYPED {
   GHOSTTY_DROP_ERROR_DENIED = 2,
   GHOSTTY_DROP_ERROR_TOO_LARGE = 3,
   GHOSTTY_DROP_ERROR_OUT_OF_MEMORY = 4,
+  /** A file request named something other than a file, directory or symlink. */
+  GHOSTTY_DROP_ERROR_UNSUPPORTED = 5,
   GHOSTTY_DROP_ERROR_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyDropError;
+
+/** What a file entry in a drop is. Symbolic links are never followed. */
+typedef enum GHOSTTY_ENUM_TYPED {
+  /** A regular file; the data is its contents. */
+  GHOSTTY_DROP_FILE_KIND_FILE = 0,
+  /** A symbolic link; the data is its target. */
+  GHOSTTY_DROP_FILE_KIND_SYMLINK = 1,
+  /**
+   * A directory; the data is the names of its entries that are regular
+   * files, directories or symbolic links, each followed by a NUL byte.
+   */
+  GHOSTTY_DROP_FILE_KIND_DIRECTORY = 2,
+  GHOSTTY_DROP_FILE_KIND_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
+} GhosttyDropFileKind;
+
+/**
+ * Value of @ref GHOSTTY_DROP_INPUT_KIND. A file request not reported is a
+ * regular file.
+ */
+typedef struct {
+  /** The request's id. */
+  uint32_t id;
+  /** What the file is. */
+  GhosttyDropFileKind kind;
+} GhosttyDropEntryKind;
 
 /** Value of @ref GHOSTTY_DROP_INPUT_FAIL. */
 typedef struct {
@@ -226,6 +263,8 @@ typedef union {
   uint32_t id;
   /** @ref GHOSTTY_DROP_INPUT_FAIL */
   GhosttyDropFailure fail;
+  /** @ref GHOSTTY_DROP_INPUT_KIND */
+  GhosttyDropEntryKind kind;
   /** Padding for ABI compatibility. Do not use. */
   uint64_t _padding[8];
 } GhosttyDropInputValue;
@@ -249,7 +288,7 @@ typedef struct {
  * @param input What happened
  * @return GHOSTTY_SUCCESS; GHOSTTY_NO_VALUE if the program isn't accepting
  *         drops; GHOSTTY_REJECTED if a request id isn't the request being
- *         served; GHOSTTY_OUT_OF_MEMORY; or GHOSTTY_INVALID_VALUE for
+ *         served, or a kind is reported for a MIME request or after data; GHOSTTY_OUT_OF_MEMORY; or GHOSTTY_INVALID_VALUE for
  *         invalid arguments or no write_pty effect
  */
 GHOSTTY_API GhosttyResult ghostty_terminal_drop(GhosttyTerminal terminal,
