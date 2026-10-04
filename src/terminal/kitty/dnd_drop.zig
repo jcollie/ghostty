@@ -10,6 +10,7 @@ const osc = @import("../osc.zig");
 const dnd = @import("../dnd.zig");
 const command = @import("dnd_command.zig");
 const response = @import("dnd_response.zig");
+const dnd_uri = @import("dnd_uri.zig");
 
 const Metadata = command.Metadata;
 const Operation = command.Operation;
@@ -20,6 +21,10 @@ const Errno = response.Errno;
 /// list, an accepted list, or a drag offer). Matches kitty's
 /// MIME_LIST_SIZE_CAP.
 pub const max_mime_list_bytes = 1024 * 1024;
+
+/// The maximum bytes of a drop's text/uri-list kept for file requests,
+/// and of a directory listing kept for reading its entries.
+pub const max_capture_bytes = 64 * 1024 * 1024;
 
 /// The maximum number of queued data requests. Matches kitty; one more
 /// is refused with EMFILE and ends the drop.
@@ -54,8 +59,15 @@ pub const DataRequest = struct {
     mime_index: u32,
 
     /// The MIME type to read. Borrowed from the drop target and valid
-    /// until the drop ends.
+    /// until the drop ends. Empty for a file request.
     mime: []const u8,
+
+    /// For a file request (from a program on another machine copying the
+    /// files the drop named), the absolute path to read, without
+    /// following symbolic links. The embedder reports what it is with
+    /// `respondKind` before sending its data. Borrowed until the request
+    /// is answered. Null for a MIME request.
+    path: ?[]const u8 = null,
 };
 
 /// Drop target state for the client registered to accept drops.
@@ -134,6 +146,28 @@ pub const DropTarget = struct {
     /// The ID of the next request handed to the embedder.
     next_id: u32 = 1,
 
+    /// True when the client declared a machine ID (t=a:x=1) other than
+    /// this machine's. Its text/uri-list data carries the X=1 marker so
+    /// it knows to copy the files the list names with file requests.
+    remote: bool = false,
+
+    /// True while a drag the client offered (the drag source) is in
+    /// progress, kept up to date by the dispatcher. Files can't be read
+    /// for a drop from the same window, so a program can't read files by
+    /// dropping its own drag.
+    self_drag: bool = false,
+
+    /// The text/uri-list data served for the current drop, which file
+    /// requests (t=r:y=N) index.
+    uri_list: std.ArrayListUnmanaged(u8) = .empty,
+
+    /// The directories the client opened during the current drop.
+    dirs: std.ArrayListUnmanaged(Dir) = .empty,
+
+    /// The handle of the next directory, never 0 or 1, which mean a file
+    /// and a symbolic link in the X key.
+    next_handle: i32 = 2,
+
     /// One queued data request.
     const Queued = struct {
         request: command.Request,
@@ -173,6 +207,45 @@ pub const DropTarget = struct {
         id: u32,
         mime_index: u32,
         terminator: osc.Terminator,
+        request: command.Request,
+
+        /// The file of a file request.
+        path: ?[]u8 = null,
+
+        /// What the file is, as the embedder reported it.
+        kind: dnd.FileKind = .file,
+
+        /// The handle of a directory, once the embedder reported one.
+        handle: i32 = 0,
+
+        /// True once data was sent: the kind can no longer change.
+        sent: bool = false,
+
+        /// Data kept as it is sent: the drop's text/uri-list, or a
+        /// directory's listing.
+        capture: enum { none, uri_list, listing } = .none,
+        listing: std.ArrayListUnmanaged(u8) = .empty,
+
+        fn deinit(self: *Serving, alloc: Allocator) void {
+            if (self.path) |path| alloc.free(path);
+            self.listing.deinit(alloc);
+        }
+    };
+
+    /// A directory the client opened (t=r:Y=handle reads its entries).
+    const Dir = struct {
+        handle: i32,
+        path: []u8,
+
+        /// The entries' names: slices of `listing`.
+        names: [][]const u8,
+        listing: []u8,
+
+        fn deinit(self: *Dir, alloc: Allocator) void {
+            alloc.free(self.path);
+            alloc.free(self.names);
+            alloc.free(self.listing);
+        }
     };
 
     /// The MIME list of the current drag plus the pre-joined move-event
@@ -218,6 +291,9 @@ pub const DropTarget = struct {
     };
 
     pub fn deinit(self: *DropTarget, alloc: Allocator) void {
+        self.freeTransfers(alloc);
+        self.uri_list.deinit(alloc);
+        self.dirs.deinit(alloc);
         self.freeOffered(alloc);
         self.accepted_mimes.deinit(alloc);
         self.registered_mimes.deinit(alloc);
@@ -252,12 +328,25 @@ pub const DropTarget = struct {
 
     /// The data request the embedder must serve, if any.
     pub fn request(self: *const DropTarget) ?DataRequest {
-        const serving = self.serving orelse return null;
+        const serving = &(self.serving orelse return null);
+        if (serving.path) |path| return .{
+            .id = serving.id,
+            .mime_index = 0,
+            .mime = "",
+            .path = path,
+        };
         return .{
             .id = serving.id,
             .mime_index = serving.mime_index,
             .mime = self.offered.?.mimes[serving.mime_index],
         };
+    }
+
+    /// Record the machine ID the client declared (t=a:x=1), deciding
+    /// whether it is on another machine than `ours`, as kitty's
+    /// is_same_machine does. Without `ours`, every client is local.
+    pub fn declareMachine(self: *DropTarget, id: []const u8, ours: ?*const dnd.MachineId) void {
+        self.remote = !sameMachine(id, ours);
     }
 
     /// Record one chunk of a registration's MIME list.
@@ -276,7 +365,13 @@ pub const DropTarget = struct {
         self.client_id = client_id;
 
         const list = &self.registered_mimes;
-        if (!continuation) list.clearRetainingCapacity();
+        if (!continuation) {
+            list.clearRetainingCapacity();
+
+            // Kitty forgets the machine ID on every registration, so it
+            // must be declared after registering.
+            self.remote = false;
+        }
 
         // Matching kitty, an over-cap chunk is dropped and does not
         // complete the registration.
@@ -342,15 +437,18 @@ pub const DropTarget = struct {
     };
 
     /// Handle a t=r data request or drop conclusion from the client,
-    /// mirroring kitty's drop_enqueue_request.
+    /// mirroring kitty's drop_enqueue_request. `self_drag` is whether a
+    /// drag the client offered is in progress.
     pub fn dataRequest(
         self: *DropTarget,
         alloc: Allocator,
         writer: *std.Io.Writer,
         meta: Metadata,
         terminator: osc.Terminator,
+        self_drag: bool,
     ) std.Io.Writer.Error!RequestResult {
         const req: command.Request = .init(meta);
+        self.self_drag = self_drag;
 
         if (req == .conclude) {
             // The client is done with the drop. A conclusion with no
@@ -392,53 +490,174 @@ pub const DropTarget = struct {
         self.queue.push(.{ .request = req, .terminator = terminator });
         if (!was_empty) return .none;
 
-        try self.process(writer);
+        try self.process(alloc, writer);
         return if (self.serving != null) .serve else .none;
     }
 
     /// Answer queued requests that need no data from the embedder
-    /// (errors) until one does or the queue is empty.
-    fn process(self: *DropTarget, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    /// (errors, closing directories) until one does or the queue is
+    /// empty.
+    fn process(self: *DropTarget, alloc: Allocator, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         assert(self.serving == null);
         while (self.queue.peek()) |queued| {
-            switch (queued.request) {
-                .mime => |idx| {
+            const outcome: Outcome = switch (queued.request) {
+                .mime => |idx| mime: {
                     const mimes = if (self.offered) |o| o.mimes else &.{};
-                    if (idx >= 1 and idx <= mimes.len) {
-                        self.serving = .{
-                            .id = self.next_id,
-                            .mime_index = @intCast(idx - 1),
-                            .terminator = queued.terminator,
-                        };
-                        self.next_id +%= 1;
-                        if (self.next_id == 0) self.next_id = 1;
-                        return;
-                    }
-
-                    try self.sendError(
-                        writer,
-                        queued.request,
-                        .ENOENT,
-                        "drop data request index out of bounds",
-                        queued.terminator,
-                    );
+                    if (idx < 1 or idx > mimes.len) break :mime .{ .fail = .{
+                        .errno = .ENOENT,
+                        .desc = "drop data request index out of bounds",
+                    } };
+                    const is_uri_list = std.mem.eql(u8, mimes[@intCast(idx - 1)], "text/uri-list");
+                    if (is_uri_list) self.uri_list.clearRetainingCapacity();
+                    break :mime .{ .serve = .{
+                        .mime_index = @intCast(idx - 1),
+                        .capture = if (is_uri_list) .uri_list else .none,
+                    } };
                 },
+                .uri => |uri| self.uriRequest(alloc, uri.mime_idx, uri.uri_idx),
+                .dir => |dir| self.dirRequest(alloc, dir.handle, dir.entry),
+                .conclude => unreachable,
+            };
 
-                // Remote drop transfers (URI file contents and directory
-                // handles). We never advertise remote support (no X=1
-                // marker), so a conforming client never sends these.
-                .uri, .dir => try self.sendError(
+            switch (outcome) {
+                .serve => |serve| {
+                    self.serving = .{
+                        .id = self.next_id,
+                        .mime_index = serve.mime_index,
+                        .terminator = queued.terminator,
+                        .request = queued.request,
+                        .path = serve.path,
+                        .capture = serve.capture,
+                    };
+                    self.next_id +%= 1;
+                    if (self.next_id == 0) self.next_id = 1;
+                    return;
+                },
+                .fail => |fail| try self.sendError(
                     writer,
                     queued.request,
-                    .EINVAL,
-                    "remote drop data is not supported",
+                    fail.errno,
+                    fail.desc,
                     queued.terminator,
                 ),
-
-                .conclude => unreachable,
+                .done => {},
             }
 
             self.queue.pop();
+        }
+    }
+
+    /// How a queued request is answered.
+    const Outcome = union(enum) {
+        /// The embedder serves it.
+        serve: struct {
+            mime_index: u32 = 0,
+            path: ?[]u8 = null,
+            capture: @FieldType(Serving, "capture") = .none,
+        },
+
+        /// It fails with an error.
+        fail: struct { errno: Errno, desc: []const u8 },
+
+        /// It needs no answer.
+        done,
+    };
+
+    /// A file request (t=r:x=idx:y=n): the n'th file the drop's
+    /// text/uri-list names, mirroring kitty's do_drop_request_uri_data.
+    fn uriRequest(self: *DropTarget, alloc: Allocator, mime_idx: i32, n: i32) Outcome {
+        if (self.uri_list.items.len == 0) return .{ .fail = .{
+            .errno = .EINVAL,
+            .desc = "drop data uri list empty",
+        } };
+        if (self.self_drag) return .{ .fail = .{
+            .errno = .EPERM,
+            .desc = "cannot drop into self window",
+        } };
+        const mimes = if (self.offered) |o| o.mimes else &.{};
+        if (mime_idx < 1 or mime_idx > mimes.len or
+            !std.mem.eql(u8, mimes[@intCast(mime_idx - 1)], "text/uri-list"))
+        {
+            return .{ .fail = .{
+                .errno = .EINVAL,
+                .desc = "drop data mime index out of bounds",
+            } };
+        }
+        if (n < 1) return .{ .fail = .{
+            .errno = .EINVAL,
+            .desc = "drop data uri index out of bounds",
+        } };
+
+        const uri = dnd_uri.UriList.get(self.uri_list.items, @intCast(n - 1)) orelse return .{ .fail = .{
+            .errno = .ENOENT,
+            .desc = "drop data uri index out of bounds",
+        } };
+        const path = dnd_uri.filePath(alloc, uri, .local) catch |err| return .{ .fail = switch (err) {
+            error.OutOfMemory => .{ .errno = .ENOMEM, .desc = "out of memory" },
+            error.Unsupported => .{ .errno = .EUNKNOWN, .desc = "unsupported uri" },
+            error.Invalid => .{ .errno = .EINVAL, .desc = "invalid file uri" },
+        } };
+        return .{ .serve = .{ .path = path } };
+    }
+
+    /// A directory request (t=r:Y=handle:x=n): read the n'th entry of a
+    /// directory the client opened, or close it when n is 0.
+    fn dirRequest(self: *DropTarget, alloc: Allocator, handle: i32, n: i32) Outcome {
+        const index = for (self.dirs.items, 0..) |dir, i| {
+            if (dir.handle == handle) break i;
+        } else return .{ .fail = .{
+            .errno = .EINVAL,
+            .desc = "invalid directory handle",
+        } };
+
+        if (n == 0) {
+            var dir = self.dirs.swapRemove(index);
+            dir.deinit(alloc);
+            return .done;
+        }
+
+        // Out of range is EINVAL here (not ENOENT), matching kitty.
+        const dir = &self.dirs.items[index];
+        if (n < 1 or n > dir.names.len) return .{ .fail = .{
+            .errno = .EINVAL,
+            .desc = "directory entry index out of bounds",
+        } };
+        const name = dir.names[@intCast(n - 1)];
+        const sep: []const u8 = if (std.mem.endsWith(u8, dir.path, "/")) "" else "/";
+        const path = std.mem.concat(alloc, u8, &.{ dir.path, sep, name }) catch return .{ .fail = .{
+            .errno = .ENOMEM,
+            .desc = "out of memory",
+        } };
+        return .{ .serve = .{ .path = path } };
+    }
+
+    /// Report what the file of the file request being served is, before
+    /// sending any of its data. A file request not reported is a regular
+    /// file. Returns error.Stale when `id` is not the request being
+    /// served and error.NotFile when it isn't a file request or its data
+    /// already started.
+    pub fn respondKind(
+        self: *DropTarget,
+        id: u32,
+        kind: dnd.FileKind,
+    ) error{ Stale, NotFile }!void {
+        _ = try self.servingRequest(id);
+        const serving = &self.serving.?;
+        if (serving.path == null or serving.sent) return error.NotFile;
+        serving.kind = kind;
+        switch (kind) {
+            .file, .symlink => {
+                serving.handle = 0;
+                serving.capture = .none;
+            },
+            .directory => {
+                if (serving.handle == 0) {
+                    serving.handle = self.next_handle;
+                    self.next_handle +%= 1;
+                    if (self.next_handle < 2) self.next_handle = 2;
+                }
+                serving.capture = .listing;
+            },
         }
     }
 
@@ -448,15 +667,32 @@ pub const DropTarget = struct {
     /// not the request being served.
     pub fn respondData(
         self: *DropTarget,
+        alloc: Allocator,
         writer: *std.Io.Writer,
         id: u32,
         data: []const u8,
-    ) (error{Stale} || std.Io.Writer.Error)!void {
-        const serving = try self.servingRequest(id);
+    ) (error{Stale} || Allocator.Error || std.Io.Writer.Error)!void {
+        _ = try self.servingRequest(id);
+        const serving = &self.serving.?;
         if (data.len == 0) return;
+        serving.sent = true;
+
+        // Kept for the file requests that follow. Data past the cap is
+        // still sent but can't be indexed.
+        const list = switch (serving.capture) {
+            .none => null,
+            .uri_list => &self.uri_list,
+            .listing => &serving.listing,
+        };
+        if (list) |l| {
+            if (l.items.len + data.len <= max_capture_bytes) {
+                try l.appendSlice(alloc, data);
+            } else serving.capture = .none;
+        }
+
         try response.encode(
             writer,
-            dataHeader(serving).slice(),
+            self.dataHeader(serving).slice(),
             self.client_id,
             data,
             .base64,
@@ -468,19 +704,47 @@ pub const DropTarget = struct {
     /// message. Returns the next request to serve, if any.
     pub fn respondEnd(
         self: *DropTarget,
+        alloc: Allocator,
         writer: *std.Io.Writer,
         id: u32,
-    ) (error{Stale} || std.Io.Writer.Error)!?DataRequest {
-        const serving = try self.servingRequest(id);
+    ) (error{Stale} || Allocator.Error || std.Io.Writer.Error)!?DataRequest {
+        _ = try self.servingRequest(id);
+        const serving = &self.serving.?;
+
+        // A directory is open for reading its entries once listed.
+        const header = self.dataHeader(serving);
+        if (serving.kind == .directory) try self.openDir(alloc, serving);
+
         try response.encode(
             writer,
-            dataHeader(serving).slice(),
+            header.slice(),
             self.client_id,
             "",
             .base64,
             serving.terminator,
         );
-        return try self.next(writer);
+        return try self.next(alloc, writer);
+    }
+
+    fn openDir(self: *DropTarget, alloc: Allocator, serving: *Serving) Allocator.Error!void {
+        try self.dirs.ensureUnusedCapacity(alloc, 1);
+        const listing = try serving.listing.toOwnedSlice(alloc);
+        errdefer alloc.free(listing);
+
+        var count: usize = 0;
+        var it = std.mem.tokenizeScalar(u8, listing, 0);
+        while (it.next()) |_| count += 1;
+        const names = try alloc.alloc([]const u8, count);
+        it.reset();
+        for (names) |*name| name.* = it.next().?;
+
+        self.dirs.appendAssumeCapacity(.{
+            .handle = serving.handle,
+            .path = serving.path.?,
+            .names = names,
+            .listing = listing,
+        });
+        serving.path = null;
     }
 
     /// Fail the request being served, e.g. when reading the data from
@@ -488,6 +752,7 @@ pub const DropTarget = struct {
     /// any.
     pub fn respondError(
         self: *DropTarget,
+        alloc: Allocator,
         writer: *std.Io.Writer,
         id: u32,
         errno: Errno,
@@ -501,7 +766,7 @@ pub const DropTarget = struct {
             "drop data request failed to read data",
             queued.terminator,
         );
-        return try self.next(writer);
+        return try self.next(alloc, writer);
     }
 
     fn servingRequest(self: *const DropTarget, id: u32) error{Stale}!Serving {
@@ -511,15 +776,16 @@ pub const DropTarget = struct {
     }
 
     /// Pop the served request and move on to the next.
-    fn next(self: *DropTarget, writer: *std.Io.Writer) std.Io.Writer.Error!?DataRequest {
+    fn next(self: *DropTarget, alloc: Allocator, writer: *std.Io.Writer) std.Io.Writer.Error!?DataRequest {
+        if (self.serving) |*serving| serving.deinit(alloc);
         self.serving = null;
         self.queue.pop();
-        try self.process(writer);
+        try self.process(alloc, writer);
         return self.request();
     }
 
     const Header = struct {
-        buf: [32]u8,
+        buf: [96]u8,
         len: usize,
 
         fn slice(self: *const Header) []const u8 {
@@ -527,9 +793,16 @@ pub const DropTarget = struct {
         }
     };
 
-    fn dataHeader(serving: Serving) Header {
+    /// The header of a response to the request being served: its keys,
+    /// and X for the remote marker or a file's kind.
+    fn dataHeader(self: *const DropTarget, serving: *const Serving) Header {
         var h: Header = .{ .buf = undefined, .len = 0 };
-        const keys: response.RequestKeys = .{ .x = @intCast(serving.mime_index + 1) };
+        var keys = requestKeys(serving.request);
+        keys.X = if (serving.path != null) switch (serving.kind) {
+            .file => 0,
+            .symlink => 1,
+            .directory => serving.handle,
+        } else if (serving.capture == .uri_list and self.remote) 1 else 0;
         h.len = (std.fmt.bufPrint(&h.buf, "t=r{f}", .{keys}) catch unreachable).len;
         return h;
     }
@@ -543,21 +816,35 @@ pub const DropTarget = struct {
         desc: []const u8,
         terminator: osc.Terminator,
     ) std.Io.Writer.Error!void {
-        const keys: response.RequestKeys = switch (req) {
-            .conclude => .{},
-            .mime => |idx| .{ .x = idx },
-            .uri => |uri| .{ .x = uri.mime_idx, .y = uri.uri_idx },
-            .dir => |dir| .{ .x = dir.entry, .Y = dir.handle },
-        };
         try response.encodeError(
             writer,
             .drop,
-            keys,
+            requestKeys(req),
             self.client_id,
             errno,
             desc,
             terminator,
         );
+    }
+
+    fn requestKeys(req: command.Request) response.RequestKeys {
+        return switch (req) {
+            .conclude => .{},
+            .mime => |idx| .{ .x = idx },
+            .uri => |uri| .{ .x = uri.mime_idx, .y = uri.uri_idx },
+            .dir => |dir| .{ .x = dir.entry, .Y = dir.handle },
+        };
+    }
+
+    /// Free the drop's file transfer state: the request being served,
+    /// the text/uri-list, and open directories.
+    fn freeTransfers(self: *DropTarget, alloc: Allocator) void {
+        if (self.serving) |*serving| serving.deinit(alloc);
+        self.serving = null;
+        self.uri_list.clearAndFree(alloc);
+        for (self.dirs.items) |*dir| dir.deinit(alloc);
+        self.dirs.clearAndFree(alloc);
+        self.next_handle = 2;
     }
 
     fn freeOffered(self: *DropTarget, alloc: Allocator) void {
@@ -578,7 +865,7 @@ pub const DropTarget = struct {
         self.accepted = null;
         self.accept_in_progress = false;
         self.queue.clear();
-        self.serving = null;
+        self.freeTransfers(alloc);
     }
 
     /// Report a native drag moving over the terminal, sending a t=m
@@ -700,3 +987,13 @@ pub const DropTarget = struct {
         return discarded;
     }
 };
+
+/// Whether a client's declared machine ID is this machine's, mirroring
+/// kitty's is_same_machine: an empty ID is local, a short one or an
+/// unknown version is another machine.
+fn sameMachine(id: []const u8, ours: ?*const dnd.MachineId) bool {
+    const mine = ours orelse return true;
+    if (id.len == 0) return true;
+    if (id.len < 20 or !std.mem.startsWith(u8, id, "1:")) return false;
+    return std.mem.eql(u8, id, mine);
+}
