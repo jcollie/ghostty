@@ -60,6 +60,10 @@ pub const StreamHandler = struct {
     /// and XTCHECKSUM may change how it's calculated.
     xt_checksum_report: bool,
 
+    /// The sides of drag and drop (OSC 72) programs can take part in,
+    /// from the runtime's support and the configuration.
+    dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = false, .drag = false },
+
     //---------------------------------------------------------------
     // Internal state
 
@@ -124,6 +128,7 @@ pub const StreamHandler = struct {
         self.osc_color_report_format = config.osc_color_report_format;
         self.clipboard_write = config.clipboard_write;
         self.clipboard_write_limit = config.clipboard_write_limit;
+        self.dnd_sides = config.dnd_sides;
         self.enquiry_response = config.enquiry_response;
         self.xt_checksum_report = config.xt_checksum_report;
         self.terminal.setDefaultCursorStyle(config.cursor_style);
@@ -132,6 +137,28 @@ pub const StreamHandler = struct {
 
         // The config could have changed any of our colors so update mode 2031
         self.messageWriter(.{ .color_scheme_report = .{ .force = false } });
+
+        self.dndStopDisabledSides();
+    }
+
+    /// End drag and drop for the sides the configuration turned off, so
+    /// the surface stops routing native drags to a program whose OSC 72
+    /// commands are now ignored and could never conclude them.
+    fn dndStopDisabledSides(self: *StreamHandler) void {
+        const state = self.terminal.kitty_dnd orelse return;
+        const alloc = self.terminal.gpa();
+        if (!self.dnd_sides.drop and state.drop.registered) {
+            if (state.drop.unregister(alloc)) self.surfaceMessageWriter(.{ .dnd = .concluded_none });
+            self.surfaceMessageWriter(.{ .dnd = .registration });
+        }
+        if (!self.dnd_sides.drag and state.drag.enabled) {
+            if (state.drag.disable(alloc)) self.surfaceMessageWriter(.{ .dnd = .drag_cancel });
+            self.surfaceMessageWriter(.{ .dnd = .offers });
+        }
+        if (!state.drop.registered and !state.drag.enabled) {
+            state.destroy(alloc);
+            self.terminal.kitty_dnd = null;
+        }
     }
 
     inline fn surfaceMessageWriter(
@@ -384,11 +411,11 @@ pub const StreamHandler = struct {
             .apc_put => self.apc.feed(self.alloc, value),
             .apc_put_slice => self.apc.feedSlice(self.alloc, value.bytes),
             .kitty_clipboard => try self.kittyClipboard(value),
+            .kitty_dnd => try self.kittyDnd(value),
 
             // Unimplemented
             .title_push,
             .title_pop,
-            .kitty_dnd,
             .osc_unknown,
             .program_status,
             => {},
@@ -1429,6 +1456,36 @@ pub const StreamHandler = struct {
         try self.kittyClipboardWriteStatus(status, state.id, terminator);
     }
 
+    /// Handle a Kitty drag and drop protocol (OSC 72) command. The
+    /// surface hears what changed and reads the details from the
+    /// terminal's state itself, so nothing needs copying across threads.
+    fn kittyDnd(
+        self: *StreamHandler,
+        v: terminal.osc.Command.KittyDndProtocol,
+    ) error{ OutOfMemory, WriteFailed }!void {
+        // Without a runtime to connect it to the OS, drag and drop is
+        // ignored entirely so programs fall back to their behavior
+        // without it.
+        if (!self.dnd_sides.drop and !self.dnd_sides.drag) return;
+
+        var stream: std.Io.Writer.Allocating = .init(self.alloc);
+        defer stream.deinit();
+        const events = try terminal.kitty.dnd.handleCommand(
+            &self.terminal.kitty_dnd,
+            self.terminal.gpa(),
+            &stream.writer,
+            self.dnd_sides,
+            v,
+        );
+
+        if (stream.written().len > 0) self.messageWriter(.{ .write_alloc = .{
+            .alloc = self.alloc,
+            .data = try stream.toOwnedSlice(),
+        } });
+
+        for (events.slice()) |ev| self.surfaceMessageWriter(.{ .dnd = ev });
+    }
+
     /// Reply to a write transaction with a single status packet.
     fn kittyClipboardWriteStatus(
         self: *StreamHandler,
@@ -2014,4 +2071,41 @@ test "kitty clipboard write: oversized text replies EFBIG" {
     // Teardown leaves no transaction that could be committed and
     // forwarded to the macOS clipboard path.
     try testing.expect(mailbox.spsc.queue.pop(global.io()) == null);
+}
+
+test "kitty dnd: ignored without runtime support" {
+    const testing = std.testing;
+
+    var mailbox = try termio.Mailbox.initSPSC(testing.allocator);
+    defer mailbox.deinit(testing.allocator);
+
+    var mutex: std.Io.Mutex = .init;
+    mutex.lockUncancelable(global.io());
+    defer mutex.unlock(global.io());
+
+    var t: terminal.Terminal = try .init(testing.io, testing.allocator, .{ .cols = 80, .rows = 24 });
+    defer t.deinit(testing.allocator);
+
+    var renderer_state: renderer.State = .{ .mutex = &mutex, .terminal = &t };
+    var handler: StreamHandler = undefined;
+    handler.alloc = testing.allocator;
+    handler.terminal = &t;
+    handler.termio_mailbox = &mailbox;
+    handler.renderer_state = &renderer_state;
+    handler.termio_messaged = false;
+    handler.dnd_sides = .{ .drop = false, .drag = false };
+
+    // Without a runtime to connect it to the OS, queries go unanswered
+    // and registrations aren't recorded.
+    try handler.kittyDnd(.{ .metadata = "t=q", .payload = null, .terminator = .st });
+    try handler.kittyDnd(.{ .metadata = "t=a", .payload = null, .terminator = .st });
+    try testing.expect(mailbox.spsc.queue.pop(global.io()) == null);
+    try testing.expect(t.kitty_dnd == null);
+
+    // With one, the query is answered.
+    handler.dnd_sides = .{ .drop = true, .drag = false };
+    try handler.kittyDnd(.{ .metadata = "t=q", .payload = null, .terminator = .st });
+    const msg = mailbox.spsc.queue.pop(global.io()).?;
+    try testing.expectEqualStrings("\x1b]72;t=q\x1b\\", msg.write_alloc.data);
+    testing.allocator.free(msg.write_alloc.data);
 }
