@@ -22,7 +22,7 @@ import termios
 import time
 import urllib.parse
 
-SCENARIOS = ("drop", "drag", "remote-drop")
+SCENARIOS = ("drop", "drag", "remote-drop", "remote-drag")
 if len(sys.argv) != 4 or sys.argv[2] not in SCENARIOS:
     raise SystemExit(f"usage: {sys.argv[0]} LIBGHOSTTY_VT_SO {'|'.join(SCENARIOS)} WORKDIR")
 
@@ -119,7 +119,7 @@ class DragOffer(C.Structure):
     _fields_ = [("operations", C.c_uint32),
                 ("items", C.POINTER(DragItem)), ("items_len", C.c_size_t),
                 ("images", C.POINTER(DragImage)), ("images_len", C.c_size_t),
-                ("has_image", C.c_bool), ("image", C.c_uint32)]
+                ("has_image", C.c_bool), ("image", C.c_uint32), ("remote", C.c_bool)]
 
 
 class DragImageChange(C.Structure):
@@ -130,9 +130,14 @@ class DragData(C.Structure):
     _fields_ = [("index", C.c_uint32), ("bytes", String), ("status", C.c_int)]
 
 
+class DragRemoteFile(C.Structure):
+    _fields_ = [("entry", C.c_uint32), ("path", String), ("kind", C.c_int),
+                ("bytes", String), ("status", C.c_int)]
+
+
 class DragEventValue(C.Union):
     _fields_ = [("enabled", C.c_bool), ("start", DragOffer), ("image", DragImageChange),
-                ("data", DragData), ("_padding", C.c_uint64 * 8)]
+                ("data", DragData), ("remote_file", DragRemoteFile), ("_padding", C.c_uint64 * 8)]
 
 
 class DragEvent(C.Structure):
@@ -173,6 +178,7 @@ for name, cls in {
     "GhosttyDragOffer": DragOffer,
     "GhosttyDragImageChange": DragImageChange,
     "GhosttyDragData": DragData,
+    "GhosttyDragRemoteFile": DragRemoteFile,
     "GhosttyDragEventValue": DragEventValue,
     "GhosttyDragEvent": DragEvent,
     "GhosttyDragInputValue": DragInputValue,
@@ -221,11 +227,9 @@ def strings(ptr, length):
 master, slave = os.openpty()
 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 480, 800))
 
-if SCENARIO == "drop":
-    argv = [KITTEN, "dnd", "--drop-anywhere=copy", "--drop", "text/plain:out.txt"]
-elif SCENARIO == "remote-drop":
-    # Files and a directory tree to drop, outside the kitten's working
-    # directory where it puts its copies.
+if SCENARIO in ("remote-drop", "remote-drag"):
+    # Files and a directory tree to drop or drag, outside the kitten's
+    # working directory where it puts its copies.
     SOURCE = os.path.join(WORKDIR, "..", os.path.basename(WORKDIR) + "-source")
     os.makedirs(os.path.join(SOURCE, "tree", "sub"))
     with open(os.path.join(SOURCE, "a file.txt"), "wb") as f:
@@ -235,7 +239,14 @@ elif SCENARIO == "remote-drop":
     with open(os.path.join(SOURCE, "tree", "sub", "deep.bin"), "wb") as f:
         f.write(bytes(range(256)))
     os.symlink("inner.txt", os.path.join(SOURCE, "tree", "link"))
+    SOURCES = [os.path.abspath(os.path.join(SOURCE, n)) for n in ("a file.txt", "tree")]
+
+if SCENARIO == "drop":
+    argv = [KITTEN, "dnd", "--drop-anywhere=copy", "--drop", "text/plain:out.txt"]
+elif SCENARIO == "remote-drop":
     argv = [KITTEN, "dnd", "--drop-anywhere=copy"]
+elif SCENARIO == "remote-drag":
+    argv = [KITTEN, "dnd", *SOURCES]
 else:
     with open(os.path.join(WORKDIR, "in.txt"), "w") as f:
         f.write("dragged from kitten\n")
@@ -258,6 +269,7 @@ RAW = open(os.path.join(WORKDIR, "raw.bin"), "wb")
 
 DROP_EVENTS = {v: k.lower() for k, v in TYPES["GhosttyDropEventTag"]["values"].items()}
 DRAG_EVENTS = {v: k.lower() for k, v in TYPES["GhosttyDragEventTag"]["values"].items()}
+FILE_KINDS = {v: k.lower() for k, v in TYPES["GhosttyDropFileKind"]["values"].items()}
 
 
 @WritePtyFn
@@ -294,11 +306,14 @@ def on_drag(_t, _ud, ev_ptr):
         details = v.enabled
     elif name == "start":
         o = v.start
-        details = [(string(o.items[i].mime),
-                    string(o.items[i].pre_sent) if o.items[i].has_pre_sent else None)
-                   for i in range(o.items_len)]
+        details = ([(string(o.items[i].mime),
+                     string(o.items[i].pre_sent) if o.items[i].has_pre_sent else None)
+                    for i in range(o.items_len)], o.remote)
     elif name == "data":
         details = (v.data.index, string(v.data.bytes), v.data.status)
+    elif name == "remote_file":
+        f = v.remote_file
+        details = (string(f.path), FILE_KINDS[f.kind], string(f.bytes), f.status)
     else:
         details = None
     print(f"  drag event: {name} {details!r}")
@@ -317,7 +332,7 @@ assert lib.ghostty_terminal_new(None, C.byref(term), 80, 24) == SUCCESS
 for opt, fn in (("WRITE_PTY", write_pty), ("SIZE", size_cb), ("DROP", on_drop), ("DRAG", on_drag)):
     lib.ghostty_terminal_set(term, enum("GhosttyTerminalOption", opt), C.cast(fn, C.c_void_p))
 
-if SCENARIO == "remote-drop":
+if SCENARIO in ("remote-drop", "remote-drag"):
     # A machine ID that isn't this machine's, so the kitten (which
     # declares this machine's) is on another machine and copies the
     # dropped files through the terminal.
@@ -379,6 +394,22 @@ def drag(tag, **value):
     for k, v in value.items():
         setattr(inp.value, k, v)
     return lib.ghostty_terminal_drag(term, C.byref(inp))
+
+
+def tree(root):
+    """A directory tree's contents, symlinks unfollowed."""
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        for n in dirnames + filenames:
+            p = os.path.join(dirpath, n)
+            rel = os.path.relpath(p, root)
+            if os.path.islink(p):
+                out[rel] = ("link", os.readlink(p))
+            elif os.path.isdir(p):
+                out[rel] = ("dir",)
+            else:
+                out[rel] = ("file", open(p, "rb").read())
+    return out
 
 
 POS = Position(2, 1, 25, 30)
@@ -452,9 +483,7 @@ if SCENARIO == "drop":
 elif SCENARIO == "remote-drop":
     accepting, _ = wait_for("registration")
     assert accepting, "FAIL: registration without accepting drops"
-    uri_list = b"".join(
-        b"file://" + urllib.parse.quote(os.path.abspath(os.path.join(SOURCE, n))).encode() + b"\r\n"
-        for n in ("a file.txt", "tree"))
+    uri_list = b"".join(b"file://" + urllib.parse.quote(p).encode() + b"\r\n" for p in SOURCES)
     mimes = (String * 1)(String(C.cast(C.c_char_p(b"text/uri-list"), C.c_void_p), 13))
     motion = DropMotion(POS, OPS_COPY, mimes, 1)
     print("OS: drag of two files moves over the terminal")
@@ -489,29 +518,82 @@ elif SCENARIO == "remote-drop":
     pump(0.5)
 
     # The kitten's copies match the originals, symlink included.
-    def tree(root):
-        out = {}
-        for dirpath, dirnames, filenames in os.walk(root):
-            for n in dirnames + filenames:
-                p = os.path.join(dirpath, n)
-                rel = os.path.relpath(p, root)
-                if os.path.islink(p):
-                    out[rel] = ("link", os.readlink(p))
-                elif os.path.isdir(p):
-                    out[rel] = ("dir",)
-                else:
-                    out[rel] = ("file", open(p, "rb").read())
-        return out
     want = tree(SOURCE)
     got = {k: v for k, v in tree(WORKDIR).items() if not k.startswith((".dnd-kitten", "raw.bin"))}
     print(f"copied: {sorted(got)}")
+    assert got == want, f"FAIL: copies differ: {sorted(got)} != {sorted(want)}"
+    shutil.rmtree(SOURCE)
+elif SCENARIO == "remote-drag":
+    assert wait_for("offers"), "FAIL: offers disabled"
+    print("OS: drag gesture")
+    assert drag("GESTURE", position=POS) == SUCCESS
+    items, remote = wait_for("start")
+    assert remote, "FAIL: the drag isn't remote"
+    mimes = [mime for mime, _ in items]
+    print(f"OS: offered {mimes}, remote")
+    assert drag("START_RESULT", start_result=enum("GhosttyDragStartResult", "STARTED")) == SUCCESS
+    pump(0.5)
+
+    # A drop target wants the files: the uri-list is requested even
+    # though it was pre-sent, and the files arrive to be written out.
+    idx = mimes.index(b"text/uri-list")
+    assert drag("ACCEPTED", mime_index=idx) == SUCCESS
+    assert drag("DROPPED") == SUCCESS
+    assert drag("REQUEST_DATA", index=idx) == SUCCESS
+    SPOOL = os.path.join(WORKDIR, "spool")
+    os.mkdir(SPOOL)
+    pending = enum("GhosttyDragDataStatus", "PENDING")
+    deadline = time.time() + 30
+    uri_list = None
+    while uri_list is None:
+        try:
+            path, kind, data, status = take("remote_file")
+        except LookupError:
+            try:
+                index, data, status = take("data")
+                assert index == idx and status != pending, "FAIL: unexpected drag data"
+                uri_list = data
+            except LookupError:
+                if time.time() > deadline:
+                    raise SystemExit("FAIL: files didn't arrive")
+                pump(0.2)
+            continue
+        # Write like an embedder: exclusively, never following symlinks.
+        # A file the list names goes in a directory for its entry.
+        target = os.path.join(SPOOL, os.fsdecode(path))
+        if path.count(b"/") == 1:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+        if kind == "directory":
+            os.mkdir(target)
+        elif kind == "symlink":
+            os.symlink(os.fsdecode(data), target)
+        else:
+            flags = os.O_WRONLY | os.O_NOFOLLOW | os.O_APPEND
+            if not os.path.lexists(target):
+                flags |= os.O_CREAT | os.O_EXCL
+            fd = os.open(target, flags, 0o644)
+            os.write(fd, data)
+            os.close(fd)
+    print(f"OS: files arrived, then the list {uri_list!r}")
+    assert drag("FINISHED", canceled=False) == SUCCESS
+    pump(0.5)
+
+    # The copies match the originals: the spool holds each listed file
+    # under its index.
+    got = {}
+    for rel, value in tree(SPOOL).items():
+        parts = rel.split(os.sep, 1)
+        if len(parts) == 2:
+            got[parts[1]] = value
+    want = tree(SOURCE)
+    print(f"spooled: {sorted(got)}")
     assert got == want, f"FAIL: copies differ: {sorted(got)} != {sorted(want)}"
     shutil.rmtree(SOURCE)
 else:
     assert wait_for("offers"), "FAIL: offers disabled"
     print("OS: drag gesture")
     assert drag("GESTURE", position=POS) == SUCCESS
-    items = wait_for("start")
+    items, _ = wait_for("start")
     for mime, pre in items:
         print(f"OS: offered {mime!r} pre-sent {pre!r}")
     mimes = [mime for mime, _ in items]
