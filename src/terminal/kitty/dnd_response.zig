@@ -23,6 +23,7 @@ pub const Errno = enum {
     EISDIR,
     ENOSPC,
     EUNKNOWN,
+    ELOOP,
 };
 
 /// The payload encoding for a message.

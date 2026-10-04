@@ -111,3 +111,22 @@ program's own drag.
 @snippet c-vt-dnd/src/main.c dnd-drag
 
 Full program: @ref c-vt-dnd/src/main.c
+
+## Offering Drags from Remote Programs {#guide-dnd-remote-drags}
+
+The files a program on another machine drags aren't here, so the
+terminal fetches them for the drop target. With
+@ref GHOSTTY_TERMINAL_OPT_DND_MACHINE_ID set, the offer of such a
+program has `remote` set. When a drop target wants its `text/uri-list`,
+report @ref GHOSTTY_DRAG_INPUT_REQUEST_DATA for it even though it was
+pre-sent. The files it names then arrive as
+@ref GHOSTTY_DRAG_EVENT_REMOTE_FILE events: write each under a
+directory of your own at the relative path given, creating files
+exclusively and without following symbolic links. A directory arrives
+before its entries. Then the list arrives as
+@ref GHOSTTY_DRAG_EVENT_DATA; give the drop target a copy rewritten to
+name your copies, and keep it for later reads: the files are fetched
+once, so requesting the list again answers GHOSTTY_NO_VALUE. Delete them
+at the next drag's start, when the drag is canceled, or when the program
+stops offering drags, but not when the drag finishes, since the drop target
+may still be reading them.
