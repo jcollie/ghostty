@@ -35,17 +35,22 @@ pub const Encoding = enum {
 };
 
 /// The `x`/`y`/`Y` keys of the data request currently being answered,
-/// echoed in responses and errors so the client can match them up. Only
-/// non-zero keys are written, matching kitty's drop_append_request_keys.
+/// echoed in responses and errors so the client can match them up, and
+/// the `X` key describing the response: the remote marker on a
+/// text/uri-list, or the kind of a file entry (1 for a symlink, a handle
+/// for a directory). Only non-zero keys are written, matching kitty's
+/// drop_append_request_keys.
 pub const RequestKeys = struct {
     x: i32 = 0,
     y: i32 = 0,
     Y: i32 = 0,
+    X: i32 = 0,
 
     pub fn format(self: RequestKeys, writer: *std.Io.Writer) !void {
         if (self.x != 0) try writer.print(":x={d}", .{self.x});
         if (self.y != 0) try writer.print(":y={d}", .{self.y});
         if (self.Y != 0) try writer.print(":Y={d}", .{self.Y});
+        if (self.X != 0) try writer.print(":X={d}", .{self.X});
     }
 };
 

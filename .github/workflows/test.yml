@@ -1582,6 +1582,13 @@ jobs:
             python3 test/kitty_dnd/harness.py \
             zig-out/lib/libghostty-vt.so drag "$RUNNER_TEMP/dnd-drag"
 
+      - name: Test drops from a remote program
+        run: |
+          mkdir -p "$RUNNER_TEMP/dnd-remote-drop"
+          nix shell --inputs-from . nixpkgs#kitty nixpkgs#python3 -c \
+            python3 test/kitty_dnd/harness.py \
+            zig-out/lib/libghostty-vt.so remote-drop "$RUNNER_TEMP/dnd-remote-drop"
+
   # Runs esctest against libghostty-vt. Report-only: many tests fail today,
   # so this never fails and isn't in the required checks. See
   # test/esctest/README.md.

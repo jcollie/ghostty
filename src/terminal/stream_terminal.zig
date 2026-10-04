@@ -76,6 +76,12 @@ pub const Handler = struct {
     /// programs.
     xt_checksum_report: bool = false,
 
+    /// This machine's drag and drop machine ID (see `dnd.machineId`),
+    /// for telling whether a program is on another machine (e.g. over
+    /// ssh) and must copy dropped files with file requests. Null treats
+    /// every program as local.
+    dnd_machine_id: ?dnd.MachineId = null,
+
     /// The APC command handler maintains the APC state. APC is like
     /// CSI or OSC, but it is a private escape sequence that is used
     /// to send commands to the terminal emulator. This is used by
@@ -1674,6 +1680,7 @@ pub const Handler = struct {
             .{
                 .drop = self.effects.drop != null,
                 .drag = self.effects.drag != null,
+                .machine_id = if (self.dnd_machine_id) |*id| id else null,
             },
             v,
         );
@@ -6830,8 +6837,8 @@ test "kitty dnd: register, drop, and serve data from the effect" {
             testing.expectEqualStrings("text/plain", ev.data_request.mime) catch unreachable;
             var id: ?u32 = ev.data_request.id;
             while (id) |i| {
-                target.respondData(&pty_writer.writer, i, "hello") catch unreachable;
-                const next = target.respondEnd(&pty_writer.writer, i) catch unreachable;
+                target.respondData(testing.allocator, &pty_writer.writer, i, "hello") catch unreachable;
+                const next = target.respondEnd(testing.allocator, &pty_writer.writer, i) catch unreachable;
                 id = if (next) |r| r.id else null;
             }
         }

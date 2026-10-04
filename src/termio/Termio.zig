@@ -192,7 +192,7 @@ pub const DerivedConfig = struct {
     osc_color_report_format: configpkg.Config.OSCColorReportFormat,
     clipboard_write: configpkg.ClipboardAccess,
     clipboard_write_limit: usize,
-    dnd_sides: terminalpkg.kitty.dnd.Sides,
+    dnd_sides: terminalpkg.kitty.dnd.Options,
     enquiry_response: []const u8,
     xt_checksum_report: bool,
     xt_checksum_extension: terminalpkg.xt_checksum.Flags,
