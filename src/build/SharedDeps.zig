@@ -726,6 +726,7 @@ fn addGtk(
         .{ "adw", "adw1" },
         .{ "gdk", "gdk4" },
         .{ "gio", "gio2" },
+        .{ "giounix", "giounix2" },
         .{ "glib", "glib2" },
         .{ "glibunix", "glibunix2" },
         .{ "gobject", "gobject2" },
