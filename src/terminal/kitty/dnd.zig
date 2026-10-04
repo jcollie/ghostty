@@ -26,20 +26,15 @@
 //!
 //! ## Divergences
 //!
-//! These will be fixed in the future:
-//!
-//!   * Drags to other machines: the drag source ignores the client's
-//!     machine ID (t=o:x=1 payload) and never requests remote drag data
-//!     (t=k), so a client on another machine (e.g. over ssh) can drag
-//!     text and other data but not files.
-//!
 //! These are on purpose forever:
 //!
 //!   * The embedder reads the files a client on another machine copies
-//!     from a drop (t=r with y or Y keys), as file requests, where kitty
-//!     reads them itself: libghostty-vt doesn't touch the filesystem.
-//!     A repeated text/uri-list request replaces the list file requests
-//!     index rather than appending to it, as kitty does.
+//!     from a drop (t=r with y or Y keys), as file requests, and writes
+//!     the files a client on another machine drags (t=k), where kitty
+//!     does both itself: libghostty-vt doesn't touch the filesystem.
+//!
+//!   * A repeated text/uri-list request replaces the list that file
+//!     requests index, where kitty appends to it.
 //!
 //!   * Responses echo the requesting command's terminator (ST or BEL)
 //!     per ghostty convention; kitty always uses ST. Terminal-
@@ -108,6 +103,7 @@ test {
     _ = dnd_drop;
     _ = dnd_drag;
     _ = @import("dnd_uri.zig");
+    _ = @import("dnd_drag_remote.zig");
     _ = dnd_embed;
     _ = @import("dnd_test.zig");
 }

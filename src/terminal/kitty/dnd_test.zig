@@ -1628,3 +1628,145 @@ test "dnd embed: drag input" {
         "this can happen if the user has already released the drag or if the " ++
         "mouse has moved out of the window\x1b\\");
 }
+
+/// Remote file events collected from `dragEvents`, as text.
+const RemoteFiles = struct {
+    var log: std.ArrayListUnmanaged(u8) = .empty;
+
+    fn emit(_: void, ev: generic.DragEvent) void {
+        const f = ev.remote_file;
+        log.print(testing.allocator, "{s} {t} {s} {t}\n", .{ f.path, f.kind, f.bytes, f.status }) catch unreachable;
+    }
+
+    /// Deliver the remote files of an event and check what arrived.
+    fn expect(h: *Harness, want: []const u8) !void {
+        defer log.clearAndFree(testing.allocator);
+        try dnd.dragEvents(&h.state, testing.allocator, .drag_remote, {}, emit);
+        try testing.expectEqualStrings(want, log.items);
+    }
+};
+
+/// A remote client offering a drag of `list`, started.
+fn setupRemoteDrag(h: *Harness, ours: *const generic.MachineId, list: []const u8) !void {
+    const theirs = generic.machineId("that machine");
+    h.options.machine_id = ours;
+    _ = try h.command("t=o:x=1", &theirs);
+    _ = try h.command("t=o:o=1", "text/plain text/uri-list");
+    var b64: [256]u8 = undefined;
+    _ = try h.command("t=p:x=1", std.base64.standard.Encoder.encode(&b64, list));
+    try h.expectEvents("t=P:x=-1", null, &.{.drag_start});
+    try h.drag().startResult(testing.allocator, h.writer(), null);
+    h.clear();
+}
+
+test "dnd remote drag: the text/uri-list must be pre-sent" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    const theirs = generic.machineId("that machine");
+    h.options.machine_id = &ours;
+    _ = try h.command("t=o:x=1", &theirs);
+    _ = try h.command("t=o:o=1", "text/uri-list");
+    try h.expectEvents("t=P:x=-1", null, &.{});
+    try h.expectOutput("\x1b]72;t=E:m=0;EINVAL:remote client must pre-send text/uri-list data\x1b\\");
+
+    // A local client needn't.
+    _ = try h.command("t=o:x=1", &ours);
+    _ = try h.command("t=o:o=1", "text/uri-list");
+    try h.expectEvents("t=P:x=-1", null, &.{.drag_start});
+}
+
+test "dnd remote drag: files and directories" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrag(&h, &ours, "file:///home/a.txt\r\n# comment\r\nhttps://x/y\r\nfile://there/home/dir/\r\n");
+
+    // The list's files are fetched instead of the list itself.
+    try h.drag().requestData(h.writer(), 1);
+    try h.expectOutput("\x1b]72;t=k:x=1\x1b\\\x1b]72;t=k:x=3\x1b\\");
+
+    // A file arrives in pieces.
+    try h.expectEvents("t=k:x=1:m=1", "aGk=", &.{.drag_remote});
+    try RemoteFiles.expect(&h, "0/a.txt file hi pending\n");
+    try h.expectEvents("t=k:x=1:m=0", "", &.{.drag_remote});
+    try RemoteFiles.expect(&h, "0/a.txt file  complete\n");
+
+    // A directory, then its entries.
+    try h.expectEvents("t=k:x=3:X=7:m=1", "ZgBsAC4u", &.{.drag_remote}); // "f\0l\0.."
+    try RemoteFiles.expect(&h, "");
+    try h.expectEvents("t=k:x=3:X=7", "", &.{.drag_remote});
+    try RemoteFiles.expect(&h, "2/dir directory  complete\n");
+    try h.expectEvents("t=k:x=3:Y=7:y=1:m=1", "eA==", &.{.drag_remote});
+    try h.expectEvents("t=k:x=3:Y=7:y=1", "", &.{.drag_remote});
+    try RemoteFiles.expect(&h, "2/dir/f file x pending\n2/dir/f file  complete\n");
+    try h.expectEvents("t=k:x=3:Y=7:y=2:X=1:m=1", "Zg", &.{.drag_remote});
+    try h.expectEvents("t=k:x=3:Y=7:y=2:X=1", "", &.{.drag_remote});
+    try RemoteFiles.expect(&h, "2/dir/l symlink f complete\n");
+
+    // ".." can't escape; the last entry completes the drag's files, and
+    // the list follows.
+    try h.expectEvents("t=k:x=3:Y=7:y=3", "", &.{ .drag_remote, .drag_data });
+    try RemoteFiles.expect(&h, "2/dir/_ file  complete\n");
+    const data = try h.drag().takeData(1);
+    try testing.expectEqualStrings("file:///home/a.txt\r\n# comment\r\nhttps://x/y\r\nfile://there/home/dir/\r\n", data.bytes);
+    try testing.expect(data.status == .complete);
+    try h.expectOutput("");
+
+    // The files are fetched once.
+    try testing.expectError(error.NotFound, h.drag().requestData(h.writer(), 1));
+    try h.expectOutput("");
+}
+
+test "dnd remote drag: errors cancel the drag" {
+    const ours = generic.machineId("this machine");
+    const cases = [_]struct { meta: []const u8, payload: []const u8, out: []const u8 }{
+        .{ .meta = "t=k:x=2", .payload = "", .out = "EINVAL:unknown remote drag entry" },
+        .{ .meta = "t=k:x=1:Y=5:y=1", .payload = "", .out = "EINVAL:unknown remote drag parent directory" },
+        .{ .meta = "t=k:x=1", .payload = "!!!!", .out = "EINVAL:could not base64 decode remote drag data" },
+        .{ .meta = "t=k:x=1", .payload = "A" ** 4100, .out = "EINVAL:remote drag data chunk too large" },
+    };
+    for (cases) |case| {
+        var h: Harness = .init();
+        defer h.deinit();
+        try setupRemoteDrag(&h, &ours, "file:///a\n");
+        try h.drag().requestData(h.writer(), 1);
+        h.clear();
+        try h.expectEvents(case.meta, case.payload, &.{.drag_cancel});
+        var want: [128]u8 = undefined;
+        try h.expectOutput(try std.fmt.bufPrint(&want, "\x1b]72;t=E:m=0;{s}\x1b\\", .{case.out}));
+    }
+
+    // Data before the files were asked for, or for a drag that isn't
+    // remote.
+    var h: Harness = .init();
+    defer h.deinit();
+    try setupRemoteDrag(&h, &ours, "file:///a\n");
+    try h.expectEvents("t=k:x=1", "", &.{.drag_cancel});
+    try h.expectOutput("\x1b]72;t=E:m=0;EINVAL:unexpected remote drag data\x1b\\");
+}
+
+test "dnd remote drag: directories nest at most 128 deep" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrag(&h, &ours, "file:///a\n");
+    try h.drag().requestData(h.writer(), 1);
+    h.clear();
+
+    // Each directory holds one directory, handle n+2 at depth n.
+    var meta: [64]u8 = undefined;
+    _ = try h.command("t=k:x=1:X=2:m=1", "ZAA="); // "d\0"
+    _ = try h.command("t=k:x=1:X=2", "");
+    var depth: usize = 1;
+    while (depth <= 128) : (depth += 1) {
+        const parent = depth + 1;
+        const handle = depth + 2;
+        _ = try h.command(try std.fmt.bufPrint(&meta, "t=k:x=1:Y={d}:y=1:X={d}:m=1", .{ parent, handle }), "ZAA=");
+        _ = try h.command(try std.fmt.bufPrint(&meta, "t=k:x=1:Y={d}:y=1:X={d}", .{ parent, handle }), "");
+    }
+    h.state.?.drag.remote_drag.?.clearOut();
+    try h.expectOutput("");
+    try h.expectEvents(try std.fmt.bufPrint(&meta, "t=k:x=1:Y={d}:y=1", .{depth + 1}), "", &.{.drag_cancel});
+    try h.expectOutput("\x1b]72;t=E:m=0;ELOOP:remote drag directories nested too deeply\x1b\\");
+}

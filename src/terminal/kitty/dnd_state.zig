@@ -64,6 +64,10 @@ pub const Event = enum {
     /// it, disabled offers, or made an error.
     drag_cancel,
 
+    /// Files of a remote client's drag arrived for the embedder to write
+    /// out.
+    drag_remote,
+
     /// The conclusion event for a performed operation.
     pub fn concluded(op: Operation) Event {
         return switch (op) {
@@ -97,6 +101,11 @@ pub const Events = struct {
             .image => self.add(.drag_image),
             .data => self.add(.drag_data),
             .cancel => self.add(.drag_cancel),
+            .remote => self.add(.drag_remote),
+            .remote_complete => {
+                self.add(.drag_remote);
+                self.add(.drag_data);
+            },
         }
     }
 };
@@ -298,7 +307,7 @@ fn dispatch(
         },
 
         .offer => switch (meta.cell_x) {
-            1 => events.addDrag(state.drag.enable()),
+            1 => events.addDrag(state.drag.enable(payload, options.machine_id)),
             2 => {
                 if (!state.drag.enabled) return;
                 if (state.drag.disable(alloc)) events.add(.drag_cancel);
@@ -357,9 +366,13 @@ fn dispatch(
             terminator,
         ),
 
-        // Remote drag data. We never advertise remote support, so a
-        // conforming client never sends it.
-        .remote_data => {},
+        .remote_data => events.addDrag(try state.drag.remoteData(
+            alloc,
+            writer,
+            meta,
+            payload,
+            terminator,
+        )),
 
         // Only ever sent by the terminal. Ignore.
         .drop, .request_error => {},
