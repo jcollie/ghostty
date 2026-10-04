@@ -14,14 +14,17 @@ import json
 import os
 import select
 import shutil
+import stat
 import struct
 import subprocess
 import sys
 import termios
 import time
+import urllib.parse
 
-if len(sys.argv) != 4 or sys.argv[2] not in ("drop", "drag"):
-    raise SystemExit(f"usage: {sys.argv[0]} LIBGHOSTTY_VT_SO drop|drag WORKDIR")
+SCENARIOS = ("drop", "drag", "remote-drop")
+if len(sys.argv) != 4 or sys.argv[2] not in SCENARIOS:
+    raise SystemExit(f"usage: {sys.argv[0]} LIBGHOSTTY_VT_SO {'|'.join(SCENARIOS)} WORKDIR")
 
 LIB = sys.argv[1]
 SCENARIO = sys.argv[2]
@@ -66,9 +69,14 @@ class DropFailure(C.Structure):
     _fields_ = [("id", C.c_uint32), ("reason", C.c_int)]
 
 
+class DropEntryKind(C.Structure):
+    _fields_ = [("id", C.c_uint32), ("kind", C.c_int)]
+
+
 class DropInputValue(C.Union):
     _fields_ = [("move", DropMotion), ("drop", DropMotion), ("data", DropData),
-                ("id", C.c_uint32), ("fail", DropFailure), ("_padding", C.c_uint64 * 8)]
+                ("id", C.c_uint32), ("fail", DropFailure), ("kind", DropEntryKind),
+                ("_padding", C.c_uint64 * 8)]
 
 
 class DropInput(C.Structure):
@@ -84,7 +92,8 @@ class DropAcceptance(C.Structure):
 
 
 class DropDataRequest(C.Structure):
-    _fields_ = [("id", C.c_uint32), ("mime_index", C.c_uint32), ("mime", String)]
+    _fields_ = [("id", C.c_uint32), ("mime_index", C.c_uint32), ("mime", String),
+                ("has_path", C.c_bool), ("path", String)]
 
 
 class DropEventValue(C.Union):
@@ -151,6 +160,7 @@ for name, cls in {
     "GhosttyDropMotion": DropMotion,
     "GhosttyDropData": DropData,
     "GhosttyDropFailure": DropFailure,
+    "GhosttyDropEntryKind": DropEntryKind,
     "GhosttyDropInputValue": DropInputValue,
     "GhosttyDropInput": DropInput,
     "GhosttyDropRegistration": DropRegistration,
@@ -213,6 +223,19 @@ fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 480, 800))
 
 if SCENARIO == "drop":
     argv = [KITTEN, "dnd", "--drop-anywhere=copy", "--drop", "text/plain:out.txt"]
+elif SCENARIO == "remote-drop":
+    # Files and a directory tree to drop, outside the kitten's working
+    # directory where it puts its copies.
+    SOURCE = os.path.join(WORKDIR, "..", os.path.basename(WORKDIR) + "-source")
+    os.makedirs(os.path.join(SOURCE, "tree", "sub"))
+    with open(os.path.join(SOURCE, "a file.txt"), "wb") as f:
+        f.write(b"remote file\n" * 5000)
+    with open(os.path.join(SOURCE, "tree", "inner.txt"), "wb") as f:
+        f.write(b"inner\n")
+    with open(os.path.join(SOURCE, "tree", "sub", "deep.bin"), "wb") as f:
+        f.write(bytes(range(256)))
+    os.symlink("inner.txt", os.path.join(SOURCE, "tree", "link"))
+    argv = [KITTEN, "dnd", "--drop-anywhere=copy"]
 else:
     with open(os.path.join(WORKDIR, "in.txt"), "w") as f:
         f.write("dragged from kitten\n")
@@ -254,7 +277,8 @@ def on_drop(_t, _ud, ev_ptr):
     elif name == "acceptance":
         details = (v.acceptance.operation, strings(v.acceptance.mimes, v.acceptance.mimes_len))
     elif name == "data_request":
-        details = (v.data_request.id, v.data_request.mime_index, string(v.data_request.mime))
+        r = v.data_request
+        details = (r.id, r.mime_index, string(r.mime), string(r.path) if r.has_path else None)
     else:
         details = v.concluded
     print(f"  drop event: {name} {details!r}")
@@ -292,6 +316,14 @@ term = Terminal()
 assert lib.ghostty_terminal_new(None, C.byref(term), 80, 24) == SUCCESS
 for opt, fn in (("WRITE_PTY", write_pty), ("SIZE", size_cb), ("DROP", on_drop), ("DRAG", on_drag)):
     lib.ghostty_terminal_set(term, enum("GhosttyTerminalOption", opt), C.cast(fn, C.c_void_p))
+
+if SCENARIO == "remote-drop":
+    # A machine ID that isn't this machine's, so the kitten (which
+    # declares this machine's) is on another machine and copies the
+    # dropped files through the terminal.
+    other = b"some other machine"
+    machine_id = String(C.cast(C.c_char_p(other), C.c_void_p), len(other))
+    lib.ghostty_terminal_set(term, enum("GhosttyTerminalOption", "DND_MACHINE_ID"), C.byref(machine_id))
 
 
 def pump(timeout):
@@ -352,6 +384,37 @@ def drag(tag, **value):
 POS = Position(2, 1, 25, 30)
 text = b"hello from ghostty\n"
 
+
+def serve(req_id, data):
+    """Send data for a request in pieces, as an embedder reading it would."""
+    for i in range(0, len(data), 65536):
+        piece = data[i:i + 65536]
+        d = DropData(req_id, String(C.cast(C.c_char_p(piece), C.c_void_p), len(piece)))
+        assert drop("DATA", data=d) == SUCCESS
+
+
+def serve_path(req_id, path):
+    """Answer a file request as an embedder does: never follow symlinks."""
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode):
+        kind, data = "SYMLINK", os.fsencode(os.readlink(path))
+    elif stat.S_ISDIR(st.st_mode):
+        names = [n for n in sorted(os.listdir(path))
+                 if stat.S_ISREG(os.lstat(os.path.join(path, n)).st_mode)
+                 or stat.S_ISDIR(os.lstat(os.path.join(path, n)).st_mode)
+                 or stat.S_ISLNK(os.lstat(os.path.join(path, n)).st_mode)]
+        kind, data = "DIRECTORY", b"".join(os.fsencode(n) + b"\0" for n in names)
+    elif stat.S_ISREG(st.st_mode):
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as f:
+            kind, data = "FILE", f.read()
+    else:
+        assert drop("FAIL", fail=DropFailure(req_id, enum("GhosttyDropError", "UNSUPPORTED"))) == SUCCESS
+        return
+    print(f"OS: serving {kind.lower()} {path!r}")
+    assert drop("KIND", kind=DropEntryKind(req_id, enum("GhosttyDropFileKind", kind))) == SUCCESS
+    serve(req_id, data)
+
 if SCENARIO == "drop":
     accepting, _ = wait_for("registration")
     assert accepting, "FAIL: registration without accepting drops"
@@ -369,7 +432,7 @@ if SCENARIO == "drop":
     # out the next through the effect.
     req = wait_for("data_request")
     while req is not None:
-        req_id, _, mime = req
+        req_id, _, mime, _ = req
         print(f"OS: serving {mime!r}")
         data = DropData(req_id, String(C.cast(C.c_char_p(text), C.c_void_p), len(text)))
         assert drop("DATA", data=data) == SUCCESS
@@ -386,6 +449,64 @@ if SCENARIO == "drop":
     got = open(out, "rb").read() if os.path.exists(out) else None
     print(f"out.txt: {got!r}")
     assert got == text, "FAIL: dropped data not written"
+elif SCENARIO == "remote-drop":
+    accepting, _ = wait_for("registration")
+    assert accepting, "FAIL: registration without accepting drops"
+    uri_list = b"".join(
+        b"file://" + urllib.parse.quote(os.path.abspath(os.path.join(SOURCE, n))).encode() + b"\r\n"
+        for n in ("a file.txt", "tree"))
+    mimes = (String * 1)(String(C.cast(C.c_char_p(b"text/uri-list"), C.c_void_p), 13))
+    motion = DropMotion(POS, OPS_COPY, mimes, 1)
+    print("OS: drag of two files moves over the terminal")
+    assert drop("MOVE", move=motion) == SUCCESS
+    op, _ = wait_for("acceptance")
+    print(f"OS: client accepts operation {op}")
+    assert drop("DROP", drop=motion) == SUCCESS
+
+    # Serve the list, then every file request the kitten makes for the
+    # files it names, after the effect returned. Answering one hands out
+    # the next through the effect.
+    concluded = None
+    deadline = time.time() + 30
+    while concluded is None:
+        try:
+            req_id, _, mime, path = take("data_request")
+        except LookupError:
+            try:
+                concluded = take("concluded")
+            except LookupError:
+                if time.time() > deadline:
+                    raise SystemExit("FAIL: no conclusion")
+                pump(0.2)
+            continue
+        if path is None:
+            print(f"OS: serving {mime!r}")
+            serve(req_id, uri_list)
+        else:
+            serve_path(req_id, path)
+        assert drop("END", id=req_id) == SUCCESS
+    print(f"OS: drop concluded with operation {concluded}")
+    pump(0.5)
+
+    # The kitten's copies match the originals, symlink included.
+    def tree(root):
+        out = {}
+        for dirpath, dirnames, filenames in os.walk(root):
+            for n in dirnames + filenames:
+                p = os.path.join(dirpath, n)
+                rel = os.path.relpath(p, root)
+                if os.path.islink(p):
+                    out[rel] = ("link", os.readlink(p))
+                elif os.path.isdir(p):
+                    out[rel] = ("dir",)
+                else:
+                    out[rel] = ("file", open(p, "rb").read())
+        return out
+    want = tree(SOURCE)
+    got = {k: v for k, v in tree(WORKDIR).items() if not k.startswith((".dnd-kitten", "raw.bin"))}
+    print(f"copied: {sorted(got)}")
+    assert got == want, f"FAIL: copies differ: {sorted(got)} != {sorted(want)}"
+    shutil.rmtree(SOURCE)
 else:
     assert wait_for("offers"), "FAIL: offers disabled"
     print("OS: drag gesture")
