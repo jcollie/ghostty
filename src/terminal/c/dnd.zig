@@ -247,6 +247,7 @@ pub const DragOffer = extern struct {
     images_len: usize,
     has_image: bool,
     image: u32,
+    remote: bool,
 };
 
 /// C: GhosttyDragImageChange
@@ -262,6 +263,15 @@ pub const DragData = extern struct {
     status: dnd.DragEvent.Data.Status,
 };
 
+/// C: GhosttyDragRemoteFile
+pub const DragRemoteFile = extern struct {
+    entry: u32,
+    path: lib.String,
+    kind: FileKind,
+    bytes: lib.String,
+    status: dnd.DragEvent.Data.Status,
+};
+
 /// A change in the drag the program offers, delivered to the drag effect.
 ///
 /// C: GhosttyDragEvent
@@ -271,6 +281,7 @@ pub const DragEvent = union(Tag) {
     image: DragImageChange,
     data: DragData,
     cancel: void,
+    remote_file: DragRemoteFile,
 
     /// C: GhosttyDragEventTag
     pub const Tag = lib.Enum(lib.target, &.{
@@ -279,6 +290,7 @@ pub const DragEvent = union(Tag) {
         "image",
         "data",
         "cancel",
+        "remote_file",
     });
 
     const c_union = lib.TaggedUnion(lib.target, @This(), .{
@@ -440,6 +452,7 @@ pub fn dragTrampoline(handler: *Handler, ev: dnd.DragEvent) void {
                 .images_len = images.len,
                 .has_image = offer.image != null,
                 .image = offer.image orelse 0,
+                .remote = offer.remote,
             } };
         },
         .image => |image| .{ .image = .{
@@ -452,6 +465,17 @@ pub fn dragTrampoline(handler: *Handler, ev: dnd.DragEvent) void {
             .status = data.status,
         } },
         .cancel => .cancel,
+        .remote_file => |f| .{ .remote_file = .{
+            .entry = f.entry,
+            .path = .init(f.path),
+            .kind = switch (f.kind) {
+                .file => .file,
+                .symlink => .symlink,
+                .directory => .directory,
+            },
+            .bytes = .init(f.bytes),
+            .status = f.status,
+        } },
     });
     func(@ptrCast(wrapper), wrapper.effects.userdata, &value);
 }
@@ -682,6 +706,10 @@ const TestTerminal = struct {
                 for (offer.images.?[0..offer.images_len]) |image| record(image.data);
             },
             .data => record(ev.value.data.bytes),
+            .remote_file => {
+                record(ev.value.remote_file.path);
+                record(ev.value.remote_file.bytes);
+            },
             .offers, .image, .cancel => {},
         }
     }
@@ -904,6 +932,36 @@ test "dnd drag round trip" {
     try testing.expectEqual(Result.invalid_value, tt.drag(.{ .operation = @enumFromInt(7) }));
     try testing.expectEqual(Result.success, tt.drag(.{ .finished = false }));
     try tt.expectOutput("\x1b]72;t=e:x=1:y=1\x1b\\\x1b]72;t=e:x=4:y=0\x1b\\");
+}
+
+test "dnd remote drag round trip" {
+    var tt: TestTerminal = try .init();
+    defer tt.deinit();
+
+    const ours: lib.String = .init(@as([]const u8, "this machine"));
+    try testing.expectEqual(Result.success, terminal_c.set(tt.t, .dnd_machine_id, @ptrCast(&ours)));
+    const theirs = dnd.machineId("that machine");
+    tt.write("\x1b]72;t=o:x=1;" ++ theirs ++ "\x1b\\");
+    try tt.expectDrags(&.{.offers}, "");
+
+    // A drag of a file, with its text/uri-list pre-sent.
+    tt.write("\x1b]72;t=o:o=1;text/uri-list\x1b\\");
+    tt.write("\x1b]72;t=p:x=0;ZmlsZTovLy9ob21lL2EudHh0DQo=\x1b\\"); // file:///home/a.txt
+    tt.write("\x1b]72;t=P:x=-1\x1b\\");
+    try tt.expectDrags(&.{.start}, "text/uri-list,file:///home/a.txt\r\n,");
+    try testing.expect(TestTerminal.last_drag.value.start.remote);
+    try testing.expectEqual(Result.success, tt.drag(.{ .start_result = .started }));
+    try tt.expectOutput("\x1b]72;t=E:m=0;OK\x1b\\");
+
+    // Its file is fetched, then the list arrives.
+    try testing.expectEqual(Result.success, tt.drag(.{ .request_data = 0 }));
+    try tt.expectOutput("\x1b]72;t=k:x=1\x1b\\");
+    tt.write("\x1b]72;t=k:x=1:m=1;aGk=\x1b\\");
+    try tt.expectDrags(&.{.remote_file}, "0/a.txt,hi,");
+    try testing.expectEqual(FileKind.file, TestTerminal.last_drag.value.remote_file.kind);
+    tt.write("\x1b]72;t=k:x=1\x1b\\");
+    try tt.expectDrags(&.{ .remote_file, .data }, "0/a.txt,,file:///home/a.txt\r\n,");
+    try testing.expectEqual(dnd.DragEvent.Data.Status.complete, TestTerminal.last_drag.value.data.status);
 }
 
 test "dnd inputs need write_pty" {
