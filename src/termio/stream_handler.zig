@@ -64,6 +64,11 @@ pub const StreamHandler = struct {
     /// from the runtime's support and the configuration.
     dnd_sides: terminal.kitty.dnd.Options = .{ .drop = false, .drag = false },
 
+    /// This machine's drag and drop machine ID, when the runtime moves
+    /// files for programs on other machines. Null treats every program
+    /// as local.
+    dnd_machine_id: ?terminal.dnd.MachineId = null,
+
     //---------------------------------------------------------------
     // Internal state
 
@@ -129,6 +134,7 @@ pub const StreamHandler = struct {
         self.clipboard_write = config.clipboard_write;
         self.clipboard_write_limit = config.clipboard_write_limit;
         self.dnd_sides = config.dnd_sides;
+        self.dnd_machine_id = config.dnd_machine_id;
         self.enquiry_response = config.enquiry_response;
         self.xt_checksum_report = config.xt_checksum_report;
         self.terminal.setDefaultCursorStyle(config.cursor_style);
@@ -1470,11 +1476,13 @@ pub const StreamHandler = struct {
 
         var stream: std.Io.Writer.Allocating = .init(self.alloc);
         defer stream.deinit();
+        var options = self.dnd_sides;
+        options.machine_id = if (self.dnd_machine_id) |*id| id else null;
         const events = try terminal.kitty.dnd.handleCommand(
             &self.terminal.kitty_dnd,
             self.terminal.gpa(),
             &stream.writer,
-            self.dnd_sides,
+            options,
             v,
         );
 

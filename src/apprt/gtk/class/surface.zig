@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const adw = @import("adw");
 const gdk = @import("gdk");
 const gio = @import("gio");
+const giounix = @import("giounix");
 const glib = @import("glib");
 const graphene = @import("graphene");
 const gobject = @import("gobject");
@@ -4317,6 +4318,14 @@ const Dnd = struct {
     content: ?*DragContent = null,
     images: std.ArrayList(?*gdk.Texture) = .empty,
 
+    /// For a drag from a program on another machine: the index of its
+    /// text/uri-list, and where its files are written. The copies outlive
+    /// the drag, since the drop target may still be reading them, until
+    /// the next drag starts, the drag is canceled, the program stops
+    /// offering drags, or the surface goes away.
+    remote_uri_item: ?u32 = null,
+    spool: ?*Spool = null,
+
     /// How much to read from the native drop at a time.
     const read_size = 64 * 1024;
 
@@ -4329,6 +4338,7 @@ const Dnd = struct {
             dnd.dropped = null;
         }
         endDrag(self, false);
+        clearSpool(dnd);
         dnd.images.deinit(Application.default().allocator());
     }
 
@@ -4476,18 +4486,29 @@ const Dnd = struct {
         dnd.hover = hover;
     }
 
-    /// A read of one data request from the native drop.
+    /// A read of one data request: a MIME type from the native drop, or
+    /// a file for a program on another machine.
     const Read = struct {
         self: *Surface,
-        drop: *gdk.Drop,
+        source: union(enum) { drop: *gdk.Drop, file: *gio.File },
         id: u32,
         stream: ?*gio.InputStream = null,
 
+        /// A directory's entries, NUL-terminated names, while listed.
+        enumerator: ?*gio.FileEnumerator = null,
+        listing: std.ArrayList(u8) = .empty,
+
         fn destroy(read: *Read) void {
+            const alloc = Application.default().allocator();
             if (read.stream) |stream| stream.unref();
-            read.drop.unref();
+            if (read.enumerator) |enumerator| enumerator.unref();
+            read.listing.deinit(alloc);
+            switch (read.source) {
+                .drop => |d| d.unref(),
+                .file => |f| f.unref(),
+            }
             read.self.unref();
-            Application.default().allocator().destroy(read);
+            alloc.destroy(read);
         }
 
         /// Answer the program; false if it no longer wants the data.
@@ -4497,9 +4518,24 @@ const Dnd = struct {
             return true;
         }
 
-        fn fail(read: *Read) void {
-            _ = read.answer(.{ .fail = .{ .id = read.id, .reason = .io } });
+        fn fail(read: *Read, reason: terminal.dnd.DropInput.Error) void {
+            _ = read.answer(.{ .fail = .{ .id = read.id, .reason = reason } });
             read.destroy();
+        }
+
+        /// Fail with the error a GIO call reported.
+        fn failWith(read: *Read, err: *glib.Error) void {
+            defer err.free();
+            log.warn("error reading drop err={s}", .{err.f_message orelse "(no message)"});
+            const reason: terminal.dnd.DropInput.Error = if (err.f_domain == gio.ioErrorQuark())
+                switch (@as(gio.IOErrorEnum, @enumFromInt(err.f_code))) {
+                    .not_found => .not_found,
+                    .permission_denied => .denied,
+                    else => .io,
+                }
+            else
+                .io;
+            read.fail(reason);
         }
     };
 
@@ -4509,12 +4545,7 @@ const Dnd = struct {
         const surface = priv.core_surface orelse return;
         const fail: CoreSurface.DndDropInput = .{ .fail = .{ .id = req.id, .reason = .io } };
 
-        // Copying the files a drop names, for a program on another
-        // machine, isn't supported yet.
-        if (req.path != null) {
-            surface.dndDropInput(.{ .fail = .{ .id = req.id, .reason = .unsupported } }) catch {};
-            return;
-        }
+        if (req.path) |path| return startFileRead(self, req.id, path);
 
         const d = priv.dnd.dropped orelse {
             surface.dndDropInput(fail) catch {};
@@ -4530,7 +4561,7 @@ const Dnd = struct {
             surface.dndDropInput(fail) catch {};
             return;
         };
-        read.* = .{ .self = self.ref(), .drop = d, .id = req.id };
+        read.* = .{ .self = self.ref(), .source = .{ .drop = d }, .id = req.id };
         d.ref();
 
         var mimes = [_:null]?[*:0]const u8{mime.ptr};
@@ -4545,14 +4576,170 @@ const Dnd = struct {
         const read: *Read = @ptrCast(@alignCast(ud orelse return));
         var mime: [*:0]const u8 = undefined;
         var gerr: ?*glib.Error = null;
-        const stream = read.drop.readFinish(result, &mime, &gerr);
-        if (gerr) |err| {
-            defer err.free();
-            log.warn("error reading drop err={s}", .{err.f_message orelse "(no message)"});
-            return read.fail();
-        }
-        read.stream = stream orelse return read.fail();
+        const stream = read.source.drop.readFinish(result, &mime, &gerr);
+        if (gerr) |err| return read.failWith(err);
+        read.stream = stream orelse return read.fail(.io);
         readNext(read);
+    }
+
+    /// Serve a file request for a program on another machine: report
+    /// what the file is, without following symbolic links, then send a
+    /// file's contents, a link's target, or a directory's entries.
+    fn startFileRead(self: *Surface, id: u32, path: []const u8) void {
+        const alloc = Application.default().allocator();
+        const surface = self.private().core_surface orelse return;
+        const path_z = alloc.dupeZ(u8, path) catch {
+            surface.dndDropInput(.{ .fail = .{ .id = id, .reason = .out_of_memory } }) catch {};
+            return;
+        };
+        defer alloc.free(path_z);
+        const read = alloc.create(Read) catch {
+            surface.dndDropInput(.{ .fail = .{ .id = id, .reason = .out_of_memory } }) catch {};
+            return;
+        };
+        const file = gio.File.newForPath(path_z);
+        read.* = .{ .self = self.ref(), .source = .{ .file = file }, .id = id };
+        file.queryInfoAsync(
+            "standard::type,standard::symlink-target",
+            .{ .nofollow_symlinks = true },
+            glib.PRIORITY_DEFAULT,
+            null,
+            fileInfoReady,
+            read,
+        );
+    }
+
+    fn fileInfoReady(
+        _: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const read: *Read = @ptrCast(@alignCast(ud orelse return));
+        const file = read.source.file;
+        var gerr: ?*glib.Error = null;
+        const info = file.queryInfoFinish(result, &gerr);
+        if (gerr) |err| return read.failWith(err);
+        defer info.?.unref();
+
+        switch (info.?.getFileType()) {
+            .symbolic_link => {
+                const target = std.mem.span(info.?.getSymlinkTarget() orelse "");
+                _ = read.answer(.{ .kind = .{ .id = read.id, .kind = .symlink } }) and
+                    read.answer(.{ .data = .{ .id = read.id, .bytes = target } }) and
+                    read.answer(.{ .end = read.id });
+                read.destroy();
+            },
+            .regular => {
+                const stream = openNoFollow(file) catch |err| {
+                    log.warn("error opening dropped file err={}", .{err});
+                    return read.fail(switch (err) {
+                        error.FileNotFound => .not_found,
+                        error.AccessDenied, error.PermissionDenied => .denied,
+                        error.NotRegular, error.SymLinkLoop => .unsupported,
+                        else => .io,
+                    });
+                };
+                read.stream = stream;
+                if (!read.answer(.{ .kind = .{ .id = read.id, .kind = .file } })) return read.destroy();
+                readNext(read);
+            },
+            .directory => {
+                if (!read.answer(.{ .kind = .{ .id = read.id, .kind = .directory } })) return read.destroy();
+                file.enumerateChildrenAsync(
+                    "standard::name,standard::type",
+                    .{ .nofollow_symlinks = true },
+                    glib.PRIORITY_DEFAULT,
+                    null,
+                    dirOpened,
+                    read,
+                );
+            },
+            else => read.fail(.unsupported),
+        }
+    }
+
+    /// Open a regular file for reading without following a symbolic
+    /// link, and without blocking on a FIFO, either of which may have
+    /// replaced it since its type was checked.
+    fn openNoFollow(file: *gio.File) !*gio.InputStream {
+        const path = file.getPath() orelse return error.FileNotFound;
+        defer glib.free(path);
+        const fd = try std.posix.openatZ(std.posix.AT.FDCWD, path, .{
+            .ACCMODE = .RDONLY,
+            .NOFOLLOW = true,
+            .NONBLOCK = true,
+            .CLOEXEC = true,
+        }, 0);
+        const handle: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = true } };
+        errdefer handle.close(global.io());
+        const stat = try handle.stat(global.io());
+        if (stat.kind != .file) return error.NotRegular;
+        return giounix.InputStream.new(fd, 1).as(gio.InputStream);
+    }
+
+    fn dirOpened(
+        _: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const read: *Read = @ptrCast(@alignCast(ud orelse return));
+        var gerr: ?*glib.Error = null;
+        const enumerator = read.source.file.enumerateChildrenFinish(result, &gerr);
+        if (gerr) |err| return read.failWith(err);
+        read.enumerator = enumerator orelse return read.fail(.io);
+        dirNext(read);
+    }
+
+    fn dirNext(read: *Read) void {
+        read.enumerator.?.nextFilesAsync(64, glib.PRIORITY_DEFAULT, null, dirFiles, read);
+    }
+
+    fn dirFiles(
+        _: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const read: *Read = @ptrCast(@alignCast(ud orelse return));
+        var gerr: ?*glib.Error = null;
+        const list = read.enumerator.?.nextFilesFinish(result, &gerr);
+        if (gerr) |err| return read.failWith(err);
+
+        // The end of the directory: send the names.
+        const first = list orelse {
+            if (read.listing.items.len > 0) {
+                if (!read.answer(.{ .data = .{ .id = read.id, .bytes = read.listing.items } })) {
+                    return read.destroy();
+                }
+            }
+            _ = read.answer(.{ .end = read.id });
+            return read.destroy();
+        };
+        defer first.free();
+
+        // Only regular files, directories and symbolic links are sent.
+        // Every info is released, even after running out of memory.
+        const alloc = Application.default().allocator();
+        var oom = false;
+        var node: ?*glib.List = first;
+        while (node) |n| : (node = n.f_next) {
+            const info: *gio.FileInfo = @ptrCast(@alignCast(n.f_data orelse continue));
+            defer info.unref();
+            if (oom) continue;
+            switch (info.getFileType()) {
+                .regular, .directory, .symbolic_link => {
+                    read.listing.appendSlice(alloc, std.mem.span(info.getName())) catch {
+                        oom = true;
+                        continue;
+                    };
+                    read.listing.append(alloc, 0) catch {
+                        oom = true;
+                    };
+                },
+                else => {},
+            }
+        }
+        if (oom) return read.fail(.out_of_memory);
+        dirNext(read);
     }
 
     fn readNext(read: *Read) void {
@@ -4567,12 +4754,8 @@ const Dnd = struct {
         const read: *Read = @ptrCast(@alignCast(ud orelse return));
         var gerr: ?*glib.Error = null;
         const bytes = read.stream.?.readBytesFinish(result, &gerr);
-        if (gerr) |err| {
-            defer err.free();
-            log.warn("error reading drop err={s}", .{err.f_message orelse "(no message)"});
-            return read.fail();
-        }
-        const b = bytes orelse return read.fail();
+        if (gerr) |err| return read.failWith(err);
+        const b = bytes orelse return read.fail(.io);
         defer b.unref();
 
         var len: usize = 0;
@@ -4609,8 +4792,9 @@ const Dnd = struct {
         const dnd = &self.private().dnd;
         switch (ev.*) {
             // The core reports the drag gesture while the program offers
-            // drags; there is nothing for the GUI to do.
-            .offers => {},
+            // drags; there is nothing for the GUI to do but let go of a
+            // remote drag's files when it stops.
+            .offers => |enabled| if (!enabled) clearSpool(dnd),
 
             .start => |*offer| {
                 const result = startDrag(self, offer);
@@ -4633,13 +4817,31 @@ const Dnd = struct {
                 setIcon(dnd, drag, index);
             },
 
-            .data => |*data| if (dnd.content) |content| content.feed(data),
+            .data => |*data| {
+                const content = dnd.content orelse return;
+                if (dnd.remote_uri_item != data.index or data.status != .complete) {
+                    return content.feed(data);
+                }
 
-            .cancel => endDrag(self, false),
+                // A remote program's list names its files, which are
+                // written here: it names the copies instead, once they
+                // are all written.
+                const spool = dnd.spool orelse return deliverUriList(self, data);
+                if (!spool.busy and spool.queue.items.len == 0) return deliverUriList(self, data);
+                const bytes = Application.default().allocator().dupe(u8, data.bytes) catch
+                    return remoteDragFailed(self);
+                spool.list = .{ .index = data.index, .bytes = bytes, .status = data.status };
+            },
 
-            // The app sets no machine ID, so every program is local and
-            // its drags never need files fetched.
-            .remote_file => {},
+            .cancel => {
+                endDrag(self, false);
+                clearSpool(dnd);
+            },
+
+            .remote_file => |*file| queueRemoteFile(self, file) catch |err| {
+                log.warn("error writing remote drag file err={}", .{err});
+                remoteDragFailed(self);
+            },
         }
     }
 
@@ -4653,6 +4855,10 @@ const Dnd = struct {
         // The user let go before the program asked to start.
         const device = dnd.press_device orelse return .denied;
         endDrag(self, false);
+        clearSpool(dnd);
+        dnd.remote_uri_item = if (offer.remote) for (offer.items, 0..) |item, i| {
+            if (std.mem.eql(u8, item.mime, "text/uri-list")) break @intCast(i);
+        } else null else null;
 
         const widget = priv.render_surface.as(gtk.Widget);
         const native = widget.getNative() orelse return .failed;
@@ -4744,6 +4950,289 @@ const Dnd = struct {
             surface.dndDragInput(.{ .finished = true }) catch {};
         }
         endDrag(self, false);
+        clearSpool(&self.private().dnd);
+    }
+
+    /// Where the files of a drag from a program on another machine are
+    /// written: a temporary directory only this user can read, each file
+    /// the list names under a directory for its index. Files are written
+    /// on a worker thread, a batch at a time so they stay in order, so a
+    /// large drag doesn't stall the GUI.
+    const Spool = struct {
+        tmp: internal_os.TempDir,
+
+        /// The directory's absolute path.
+        path: []u8,
+
+        /// Files still arriving, by relative path. Touched only by the
+        /// batch being written.
+        files: std.StringHashMapUnmanaged(std.Io.File) = .empty,
+
+        /// The relative path of each file the list names, by index.
+        /// Written by batches, read once none is being written.
+        entries: std.AutoHashMapUnmanaged(u32, []u8) = .empty,
+
+        /// Writes waiting for the next batch.
+        queue: std.ArrayList(Job) = .empty,
+
+        /// True while a batch is being written.
+        busy: bool = false,
+
+        /// Set by a batch that failed, read once it finished.
+        failed: bool = false,
+
+        /// The list, held until the writes before it finished.
+        list: ?terminal.dnd.DragEvent.Data = null,
+
+        /// Let go of while a batch was being written: freed when it is.
+        closing: bool = false,
+
+        const Job = struct {
+            entry: u32,
+            path: []u8,
+            kind: terminal.dnd.FileKind,
+            bytes: []u8,
+            status: terminal.dnd.DragEvent.Data.Status,
+
+            fn deinit(job: *Job, alloc: Allocator) void {
+                alloc.free(job.path);
+                alloc.free(job.bytes);
+            }
+        };
+
+        const Batch = struct {
+            spool: *Spool,
+            jobs: []Job,
+        };
+
+        fn create() !*Spool {
+            const alloc = Application.default().allocator();
+            const spool = try alloc.create(Spool);
+            errdefer alloc.destroy(spool);
+            spool.* = .{ .tmp = try .initWith(.fromMode(0o700)), .path = undefined };
+            errdefer spool.tmp.deinit();
+            const tmp_dir = try internal_os.allocTmpDir(alloc, global.environ());
+            defer internal_os.freeTmpDir(alloc, tmp_dir);
+            spool.path = try std.fs.path.join(alloc, &.{ tmp_dir, spool.tmp.name() });
+            return spool;
+        }
+
+        fn destroy(spool: *Spool) void {
+            assert(!spool.busy);
+            const alloc = Application.default().allocator();
+            for (spool.queue.items) |*job| job.deinit(alloc);
+            spool.queue.deinit(alloc);
+            if (spool.list) |list| alloc.free(list.bytes);
+            var files = spool.files.iterator();
+            while (files.next()) |entry| {
+                entry.value_ptr.close(global.io());
+                alloc.free(entry.key_ptr.*);
+            }
+            spool.files.deinit(alloc);
+            var entries = spool.entries.valueIterator();
+            while (entries.next()) |path| alloc.free(path.*);
+            spool.entries.deinit(alloc);
+            alloc.free(spool.path);
+            spool.tmp.deinit();
+            alloc.destroy(spool);
+        }
+
+        /// Write one file, on the worker thread. Each is created
+        /// exclusively, inside directories this spool created, so nothing
+        /// the program sends can write outside it.
+        fn write(spool: *Spool, job: *const Job) !void {
+            const alloc = Application.default().allocator();
+            const io = global.io();
+            const dir = spool.tmp.dir;
+            const private_dir: std.Io.File.Permissions = .fromMode(0o700);
+
+            // A file the list names goes in a directory for its index.
+            if (std.mem.indexOfScalar(u8, job.path, '/')) |slash| {
+                if (std.mem.indexOfScalarPos(u8, job.path, slash + 1, '/') == null) {
+                    dir.createDir(io, job.path[0..slash], private_dir) catch |err| switch (err) {
+                        error.PathAlreadyExists => {},
+                        else => return err,
+                    };
+                    const gop = try spool.entries.getOrPut(alloc, job.entry);
+                    if (!gop.found_existing) gop.value_ptr.* = try alloc.dupe(u8, job.path);
+                }
+            }
+
+            switch (job.kind) {
+                .directory => try dir.createDir(io, job.path, private_dir),
+                .symlink => try dir.symLink(io, job.bytes, job.path, .{}),
+                .file => {
+                    const gop = try spool.files.getOrPut(alloc, job.path);
+                    if (!gop.found_existing) {
+                        gop.key_ptr.* = alloc.dupe(u8, job.path) catch |err| {
+                            spool.files.removeByPtr(gop.key_ptr);
+                            return err;
+                        };
+                        gop.value_ptr.* = dir.createFile(io, job.path, .{
+                            .exclusive = true,
+                            .permissions = .fromMode(0o600),
+                        }) catch |err| {
+                            alloc.free(gop.key_ptr.*);
+                            spool.files.removeByPtr(gop.key_ptr);
+                            return err;
+                        };
+                    }
+                    try gop.value_ptr.writeStreamingAll(io, job.bytes);
+                    if (job.status != .pending) {
+                        gop.value_ptr.close(io);
+                        const key = gop.key_ptr.*;
+                        spool.files.removeByPtr(gop.key_ptr);
+                        alloc.free(key);
+                    }
+                },
+            }
+        }
+    };
+
+    fn clearSpool(dnd: *Dnd) void {
+        const spool = dnd.spool orelse return;
+        dnd.spool = null;
+        if (spool.busy) spool.closing = true else spool.destroy();
+    }
+
+    /// Queue a file of a remote drag to be written.
+    fn queueRemoteFile(self: *Surface, file: *const terminal.dnd.DragEvent.RemoteFile) !void {
+        const alloc = Application.default().allocator();
+        const dnd = &self.private().dnd;
+        if (dnd.spool == null) dnd.spool = try Spool.create();
+        const spool = dnd.spool.?;
+
+        const path = try alloc.dupe(u8, file.path);
+        errdefer alloc.free(path);
+        const bytes = try alloc.dupe(u8, file.bytes);
+        errdefer alloc.free(bytes);
+        try spool.queue.append(alloc, .{
+            .entry = file.entry,
+            .path = path,
+            .kind = file.kind,
+            .bytes = bytes,
+            .status = file.status,
+        });
+        try startBatch(self, spool);
+    }
+
+    /// Write the queued files on a worker thread, unless a batch is
+    /// already being written.
+    fn startBatch(self: *Surface, spool: *Spool) !void {
+        if (spool.busy or spool.queue.items.len == 0) return;
+        const alloc = Application.default().allocator();
+        const batch = try alloc.create(Spool.Batch);
+        errdefer alloc.destroy(batch);
+        batch.* = .{ .spool = spool, .jobs = try spool.queue.toOwnedSlice(alloc) };
+        spool.busy = true;
+
+        // The task holds the surface while the batch is written.
+        const task = gio.Task.new(self.as(gobject.Object), null, batchDone, batch);
+        defer task.unref();
+        task.setTaskData(batch, null);
+        task.runInThread(writeBatch);
+    }
+
+    fn writeBatch(
+        task: *gio.Task,
+        _: *gobject.Object,
+        data: ?*anyopaque,
+        _: ?*gio.Cancellable,
+    ) callconv(.c) void {
+        const batch: *Spool.Batch = @ptrCast(@alignCast(data orelse return));
+        for (batch.jobs) |*job| batch.spool.write(job) catch |err| {
+            log.warn("error writing remote drag file err={}", .{err});
+            batch.spool.failed = true;
+            break;
+        };
+        task.returnBoolean(1);
+    }
+
+    fn batchDone(
+        source: ?*gobject.Object,
+        _: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const alloc = Application.default().allocator();
+        const batch: *Spool.Batch = @ptrCast(@alignCast(ud orelse return));
+        const spool = batch.spool;
+        for (batch.jobs) |*job| job.deinit(alloc);
+        alloc.free(batch.jobs);
+        alloc.destroy(batch);
+        spool.busy = false;
+
+        if (spool.closing) return spool.destroy();
+        const self = gobject.ext.cast(Surface, source orelse return) orelse return;
+        if (spool.failed) return remoteDragFailed(self);
+        if (spool.queue.items.len > 0) return startBatch(self, spool) catch remoteDragFailed(self);
+
+        // Every write before the list finished.
+        if (spool.list) |list| {
+            spool.list = null;
+            defer alloc.free(list.bytes);
+            deliverUriList(self, &list);
+        }
+    }
+
+    /// The drop target won't get a remote drag's files, so the drag is
+    /// over; the program hears it was canceled.
+    fn remoteDragFailed(self: *Surface) void {
+        if (self.private().core_surface) |surface| {
+            surface.dndDragInput(.{ .finished = true }) catch {};
+        }
+        endDrag(self, false);
+        clearSpool(&self.private().dnd);
+    }
+
+    /// Give the drop target a remote drag's list, naming the copies.
+    fn deliverUriList(self: *Surface, data: *const terminal.dnd.DragEvent.Data) void {
+        const dnd = &self.private().dnd;
+        const content = dnd.content orelse return;
+        var copy = data.*;
+        const list = rewriteUriList(dnd, data.bytes) catch |err| list: {
+            log.warn("error rewriting remote drag uri list err={}", .{err});
+            copy.status = .failed;
+            break :list null;
+        };
+        defer if (list) |l| Application.default().allocator().free(l);
+        if (list) |l| copy.bytes = l;
+        content.feed(&copy);
+    }
+
+    /// A remote drag's text/uri-list with the files it names replaced by
+    /// their copies in the spool.
+    fn rewriteUriList(dnd: *Dnd, list: []const u8) ![]u8 {
+        const alloc = Application.default().allocator();
+        var out: std.Io.Writer.Allocating = .init(alloc);
+        errdefer out.deinit();
+
+        // URIs are counted the way the terminal counts them.
+        var index: u32 = 0;
+        var lines: terminal.kitty.dnd.UriList = .init(list);
+        while (lines.nextLine()) |line| {
+            const uri = line.uri orelse {
+                try out.writer.print("{s}\r\n", .{line.text});
+                continue;
+            };
+            defer index += 1;
+
+            const spool = dnd.spool orelse {
+                try out.writer.print("{s}\r\n", .{uri});
+                continue;
+            };
+            const rel = spool.entries.get(index) orelse {
+                try out.writer.print("{s}\r\n", .{uri});
+                continue;
+            };
+            const path = try std.fs.path.joinZ(alloc, &.{ spool.path, rel });
+            defer alloc.free(path);
+            const copy = gio.File.newForPath(path);
+            defer copy.unref();
+            const copy_uri = copy.getUri();
+            defer glib.free(copy_uri);
+            try out.writer.print("{s}\r\n", .{std.mem.span(copy_uri)});
+        }
+        return try out.toOwnedSlice();
     }
 
     fn dragSelectedAction(drag: *gdk.Drag, _: *gobject.ParamSpec, self: *Surface) callconv(.c) void {
