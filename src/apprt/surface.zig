@@ -13,7 +13,7 @@ const MessageData = @import("../datastruct/main.zig").MessageData;
 /// The sides of drag and drop the runtime connects to the OS. A runtime
 /// opts in by declaring `dnd_sides` on its surface and implementing
 /// `dropEvent` and `dragEvent` for the sides it declares.
-pub const dnd_sides: terminal.kitty.dnd.Sides = if (@hasDecl(apprt.runtime.Surface, "dnd_sides"))
+pub const dnd_sides: terminal.kitty.dnd.Options = if (@hasDecl(apprt.runtime.Surface, "dnd_sides"))
     apprt.runtime.Surface.dnd_sides
 else
     .{ .drop = false, .drag = false };

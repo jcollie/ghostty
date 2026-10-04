@@ -13,13 +13,21 @@ and `ghostty_terminal_drag` from `ghostty/vt/dnd.h`, hears what the kitten
 did through the drop and drag effects, then checks that the data arrived
 intact.
 
-It runs two scenarios:
+It runs three scenarios:
 
 - `drop`: the kitten registers to accept drops. The harness moves a drag
   carrying `text/plain` over the terminal, waits for the kitten to accept
   it, drops it, and serves the kitten's data request once the drop effect
   has returned, as an embedder reading a native drop asynchronously does. It passes when the
   kitten concludes the drop and has written the data to `out.txt`.
+- `remote-drop`: the harness gives the terminal a machine ID that isn't
+  this machine's, so the kitten, which declares this machine's, counts as
+  a program on another machine. The harness drops a `text/uri-list`
+  naming a file and a directory tree (with a subdirectory and a symbolic
+  link) kept beside the working directory, and answers the kitten's file
+  requests the way an embedder would, reading the files without following
+  symbolic links. It passes when the kitten concludes the drop and its
+  copies in the working directory match the originals.
 - `drag`: the kitten offers to drag `in.txt` as `text/plain`. The harness
   performs the drag gesture, starts the drag when the kitten asks, reports
   that a target accepted and dropped it, and requests the data. It passes
@@ -45,9 +53,10 @@ Then run a scenario, giving it the library and an empty working
 directory, which becomes the kitten's working directory:
 
 ```console
-$ mkdir -p /tmp/dnd-drop /tmp/dnd-drag
+$ mkdir -p /tmp/dnd-drop /tmp/dnd-drag /tmp/dnd-remote-drop
 $ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so drop /tmp/dnd-drop
 $ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so drag /tmp/dnd-drag
+$ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so remote-drop /tmp/dnd-remote-drop
 ```
 
 On macOS the library is `zig-out/lib/libghostty-vt.dylib`.
@@ -63,8 +72,8 @@ $ nix shell --inputs-from . nixpkgs#kitty nixpkgs#python3 -c \
 
 ## CI
 
-The `test-kitty-dnd` job in `.github/workflows/test.yml` runs both
-scenarios on Linux this way, using the kitty in the flake's pinned
+The `test-kitty-dnd` job in `.github/workflows/test.yml` runs every
+scenario on Linux this way, using the kitty in the flake's pinned
 nixpkgs.
 
 The harness prints the protocol conversation as it goes, then `PASS`, or
@@ -96,8 +105,8 @@ for m in re.finditer(rb'\x1b\]72;([^\x1b\x07]*)', d): print(m.group(1))
 
 ## Limitations
 
-- Only `text/plain` is tested. Remote file transfer isn't, since
-  libghostty-vt doesn't support it.
+- Drags to a program on another machine aren't tested, since
+  libghostty-vt doesn't support them yet.
 - The structures are declared by hand with `ctypes`. Enum values are read
   from the library's ABI manifest (`ghostty_type_json`), and every
   structure's size and field offsets are checked against it at startup, so

@@ -28,14 +28,18 @@
 //!
 //! These will be fixed in the future:
 //!
-//!   * Every client is treated as local: machine IDs (t=a:x=1,
-//!     t=o:x=1 payloads) are accepted and ignored, responses never carry
-//!     the X=1 remote marker, remote file transfer requests (t=r with y
-//!     or Y keys) are answered with EINVAL, and remote drag data (t=k)
-//!     is ignored. A remote client (e.g. over ssh) can still exchange
-//!     text and other data; only file-content transfer is unavailable.
+//!   * Drags to other machines: the drag source ignores the client's
+//!     machine ID (t=o:x=1 payload) and never requests remote drag data
+//!     (t=k), so a client on another machine (e.g. over ssh) can drag
+//!     text and other data but not files.
 //!
 //! These are on purpose forever:
+//!
+//!   * The embedder reads the files a client on another machine copies
+//!     from a drop (t=r with y or Y keys), as file requests, where kitty
+//!     reads them itself: libghostty-vt doesn't touch the filesystem.
+//!     A repeated text/uri-list request replaces the list file requests
+//!     index rather than appending to it, as kitty does.
 //!
 //!   * Responses echo the requesting command's terminator (ST or BEL)
 //!     per ghostty convention; kitty always uses ST. Terminal-
@@ -69,7 +73,7 @@ pub const encodeError = dnd_response.encodeError;
 pub const State = dnd_state.State;
 pub const Event = dnd_state.Event;
 pub const Events = dnd_state.Events;
-pub const Sides = dnd_state.Sides;
+pub const Options = dnd_state.Options;
 pub const handleCommand = dnd_state.handleCommand;
 
 pub const isDrop = dnd_embed.isDrop;
@@ -78,6 +82,8 @@ pub const dragEvents = dnd_embed.dragEvents;
 pub const dropInput = dnd_embed.dropInput;
 pub const dragInput = dnd_embed.dragInput;
 pub const InputError = dnd_embed.InputError;
+
+pub const UriList = @import("dnd_uri.zig").UriList;
 
 pub const DropTarget = dnd_drop.DropTarget;
 pub const MoveEvent = dnd_drop.MoveEvent;
@@ -101,6 +107,7 @@ test {
     _ = dnd_state;
     _ = dnd_drop;
     _ = dnd_drag;
+    _ = @import("dnd_uri.zig");
     _ = dnd_embed;
     _ = @import("dnd_test.zig");
 }

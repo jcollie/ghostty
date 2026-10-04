@@ -849,7 +849,7 @@
     },
     "GhosttyDropDataRequest": {
       "kind": "struct",
-      "size": 24,
+      "size": 48,
       "align": 8,
       "fields": {
         "id": {
@@ -866,6 +866,33 @@
           "offset": 8,
           "size": 16,
           "type": "GhosttyString"
+        },
+        "has_path": {
+          "offset": 24,
+          "size": 1,
+          "type": "bool"
+        },
+        "path": {
+          "offset": 32,
+          "size": 16,
+          "type": "GhosttyString"
+        }
+      }
+    },
+    "GhosttyDropEntryKind": {
+      "kind": "struct",
+      "size": 8,
+      "align": 4,
+      "fields": {
+        "id": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "kind": {
+          "offset": 4,
+          "size": 4,
+          "type": "GhosttyDropFileKind"
         }
       }
     },
@@ -910,7 +937,7 @@
         },
         "data_request": {
           "offset": 0,
-          "size": 24,
+          "size": 48,
           "type": "GhosttyDropDataRequest"
         },
         "concluded": {
@@ -965,7 +992,8 @@
             "DROP": "drop",
             "DATA": "data",
             "END": "id",
-            "FAIL": "fail"
+            "FAIL": "fail",
+            "KIND": "kind"
           }
         }
       }
@@ -999,6 +1027,11 @@
           "offset": 0,
           "size": 8,
           "type": "GhosttyDropFailure"
+        },
+        "kind": {
+          "offset": 0,
+          "size": 8,
+          "type": "GhosttyDropEntryKind"
         },
         "_padding": {
           "offset": 0,
@@ -2943,6 +2976,7 @@
         "DENIED": 2,
         "TOO_LARGE": 3,
         "OUT_OF_MEMORY": 4,
+        "UNSUPPORTED": 5,
         "MAX_VALUE": 2147483647
       }
     },
@@ -2960,6 +2994,19 @@
         "MAX_VALUE": 2147483647
       }
     },
+    "GhosttyDropFileKind": {
+      "kind": "enum",
+      "size": 4,
+      "align": 4,
+      "underlying": "i32",
+      "prefix": "GHOSTTY_DROP_FILE_KIND_",
+      "values": {
+        "FILE": 0,
+        "SYMLINK": 1,
+        "DIRECTORY": 2,
+        "MAX_VALUE": 2147483647
+      }
+    },
     "GhosttyDropInputTag": {
       "kind": "enum",
       "size": 4,
@@ -2973,6 +3020,7 @@
         "DATA": 3,
         "END": 4,
         "FAIL": 5,
+        "KIND": 6,
         "MAX_VALUE": 2147483647
       }
     },
@@ -5239,6 +5287,7 @@
         "RESIZE_WINDOW": 48,
         "DROP": 49,
         "DRAG": 50,
+        "DND_MACHINE_ID": 51,
         "MAX_VALUE": 2147483647
       },
       "keys": {
@@ -5443,6 +5492,10 @@
         "DRAG": {
           "direction": "in",
           "type": "GhosttyTerminalDragFn"
+        },
+        "DND_MACHINE_ID": {
+          "direction": "in",
+          "type": "GhosttyString"
         }
       }
     },

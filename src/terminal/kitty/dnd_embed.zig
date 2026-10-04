@@ -53,7 +53,7 @@ pub fn dropEvent(state: ?*const State, ev: Event) ?dnd.DropEvent {
         } },
         .data_request => .{ .data_request = req: {
             const r = (drop orelse return null).request() orelse return null;
-            break :req .{ .id = r.id, .mime_index = r.mime_index, .mime = r.mime };
+            break :req .{ .id = r.id, .mime_index = r.mime_index, .mime = r.mime, .path = r.path };
         } },
         .concluded_none => .{ .concluded = .none },
         .concluded_copy => .{ .concluded = .copy },
@@ -191,9 +191,15 @@ pub fn dropInput(
             return null;
         },
 
+        .kind => |kind| {
+            target.respondKind(kind.id, kind.kind) catch return error.Rejected;
+            return null;
+        },
+
         .data => |data| {
-            target.respondData(writer, data.id, data.bytes) catch |err| return switch (err) {
+            target.respondData(alloc, writer, data.id, data.bytes) catch |err| return switch (err) {
                 error.Stale => error.Rejected,
+                error.OutOfMemory => error.OutOfMemory,
                 error.WriteFailed => error.WriteFailed,
             };
             return null;
@@ -201,16 +207,18 @@ pub fn dropInput(
 
         .end, .fail => {
             const next = (if (input == .end)
-                target.respondEnd(writer, input.end)
+                target.respondEnd(alloc, writer, input.end)
             else
-                target.respondError(writer, input.fail.id, switch (input.fail.reason) {
+                target.respondError(alloc, writer, input.fail.id, switch (input.fail.reason) {
                     .io => .EIO,
                     .not_found => .ENOENT,
                     .denied => .EPERM,
                     .too_large => .EFBIG,
                     .out_of_memory => .ENOMEM,
+                    .unsupported => .EINVAL,
                 })) catch |err| return switch (err) {
                 error.Stale => error.Rejected,
+                error.OutOfMemory => error.OutOfMemory,
                 error.WriteFailed => error.WriteFailed,
             };
 
@@ -221,6 +229,7 @@ pub fn dropInput(
                 .id = r.id,
                 .mime_index = r.mime_index,
                 .mime = r.mime,
+                .path = r.path,
             } };
         },
     }
