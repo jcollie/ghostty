@@ -4,6 +4,7 @@
 //! protocol today.
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 /// A drag and drop operation.
 ///
@@ -33,6 +34,10 @@ pub const MimeList = struct {
 
     pub fn iterator(self: MimeList) std.mem.TokenIterator(u8, .scalar) {
         return std.mem.tokenizeScalar(u8, self.bytes, self.separator);
+    }
+
+    pub fn dupe(self: MimeList, alloc: Allocator) Allocator.Error!MimeList {
+        return .{ .bytes = try alloc.dupe(u8, self.bytes), .separator = self.separator };
     }
 
     pub fn count(self: MimeList) usize {
@@ -65,6 +70,28 @@ pub const DropEvent = union(enum) {
     /// The program is done with the drop. The embedder finishes the
     /// native drop with the operation it performed.
     concluded: Operation,
+
+    /// A copy of the event that owns everything it borrows, allocated
+    /// with `alloc` (typically an arena), for delivering it somewhere the
+    /// terminal's state can't be borrowed from.
+    pub fn dupe(self: DropEvent, alloc: Allocator) Allocator.Error!DropEvent {
+        return switch (self) {
+            .registration => |r| .{ .registration = .{
+                .accepting = r.accepting,
+                .mimes = try r.mimes.dupe(alloc),
+            } },
+            .acceptance => |a| .{ .acceptance = .{
+                .operation = a.operation,
+                .mimes = try a.mimes.dupe(alloc),
+            } },
+            .data_request => |r| .{ .data_request = .{
+                .id = r.id,
+                .mime_index = r.mime_index,
+                .mime = try alloc.dupe(u8, r.mime),
+            } },
+            .concluded => self,
+        };
+    }
 
     pub const Registration = struct {
         accepting: bool,
@@ -123,6 +150,38 @@ pub const DragEvent = union(enum) {
 
     /// The native drag in progress must be canceled.
     cancel,
+
+    /// A copy of the event that owns everything it borrows, allocated
+    /// with `alloc` (typically an arena), for delivering it somewhere the
+    /// terminal's state can't be borrowed from.
+    pub fn dupe(self: DragEvent, alloc: Allocator) Allocator.Error!DragEvent {
+        return switch (self) {
+            .offers, .image, .cancel => self,
+            .start => |offer| start: {
+                const items = try alloc.alloc(Offer.Item, offer.items.len);
+                for (items, offer.items) |*item, src| item.* = .{
+                    .mime = try alloc.dupe(u8, src.mime),
+                    .pre_sent = if (src.pre_sent) |data| try alloc.dupe(u8, data) else null,
+                };
+                const images = try alloc.alloc(Image, offer.images.len);
+                for (images, offer.images) |*image, src| {
+                    image.* = src;
+                    image.data = try alloc.dupe(u8, src.data);
+                }
+                break :start .{ .start = .{
+                    .operations = offer.operations,
+                    .items = items,
+                    .images = images,
+                    .image = offer.image,
+                } };
+            },
+            .data => |data| .{ .data = .{
+                .index = data.index,
+                .bytes = try alloc.dupe(u8, data.bytes),
+                .status = data.status,
+            } },
+        };
+    }
 
     pub const Offer = struct {
         /// The operations the drag allows.
