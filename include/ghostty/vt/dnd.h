@@ -125,6 +125,24 @@ extern "C" {
  *
  * @snippet c-vt-dnd/src/main.c dnd-drag
  *
+ * ## Offering Drags from Remote Programs
+ *
+ * The files a program on another machine drags aren't here, so the
+ * terminal fetches them for the drop target. With
+ * @ref GHOSTTY_TERMINAL_OPT_DND_MACHINE_ID set, the offer of such a
+ * program has `remote` set. When a drop target wants its `text/uri-list`,
+ * report @ref GHOSTTY_DRAG_INPUT_REQUEST_DATA for it even though it was
+ * pre-sent. The files it names then arrive as
+ * @ref GHOSTTY_DRAG_EVENT_REMOTE_FILE events: write each under a
+ * directory of your own at the relative path given, creating files
+ * exclusively and without following symbolic links. A directory arrives
+ * before its entries. Then the list arrives as
+ * @ref GHOSTTY_DRAG_EVENT_DATA; give the drop target a copy rewritten to
+ * name your copies, and keep it for later reads: the files are fetched
+ * once, so requesting the list again answers GHOSTTY_NO_VALUE. Delete them at the next drag's start, when the drag
+ * is canceled, or when the program stops offering drags, but not when
+ * the drag finishes, since the drop target may still be reading them.
+ *
  * @{
  */
 
@@ -394,6 +412,8 @@ typedef enum GHOSTTY_ENUM_TYPED {
   GHOSTTY_DRAG_EVENT_DATA = 3,
   /** The native drag in progress must be canceled. */
   GHOSTTY_DRAG_EVENT_CANCEL = 4,
+  /** A file of a remote program's drag arrived. */
+  GHOSTTY_DRAG_EVENT_REMOTE_FILE = 5,
   GHOSTTY_DRAG_EVENT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyDragEventTag;
 
@@ -448,6 +468,12 @@ typedef struct {
   bool has_image;
   /** The index of the image to show, when has_image. */
   uint32_t image;
+  /**
+   * Whether the program is on another machine, so the files its
+   * text/uri-list names are fetched. See "Offering Drags from Remote
+   * Programs".
+   */
+  bool remote;
 } GhosttyDragOffer;
 
 /** Value of @ref GHOSTTY_DRAG_EVENT_IMAGE. */
@@ -479,6 +505,28 @@ typedef struct {
   GhosttyDragDataStatus status;
 } GhosttyDragData;
 
+/** Value of @ref GHOSTTY_DRAG_EVENT_REMOTE_FILE. */
+typedef struct {
+  /** The index of the file in the text/uri-list, counting only its URIs. */
+  uint32_t entry;
+  /**
+   * Where to write it, relative to your directory for the drag:
+   * "<entry>/<name>" for the file the list names (create the "<entry>"
+   * directory for it), with each directory level below it appended.
+   * Names are sanitized.
+   */
+  GhosttyString path;
+  /** What it is. */
+  GhosttyDropFileKind kind;
+  /**
+   * A file's data since its last event, or a symbolic link's target.
+   * Empty for a directory.
+   */
+  GhosttyString bytes;
+  /** Complete once the file is. */
+  GhosttyDragDataStatus status;
+} GhosttyDragRemoteFile;
+
 /** Value of a GhosttyDragEvent, selected by its tag. */
 typedef union {
   /** @ref GHOSTTY_DRAG_EVENT_OFFERS: whether the program offers drags. */
@@ -489,6 +537,8 @@ typedef union {
   GhosttyDragImageChange image;
   /** @ref GHOSTTY_DRAG_EVENT_DATA */
   GhosttyDragData data;
+  /** @ref GHOSTTY_DRAG_EVENT_REMOTE_FILE */
+  GhosttyDragRemoteFile remote_file;
   /** Padding for ABI compatibility. Do not use. */
   uint64_t _padding[8];
 } GhosttyDragEventValue;
