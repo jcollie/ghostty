@@ -410,6 +410,7 @@ pub const type_decls = [_]TypeDecl{
     .initUnion("GhosttyDragInputValue", dnd.DragInput.CValue, dnd.DragInput.C),
     .initStruct("GhosttyDragItem", dnd.DragItem),
     .initStruct("GhosttyDragOffer", dnd.DragOffer),
+    .initStruct("GhosttyDragRemoteFile", dnd.DragRemoteFile),
     .initStruct("GhosttyDropAcceptance", dnd.DropAcceptance),
     .initStruct("GhosttyDropData", dnd.DropData),
     .initStruct("GhosttyDropDataRequest", dnd.DropDataRequest),
