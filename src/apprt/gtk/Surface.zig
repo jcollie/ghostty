@@ -71,20 +71,17 @@ pub fn supportsClipboard(
     };
 }
 
-/// The sides of drag and drop programs can take part in. Not yet
-/// connected to GTK.
-pub const dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = false, .drag = false };
+/// The sides of drag and drop programs can take part in.
+pub const dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = true, .drag = true };
 
 /// A change in drops onto the terminal from the program accepting them.
 pub fn dropEvent(self: *Self, ev: *const terminal.dnd.DropEvent) void {
-    _ = self;
-    _ = ev;
+    self.surface.dndDropEvent(ev);
 }
 
 /// A change in the drag the program offers out of the terminal.
 pub fn dragEvent(self: *Self, ev: *const terminal.dnd.DragEvent) void {
-    _ = self;
-    _ = ev;
+    self.surface.dndDragEvent(ev);
 }
 
 pub fn clipboardRequest(

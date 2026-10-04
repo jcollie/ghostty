@@ -72,6 +72,19 @@ Overlay terminal_page {
       released => $mouse_up();
       button: 0;
     }
+
+    // Drops for a program accepting them (the Kitty drag and drop
+    // protocol). Only active while one does; otherwise drop_target
+    // pastes the drop.
+    DropTargetAsync dnd_drop_target {
+      accept => $dnd_accept();
+      drag-enter => $dnd_drag_enter();
+      drag-motion => $dnd_drag_motion();
+      drag-leave => $dnd_drag_leave();
+      drop => $dnd_drop();
+      actions: copy | move;
+      propagation-phase: none;
+    }
   };
 
   [overlay]

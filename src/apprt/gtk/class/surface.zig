@@ -6,6 +6,7 @@ const adw = @import("adw");
 const gdk = @import("gdk");
 const gio = @import("gio");
 const glib = @import("glib");
+const graphene = @import("graphene");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
@@ -18,6 +19,7 @@ const input = @import("../../../input.zig");
 const internal_os = @import("../../../os/main.zig");
 const renderer = @import("../../../renderer.zig");
 const terminal = @import("../../../terminal/main.zig");
+const DragContent = @import("drag_content.zig").DragContent;
 const CoreSurface = @import("../../../Surface.zig");
 const CoreConfig = @import("../../../config/Config.zig");
 const gresource = @import("../build/gresource.zig");
@@ -744,6 +746,7 @@ pub const Surface = extern struct {
         child_exited_overlay: *ChildExited,
         context_menu: *gtk.PopoverMenu,
         drop_target: *gtk.DropTarget,
+        dnd_drop_target: *gtk.DropTargetAsync,
         surface_drop_target: *gtk.DropTarget,
         drag_handle: *gtk.Widget,
         drop_overlay: *gtk.Widget,
@@ -761,6 +764,9 @@ pub const Surface = extern struct {
         /// True when a left mouse down was consumed purely for a focus change,
         /// and the matching left mouse release should also be suppressed.
         suppress_left_mouse_release: bool = false,
+
+        /// Kitty drag and drop protocol (OSC 72) state.
+        dnd: Dnd = .{},
 
         /// How much pending horizontal scroll do we have?
         pending_horizontal_scroll: f64 = 0.0,
@@ -1795,6 +1801,25 @@ pub const Surface = extern struct {
         for (env_to_remove.items) |key| _ = env_map.orderedRemove(key);
     }
 
+    /// A change in drops onto the terminal from the program accepting them.
+    pub fn dndDropEvent(self: *Self, ev: *const terminal.dnd.DropEvent) void {
+        Dnd.dropEvent(self, ev);
+    }
+
+    /// A change in the drag the program offers out of the terminal.
+    pub fn dndDragEvent(self: *Self, ev: *const terminal.dnd.DragEvent) void {
+        Dnd.dragEvent(self, ev);
+    }
+
+    /// Ask the program for the data of an offered MIME type a drop
+    /// target wants. False if the program can't be asked.
+    pub fn dndDragRequest(self: *Self, index: u32) bool {
+        const surface = self.private().core_surface orelse return false;
+        surface.dndDragInput(.{ .accepted = index }) catch {};
+        surface.dndDragInput(.{ .request_data = index }) catch return false;
+        return true;
+    }
+
     pub fn clipboardRequest(
         self: *Self,
         clipboard_type: apprt.Clipboard,
@@ -1955,6 +1980,8 @@ pub const Surface = extern struct {
 
     fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
+
+        Dnd.deinit(self);
 
         if (priv.config) |v| {
             v.unref();
@@ -2956,6 +2983,8 @@ pub const Surface = extern struct {
             return;
         }
 
+        if (button == .left) Dnd.press(self, gesture, x, y);
+
         if (button == .middle and
             !priv.gtk_enable_primary_paste and
             !core_surface.mouseReportingActive())
@@ -3013,6 +3042,7 @@ pub const Surface = extern struct {
         const surface = priv.core_surface orelse return;
         const gtk_mods = event.getModifierState();
         const button = translateMouseButton(gesture.as(gtk.GestureSingle).getCurrentButton());
+        if (button == .left) Dnd.release(self);
 
         if (button == .left and priv.suppress_left_mouse_release) {
             priv.suppress_left_mouse_release = false;
@@ -4083,6 +4113,7 @@ pub const Surface = extern struct {
             class.bindTemplateChildPrivate("key_state_overlay", .{});
             class.bindTemplateChildPrivate("terminal_page", .{});
             class.bindTemplateChildPrivate("drop_target", .{});
+            class.bindTemplateChildPrivate("dnd_drop_target", .{});
             class.bindTemplateChildPrivate("surface_drop_target", .{});
             class.bindTemplateChildPrivate("drag_handle", .{});
             class.bindTemplateChildPrivate("drop_overlay", .{});
@@ -4103,6 +4134,11 @@ pub const Surface = extern struct {
             class.bindTemplateCallback("scroll_vertical_end", &ecMouseScrollVerticalPrecisionEnd);
             class.bindTemplateCallback("scroll_horizontal", &ecMouseScrollHorizontal);
             class.bindTemplateCallback("drop", &dtDrop);
+            class.bindTemplateCallback("dnd_accept", &Dnd.accept);
+            class.bindTemplateCallback("dnd_drag_enter", &Dnd.dragMotion);
+            class.bindTemplateCallback("dnd_drag_motion", &Dnd.dragMotion);
+            class.bindTemplateCallback("dnd_drag_leave", &Dnd.dragLeave);
+            class.bindTemplateCallback("dnd_drop", &Dnd.drop);
             class.bindTemplateCallback("render_surface_realize", &renderSurfaceRealize);
             class.bindTemplateCallback("render_surface_unrealize", &renderSurfaceUnrealize);
             class.bindTemplateCallback("render_surface_map", &renderSurfaceMap);
@@ -4248,6 +4284,520 @@ fn translateMouseButton(button: c_uint) input.MouseButton {
         else => .unknown,
     };
 }
+
+/// The Kitty drag and drop protocol (OSC 72) on a surface: drops onto the
+/// terminal for a program accepting them, read lazily from the native
+/// drop, and drags out of the terminal that a program offers.
+const Dnd = struct {
+    /// Whether the program accepts drops. While it does, the async drop
+    /// target takes drops instead of the pasting one.
+    accepting: bool = false,
+
+    /// The program's answer for the drag over the terminal, for the OS
+    /// drag feedback. Null until it answers.
+    accepted: ?terminal.dnd.Operation = null,
+
+    /// The native drag over the terminal, for immediate feedback when
+    /// the program answers.
+    hover: ?*gdk.Drop = null,
+
+    /// The native drop, kept open while the program reads it, until the
+    /// program concludes it.
+    dropped: ?*gdk.Drop = null,
+
+    /// The device and position of the left press that may become a drag
+    /// the program offers, until the press is released.
+    press_device: ?*gdk.Device = null,
+    press_x: f64 = 0,
+    press_y: f64 = 0,
+
+    /// The native drag the program started, its content, and its images
+    /// (copied at the start, since later changes refer to them by index).
+    drag: ?*gdk.Drag = null,
+    content: ?*DragContent = null,
+    images: std.ArrayList(?*gdk.Texture) = .empty,
+
+    /// How much to read from the native drop at a time.
+    const read_size = 64 * 1024;
+
+    fn deinit(self: *Surface) void {
+        const dnd = &self.private().dnd;
+        setHover(dnd, null);
+        if (dnd.dropped) |d| {
+            d.finish(.{});
+            d.unref();
+            dnd.dropped = null;
+        }
+        endDrag(self, false);
+        dnd.images.deinit(Application.default().allocator());
+    }
+
+    //---------------------------------------------------------------
+    // Drops
+
+    fn dropEvent(self: *Surface, ev: *const terminal.dnd.DropEvent) void {
+        const priv = self.private();
+        const dnd = &priv.dnd;
+        switch (ev.*) {
+            .registration => |r| {
+                dnd.accepting = r.accepting;
+                priv.dnd_drop_target.as(gtk.EventController).setPropagationPhase(
+                    if (r.accepting) .bubble else .none,
+                );
+                priv.drop_target.as(gtk.EventController).setPropagationPhase(
+                    if (r.accepting) .none else .bubble,
+                );
+
+                // A drop it held was concluded before it stopped.
+                if (!r.accepting) {
+                    setHover(dnd, null);
+                    dnd.accepted = null;
+                }
+            },
+
+            .acceptance => |a| {
+                dnd.accepted = a.operation;
+                if (dnd.hover) |hover| hover.status(
+                    hover.getActions(),
+                    preferredAction(hover, a.operation),
+                );
+            },
+
+            .data_request => |r| startRead(self, r),
+
+            .concluded => |op| {
+                const d = dnd.dropped orelse return;
+                d.finish(dragAction(op));
+                d.unref();
+                dnd.dropped = null;
+            },
+        }
+    }
+
+    fn accept(
+        _: *gtk.DropTargetAsync,
+        _: *gdk.Drop,
+        self: *Surface,
+    ) callconv(.c) c_int {
+        return @intFromBool(self.private().dnd.accepting);
+    }
+
+    fn dragMotion(
+        _: *gtk.DropTargetAsync,
+        drop_: *gdk.Drop,
+        x: f64,
+        y: f64,
+        self: *Surface,
+    ) callconv(.c) gdk.DragAction {
+        const dnd = &self.private().dnd;
+        setHover(dnd, drop_);
+        motion(self, drop_, x, y, false) catch return .{};
+
+        // Like kitty, the drag isn't accepted until the program says so.
+        return preferredAction(drop_, dnd.accepted orelse .none);
+    }
+
+    fn dragLeave(
+        _: *gtk.DropTargetAsync,
+        _: *gdk.Drop,
+        self: *Surface,
+    ) callconv(.c) void {
+        const priv = self.private();
+        setHover(&priv.dnd, null);
+        priv.dnd.accepted = null;
+        const surface = priv.core_surface orelse return;
+        surface.dndDropInput(.leave) catch {};
+    }
+
+    fn drop(
+        _: *gtk.DropTargetAsync,
+        drop_: *gdk.Drop,
+        x: f64,
+        y: f64,
+        self: *Surface,
+    ) callconv(.c) c_int {
+        const priv = self.private();
+        const dnd = &priv.dnd;
+        setHover(dnd, null);
+
+        // A drop the program hasn't accepted is refused, as kitty does:
+        // the program wouldn't read or conclude it (e.g. a drag it
+        // started itself), so the native drag would never finish.
+        const accepted = dnd.accepted orelse .none;
+        dnd.accepted = null;
+        if (accepted == .none) {
+            if (priv.core_surface) |surface| surface.dndDropInput(.leave) catch {};
+            return 0;
+        }
+
+        // A drop the program never concluded is concluded (and released)
+        // while reporting this one, so this one is only kept afterwards.
+        motion(self, drop_, x, y, true) catch return 0;
+        if (dnd.dropped) |old| {
+            old.finish(.{});
+            old.unref();
+        }
+
+        // Kept open for the program to read until it concludes the drop.
+        dnd.dropped = drop_;
+        drop_.ref();
+        return 1;
+    }
+
+    /// Report a native drag over, or dropping onto, the terminal.
+    fn motion(self: *Surface, drop_: *gdk.Drop, x: f64, y: f64, is_drop: bool) !void {
+        const surface = self.private().core_surface orelse return error.Inactive;
+
+        var mimes_buf: [64][]const u8 = undefined;
+        var n: usize = 0;
+        if (drop_.getFormats().getMimeTypes(null)) |mimes| {
+            var i: usize = 0;
+            while (mimes[i]) |mime| : (i += 1) {
+                if (n == mimes_buf.len) break;
+                mimes_buf[n] = std.mem.span(mime);
+                n += 1;
+            }
+        }
+
+        const actions = drop_.getActions();
+        const scaled = self.scaledCoordinates(x, y);
+        const m: CoreSurface.DndDropInput.Motion = .{
+            .pos = .{ .x = @floatCast(scaled.x), .y = @floatCast(scaled.y) },
+            .operations = .{ .copy = actions.copy, .move = actions.move },
+            .mimes = mimes_buf[0..n],
+        };
+        try surface.dndDropInput(if (is_drop) .{ .drop = m } else .{ .move = m });
+    }
+
+    fn setHover(dnd: *Dnd, hover: ?*gdk.Drop) void {
+        if (dnd.hover == hover) return;
+        if (dnd.hover) |old| old.unref();
+        if (hover) |new| new.ref();
+        dnd.hover = hover;
+    }
+
+    /// A read of one data request from the native drop.
+    const Read = struct {
+        self: *Surface,
+        drop: *gdk.Drop,
+        id: u32,
+        stream: ?*gio.InputStream = null,
+
+        fn destroy(read: *Read) void {
+            if (read.stream) |stream| stream.unref();
+            read.drop.unref();
+            read.self.unref();
+            Application.default().allocator().destroy(read);
+        }
+
+        /// Answer the program; false if it no longer wants the data.
+        fn answer(read: *Read, native: CoreSurface.DndDropInput) bool {
+            const surface = read.self.private().core_surface orelse return false;
+            surface.dndDropInput(native) catch return false;
+            return true;
+        }
+
+        fn fail(read: *Read) void {
+            _ = read.answer(.{ .fail = .{ .id = read.id, .reason = .io } });
+            read.destroy();
+        }
+    };
+
+    fn startRead(self: *Surface, req: terminal.dnd.DropEvent.DataRequest) void {
+        const alloc = Application.default().allocator();
+        const priv = self.private();
+        const surface = priv.core_surface orelse return;
+        const fail: CoreSurface.DndDropInput = .{ .fail = .{ .id = req.id, .reason = .io } };
+        const d = priv.dnd.dropped orelse {
+            surface.dndDropInput(fail) catch {};
+            return;
+        };
+
+        const mime = alloc.dupeZ(u8, req.mime) catch {
+            surface.dndDropInput(fail) catch {};
+            return;
+        };
+        defer alloc.free(mime);
+        const read = alloc.create(Read) catch {
+            surface.dndDropInput(fail) catch {};
+            return;
+        };
+        read.* = .{ .self = self.ref(), .drop = d, .id = req.id };
+        d.ref();
+
+        var mimes = [_:null]?[*:0]const u8{mime.ptr};
+        d.readAsync(@ptrCast(&mimes), glib.PRIORITY_DEFAULT, null, readReady, read);
+    }
+
+    fn readReady(
+        _: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const read: *Read = @ptrCast(@alignCast(ud orelse return));
+        var mime: [*:0]const u8 = undefined;
+        var gerr: ?*glib.Error = null;
+        const stream = read.drop.readFinish(result, &mime, &gerr);
+        if (gerr) |err| {
+            defer err.free();
+            log.warn("error reading drop err={s}", .{err.f_message orelse "(no message)"});
+            return read.fail();
+        }
+        read.stream = stream orelse return read.fail();
+        readNext(read);
+    }
+
+    fn readNext(read: *Read) void {
+        read.stream.?.readBytesAsync(read_size, glib.PRIORITY_DEFAULT, null, readBytes, read);
+    }
+
+    fn readBytes(
+        _: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const read: *Read = @ptrCast(@alignCast(ud orelse return));
+        var gerr: ?*glib.Error = null;
+        const bytes = read.stream.?.readBytesFinish(result, &gerr);
+        if (gerr) |err| {
+            defer err.free();
+            log.warn("error reading drop err={s}", .{err.f_message orelse "(no message)"});
+            return read.fail();
+        }
+        const b = bytes orelse return read.fail();
+        defer b.unref();
+
+        var len: usize = 0;
+        const data = b.getData(&len);
+        if (len == 0) {
+            _ = read.answer(.{ .end = read.id });
+            return read.destroy();
+        }
+
+        // The data is sent as it arrives; stop if the program moved on.
+        const ptr: [*]const u8 = @ptrCast(data.?);
+        if (!read.answer(.{ .data = .{ .id = read.id, .bytes = ptr[0..len] } })) {
+            return read.destroy();
+        }
+        readNext(read);
+    }
+
+    //---------------------------------------------------------------
+    // Drags
+
+    /// A left press that may become a drag the program offers.
+    fn press(self: *Surface, gesture: *gtk.GestureClick, x: f64, y: f64) void {
+        const dnd = &self.private().dnd;
+        dnd.press_device = gesture.as(gtk.EventController).getCurrentEventDevice();
+        dnd.press_x = x;
+        dnd.press_y = y;
+    }
+
+    fn release(self: *Surface) void {
+        self.private().dnd.press_device = null;
+    }
+
+    fn dragEvent(self: *Surface, ev: *const terminal.dnd.DragEvent) void {
+        const dnd = &self.private().dnd;
+        switch (ev.*) {
+            // The core reports the drag gesture while the program offers
+            // drags; there is nothing for the GUI to do.
+            .offers => {},
+
+            .start => |*offer| {
+                const result = startDrag(self, offer);
+                const surface = self.private().core_surface orelse return;
+                surface.dndDragInput(.{ .start_result = result }) catch |err| {
+                    log.warn("error reporting drag start err={}", .{err});
+                };
+                if (result != .started) return endDrag(self, false);
+
+                // The native drag takes the pointer, so the press's release
+                // may never reach us: the press is over now.
+                dnd.press_device = null;
+                _ = surface.mouseButtonCallback(.release, .left, .{}) catch |err| {
+                    log.warn("error releasing the drag's press err={}", .{err});
+                };
+            },
+
+            .image => |index| {
+                const drag = dnd.drag orelse return;
+                setIcon(dnd, drag, index);
+            },
+
+            .data => |*data| if (dnd.content) |content| content.feed(data),
+
+            .cancel => endDrag(self, false),
+        }
+    }
+
+    fn startDrag(
+        self: *Surface,
+        offer: *const terminal.dnd.DragEvent.Offer,
+    ) terminal.dnd.DragInput.StartResult {
+        const priv = self.private();
+        const dnd = &priv.dnd;
+
+        // The user let go before the program asked to start.
+        const device = dnd.press_device orelse return .denied;
+        endDrag(self, false);
+
+        const widget = priv.render_surface.as(gtk.Widget);
+        const native = widget.getNative() orelse return .failed;
+        const gsurface = native.getSurface() orelse return .failed;
+
+        // The press position in the native surface's coordinates.
+        var point: graphene.Point = undefined;
+        if (widget.computePoint(
+            native.as(gtk.Widget),
+            &graphene.Point{ .f_x = @floatCast(dnd.press_x), .f_y = @floatCast(dnd.press_y) },
+            &point,
+        ) == 0) return .failed;
+        var tx: f64 = 0;
+        var ty: f64 = 0;
+        native.getSurfaceTransform(&tx, &ty);
+
+        const content = DragContent.new(self, offer) catch return .failed;
+        const drag = gdk.Drag.begin(
+            gsurface,
+            device,
+            content.as(gdk.ContentProvider),
+            .{ .copy = offer.operations.copy, .move = offer.operations.move },
+            point.f_x + tx,
+            point.f_y + ty,
+        ) orelse {
+            content.end();
+            content.unref();
+            return .failed;
+        };
+        dnd.drag = drag;
+        dnd.content = content;
+
+        // Later image changes refer to the offer's images by index.
+        const alloc = Application.default().allocator();
+        for (offer.images) |*image| {
+            dnd.images.append(alloc, texture(image)) catch break;
+        }
+        if (offer.image) |index| setIcon(dnd, drag, index);
+
+        _ = gdk.Drag.signals.drop_performed.connect(drag, *Surface, dragDropPerformed, self, .{});
+        _ = gdk.Drag.signals.dnd_finished.connect(drag, *Surface, dragFinished, self, .{});
+        _ = gdk.Drag.signals.cancel.connect(drag, *Surface, dragCancel, self, .{});
+        _ = gobject.Object.signals.notify.connect(drag, *Surface, dragSelectedAction, self, .{
+            .detail = "selected-action",
+        });
+        return .started;
+    }
+
+    /// End the native drag, if any, reporting `success` to the OS.
+    fn endDrag(self: *Surface, success: bool) void {
+        const dnd = &self.private().dnd;
+        if (dnd.drag) |drag| {
+            _ = gobject.signalHandlersDisconnectMatched(
+                drag.as(gobject.Object),
+                .{ .data = true },
+                0,
+                0,
+                null,
+                null,
+                self,
+            );
+            drag.dropDone(@intFromBool(success));
+            drag.unref();
+            dnd.drag = null;
+        }
+        if (dnd.content) |content| {
+            content.end();
+            content.unref();
+            dnd.content = null;
+        }
+        for (dnd.images.items) |tex| if (tex) |t| t.unref();
+        dnd.images.clearRetainingCapacity();
+    }
+
+    fn dragDropPerformed(_: *gdk.Drag, self: *Surface) callconv(.c) void {
+        const surface = self.private().core_surface orelse return;
+        surface.dndDragInput(.dropped) catch {};
+    }
+
+    fn dragFinished(_: *gdk.Drag, self: *Surface) callconv(.c) void {
+        if (self.private().core_surface) |surface| {
+            surface.dndDragInput(.{ .finished = false }) catch {};
+        }
+        endDrag(self, true);
+    }
+
+    fn dragCancel(_: *gdk.Drag, _: gdk.DragCancelReason, self: *Surface) callconv(.c) void {
+        if (self.private().core_surface) |surface| {
+            surface.dndDragInput(.{ .finished = true }) catch {};
+        }
+        endDrag(self, false);
+    }
+
+    fn dragSelectedAction(drag: *gdk.Drag, _: *gobject.ParamSpec, self: *Surface) callconv(.c) void {
+        const surface = self.private().core_surface orelse return;
+        const action = drag.getSelectedAction();
+        surface.dndDragInput(.{ .operation = if (action.move)
+            .move
+        else if (action.copy)
+            .copy
+        else
+            .none }) catch {};
+    }
+
+    fn setIcon(dnd: *Dnd, drag: *gdk.Drag, index: ?u32) void {
+        const i = index orelse return;
+        if (i >= dnd.images.items.len) return;
+        const tex = dnd.images.items[i] orelse return;
+        gtk.DragIcon.setFromPaintable(drag, tex.as(gdk.Paintable), 0, 0);
+    }
+
+    /// A texture for a drag image, or null for text images, which are
+    /// not rendered.
+    fn texture(image: *const terminal.dnd.Image) ?*gdk.Texture {
+        const bytes = glib.Bytes.new(image.data.ptr, image.data.len);
+        defer bytes.unref();
+        return switch (image.format) {
+            .rgba => gdk.MemoryTexture.new(
+                @intCast(image.width),
+                @intCast(image.height),
+                .r8g8b8a8,
+                bytes,
+                @as(usize, image.width) * 4,
+            ).as(gdk.Texture),
+            .png => png: {
+                var gerr: ?*glib.Error = null;
+                const tex = gdk.Texture.newFromBytes(bytes, &gerr);
+                if (gerr) |err| {
+                    defer err.free();
+                    log.warn("error decoding drag image err={s}", .{err.f_message orelse "(no message)"});
+                }
+                break :png tex;
+            },
+            .text => null,
+        };
+    }
+
+    //---------------------------------------------------------------
+
+    fn dragAction(op: terminal.dnd.Operation) gdk.DragAction {
+        return switch (op) {
+            .none => .{},
+            .copy => .{ .copy = true },
+            .move => .{ .move = true },
+        };
+    }
+
+    /// The action to show for `op`, limited to what the drag allows.
+    fn preferredAction(drop_: *gdk.Drop, op: terminal.dnd.Operation) gdk.DragAction {
+        const allowed = drop_.getActions();
+        return switch (op) {
+            .none => .{},
+            .copy => if (allowed.copy) .{ .copy = true } else .{},
+            .move => if (allowed.move) .{ .move = true } else .{},
+        };
+    }
+};
 
 /// A namespace for our clipboard-related functions so Surface isn't SO large.
 const Clipboard = struct {
