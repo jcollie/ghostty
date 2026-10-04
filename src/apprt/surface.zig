@@ -10,6 +10,14 @@ const terminal = @import("../terminal/main.zig");
 const Config = @import("../config.zig").Config;
 const MessageData = @import("../datastruct/main.zig").MessageData;
 
+/// The sides of drag and drop the runtime connects to the OS. A runtime
+/// opts in by declaring `dnd_sides` on its surface and implementing
+/// `dropEvent` and `dragEvent` for the sides it declares.
+pub const dnd_sides: terminal.kitty.dnd.Sides = if (@hasDecl(apprt.runtime.Surface, "dnd_sides"))
+    apprt.runtime.Surface.dnd_sides
+else
+    .{ .drop = false, .drag = false };
+
 /// The message types that can be sent to a single surface.
 pub const Message = union(enum) {
     /// Represents a write request. Magic number comes from the max size
@@ -85,6 +93,10 @@ pub const Message = union(enum) {
     /// transaction. The receiver takes ownership of the request state
     /// and must eventually destroy it.
     kitty_clipboard_write: *apprt.ClipboardRequest.KittyWrite,
+
+    /// The running program changed drag and drop protocol state. The
+    /// details are read from the terminal's state when this is handled.
+    dnd: terminal.kitty.dnd.Event,
 
     /// Write the clipboard contents.
     clipboard_write: struct {
