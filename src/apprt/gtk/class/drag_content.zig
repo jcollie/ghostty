@@ -108,6 +108,13 @@ pub const DragContent = extern struct {
         for (offer.items, priv.mimes, priv.pre_sent) |item, *mime, *pre_sent| {
             mime.* = try arena.dupeZ(u8, item.mime);
             pre_sent.* = if (item.pre_sent) |data| glib.Bytes.new(data.ptr, data.len) else null;
+
+            // A remote program's files aren't here: its list is asked for
+            // so they're fetched, and arrives naming local copies.
+            if (offer.remote and std.mem.eql(u8, item.mime, "text/uri-list")) {
+                if (pre_sent.*) |b| b.unref();
+                pre_sent.* = null;
+            }
         }
 
         return self;

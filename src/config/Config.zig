@@ -2522,6 +2522,11 @@ keybind: Keybinds = .{},
 /// usual. Set this to false to always paste drops and to stop programs
 /// from starting drags.
 ///
+/// Programs on other machines (e.g. over ssh) can take part too: Ghostty
+/// tells them apart by this machine's ID (`/etc/machine-id`) and moves
+/// the dropped or dragged files for them, keeping a dragged program's
+/// files in a temporary directory until the next drag.
+///
 /// This only takes effect where Ghostty's GUI supports it.
 ///
 /// Available since: 1.4.0
