@@ -2512,6 +2512,21 @@ keybind: Keybinds = .{},
 /// Available since: 1.0.1
 @"title-report": bool = false,
 
+/// Whether programs running in the terminal can take part in native drag
+/// and drop with the Kitty drag and drop protocol (OSC 72): accepting
+/// drops onto the terminal and reading the dropped data, and starting
+/// drags out of the terminal.
+///
+/// While a program accepts drops, dropping onto its terminal gives it the
+/// data instead of pasting it; when no program does, drops paste as
+/// usual. Set this to false to always paste drops and to stop programs
+/// from starting drags.
+///
+/// This only takes effect where Ghostty's GUI supports it.
+///
+/// Available since: 1.4.0
+@"drag-and-drop-protocol": bool = true,
+
 /// The total amount of bytes that can be used for image data (e.g. the Kitty
 /// image protocol) per terminal screen. The maximum value is 4,294,967,295
 /// (4GiB). The default is 320MB. If this is set to zero, then all image

@@ -238,6 +238,11 @@ const Mouse = struct {
     /// Gesture state for text selection.
     selection_gesture: terminal.SelectionGesture = .init,
 
+    /// Where the left button was pressed, until the press is released or
+    /// has been dragged far enough to ask a program offering drags to
+    /// start one.
+    dnd_press: ?apprt.CursorPos = null,
+
     /// The last x/y sent for mouse reports.
     event_point: ?terminal.point.Coordinate = null,
 
@@ -1078,6 +1083,8 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .kitty_clipboard_read => |req| try self.kittyClipboardRead(req),
 
         .kitty_clipboard_write => |req| try self.kittyClipboardWrite(req),
+
+        .dnd => |ev| try self.dndEvent(ev),
 
         .clipboard_write => |w| switch (w.req) {
             .small => |v| try self.clipboardWrite(v.data[0..v.len], w.clipboard_type),
@@ -3896,6 +3903,13 @@ pub fn mouseButtonCallback(
     // Always record our latest mouse state
     self.mouse.click_state[@intCast(@intFromEnum(button))] = action;
 
+    // A left press may become the gesture that asks a program offering
+    // drags to start one.
+    if (button == .left) self.mouse.dnd_press = if (action == .press)
+        self.rt_surface.getCursorPos() catch null
+    else
+        null;
+
     // Always show the mouse again if it is hidden
     if (self.mouse.hidden) self.showMouse();
 
@@ -4731,6 +4745,10 @@ pub fn cursorPosCallback(
         // changed underneath us, even if the mouse didn't move, we update the URL hints and state
         try self.mouseRefreshLinks(pos, pos_vp, over_link);
     }
+
+    // A left press dragged far enough asks a program offering drags to
+    // start one, whether or not it reports the mouse, matching kitty.
+    if (self.mouse.dnd_press) |press| self.dndGesture(press, pos);
 
     // Do a mouse report
     if (self.isMouseReporting()) report: {
@@ -6292,6 +6310,197 @@ fn completeClipboardPaste(
             self.alloc,
             vec,
         ), .unlocked);
+    };
+}
+
+/// Deliver a change in a program's drag and drop protocol state to the
+/// runtime. The details are read from the terminal's state now and
+/// copied, since the runtime may answer by calling `dndDropInput` or
+/// `dndDragInput`, which need the lock.
+fn dndEvent(self: *Surface, ev: terminal.kitty.dnd.Event) !void {
+    if (comptime !@hasDecl(apprt.runtime.Surface, "dnd_sides")) return;
+
+    var arena: std.heap.ArenaAllocator = .init(self.alloc);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    if (terminal.kitty.dnd.isDrop(ev)) {
+        const drop_ev: terminal.dnd.DropEvent = copy: {
+            self.renderer_state.mutex.lockUncancelable(global.io());
+            defer self.renderer_state.mutex.unlock(global.io());
+            const drop_ev = terminal.kitty.dnd.dropEvent(self.io.terminal.kitty_dnd, ev) orelse
+                return;
+            break :copy try drop_ev.dupe(alloc);
+        };
+        self.rt_surface.dropEvent(&drop_ev);
+        return;
+    }
+
+    // One protocol event can produce several drag events (data for
+    // several items), each copied as it is produced.
+    const Collect = struct {
+        alloc: Allocator,
+        events: std.ArrayList(terminal.dnd.DragEvent) = .empty,
+        err: ?Allocator.Error = null,
+
+        fn emit(collect: *@This(), drag_ev: terminal.dnd.DragEvent) void {
+            const copy = drag_ev.dupe(collect.alloc) catch |err| {
+                collect.err = err;
+                return;
+            };
+            collect.events.append(collect.alloc, copy) catch |err| {
+                collect.err = err;
+            };
+        }
+    };
+    var collect: Collect = .{ .alloc = alloc };
+    {
+        self.renderer_state.mutex.lockUncancelable(global.io());
+        defer self.renderer_state.mutex.unlock(global.io());
+        try terminal.kitty.dnd.dragEvents(
+            &self.io.terminal.kitty_dnd,
+            alloc,
+            ev,
+            &collect,
+            Collect.emit,
+        );
+    }
+    if (collect.err) |err| return err;
+    for (collect.events.items) |*drag_ev| self.rt_surface.dragEvent(drag_ev);
+}
+
+/// Native drop activity for `dndDropInput`. Positions are in surface
+/// pixels, like `cursorPosCallback`.
+pub const DndDropInput = union(enum) {
+    move: Motion,
+    leave,
+    drop: Motion,
+    data: terminal.dnd.DropInput.Data,
+    end: u32,
+    fail: terminal.dnd.DropInput.Failure,
+
+    pub const Motion = struct {
+        pos: apprt.CursorPos,
+        operations: terminal.dnd.Operations,
+        mimes: []const []const u8,
+    };
+};
+
+/// Report native drop activity to a program accepting drops. The
+/// runtime's `dropEvent` hears what it must handle next, if anything,
+/// before this returns. Returns error.Inactive when no program accepts
+/// drops, so the runtime handles the drop as it would without one.
+pub fn dndDropInput(
+    self: *Surface,
+    native: DndDropInput,
+) terminal.kitty.dnd.InputError!void {
+    var arena: std.heap.ArenaAllocator = .init(self.alloc);
+    defer arena.deinit();
+
+    const followup: ?terminal.dnd.DropEvent = followup: {
+        self.renderer_state.mutex.lockUncancelable(global.io());
+        defer self.renderer_state.mutex.unlock(global.io());
+        const state = self.io.terminal.kitty_dnd orelse return error.Inactive;
+
+        const zig_input: terminal.dnd.DropInput = switch (native) {
+            .move => |m| .{ .move = self.dndMotion(m) },
+            .drop => |m| .{ .drop = self.dndMotion(m) },
+            .leave => .leave,
+            .data => |data| .{ .data = data },
+            .end => |id| .{ .end = id },
+            .fail => |fail| .{ .fail = fail },
+        };
+
+        var aw: std.Io.Writer.Allocating = .init(self.alloc);
+        defer aw.deinit();
+        const next = try terminal.kitty.dnd.dropInput(
+            state,
+            self.io.terminal.gpa(),
+            &aw.writer,
+            zig_input,
+        );
+        try self.dndWrite(&aw);
+        break :followup if (next) |ev| try ev.dupe(arena.allocator()) else null;
+    };
+
+    if (comptime @hasDecl(apprt.runtime.Surface, "dnd_sides")) {
+        if (followup) |*ev| self.rt_surface.dropEvent(ev);
+    }
+}
+
+/// Report native activity for the drag a program offers. The drag
+/// gesture is reported by the core from mouse input, not by the runtime.
+pub fn dndDragInput(
+    self: *Surface,
+    native: terminal.dnd.DragInput,
+) terminal.kitty.dnd.InputError!void {
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+    const state = self.io.terminal.kitty_dnd orelse return error.Inactive;
+
+    var aw: std.Io.Writer.Allocating = .init(self.alloc);
+    defer aw.deinit();
+    try terminal.kitty.dnd.dragInput(state, self.io.terminal.gpa(), &aw.writer, native);
+    try self.dndWrite(&aw);
+}
+
+/// Ask a program offering drags to start one once a left press has
+/// been dragged more than a cell's width, matching kitty.
+///
+/// Precondition: the render_state mutex must be held.
+fn dndGesture(self: *Surface, press: apprt.CursorPos, pos: apprt.CursorPos) void {
+    const dx = pos.x - press.x;
+    const dy = pos.y - press.y;
+    const threshold: f32 = @floatFromInt(self.size.cell.width);
+    if (dx * dx + dy * dy <= threshold * threshold) return;
+    self.mouse.dnd_press = null;
+
+    const state = self.io.terminal.kitty_dnd orelse return;
+    var aw: std.Io.Writer.Allocating = .init(self.alloc);
+    defer aw.deinit();
+    terminal.kitty.dnd.dragInput(state, self.io.terminal.gpa(), &aw.writer, .{
+        .gesture = self.dndPosition(pos),
+    }) catch |err| switch (err) {
+        // No program offers drags.
+        error.Inactive => return,
+        else => {
+            log.warn("error starting drag gesture err={}", .{err});
+            return;
+        },
+    };
+    self.dndWrite(&aw) catch |err| log.warn("error starting drag gesture err={}", .{err});
+}
+
+/// Write drag and drop protocol messages to the pty.
+///
+/// Precondition: the render_state mutex must be held.
+fn dndWrite(self: *Surface, aw: *std.Io.Writer.Allocating) Allocator.Error!void {
+    if (aw.written().len == 0) return;
+    self.queueIo(.{ .write_alloc = .{
+        .alloc = self.alloc,
+        .data = try aw.toOwnedSlice(),
+    } }, .locked);
+}
+
+fn dndMotion(self: *const Surface, m: DndDropInput.Motion) terminal.dnd.DropInput.Motion {
+    return .{
+        .position = self.dndPosition(m.pos),
+        .operations = m.operations,
+        .mimes = m.mimes,
+    };
+}
+
+/// The protocol position of a point in surface pixels: its cell, and
+/// pixels relative to the terminal's content area.
+fn dndPosition(self: *const Surface, pos: apprt.CursorPos) terminal.dnd.Position {
+    const vp = self.posToViewport(pos.x, pos.y);
+    const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = pos.x, .y = pos.y } };
+    const term = coord.convert(.terminal, self.size).terminal;
+    return .{
+        .cell_x = vp.x,
+        .cell_y = vp.y,
+        .pixel_x = @intFromFloat(std.math.clamp(@round(term.x), std.math.minInt(i32), std.math.maxInt(i32))),
+        .pixel_y = @intFromFloat(std.math.clamp(@round(term.y), std.math.minInt(i32), std.math.maxInt(i32))),
     };
 }
 

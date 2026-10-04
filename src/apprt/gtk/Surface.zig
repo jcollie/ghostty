@@ -4,6 +4,7 @@ const std = @import("std");
 const apprt = @import("../../apprt.zig");
 const configpkg = @import("../../config.zig");
 const CoreSurface = @import("../../Surface.zig");
+const terminal = @import("../../terminal/main.zig");
 const ApprtApp = @import("App.zig");
 const Application = @import("class/application.zig").Application;
 const Surface = @import("class/surface.zig").Surface;
@@ -68,6 +69,22 @@ pub fn supportsClipboard(
         .primary,
         => true,
     };
+}
+
+/// The sides of drag and drop programs can take part in. Not yet
+/// connected to GTK.
+pub const dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = false, .drag = false };
+
+/// A change in drops onto the terminal from the program accepting them.
+pub fn dropEvent(self: *Self, ev: *const terminal.dnd.DropEvent) void {
+    _ = self;
+    _ = ev;
+}
+
+/// A change in the drag the program offers out of the terminal.
+pub fn dragEvent(self: *Self, ev: *const terminal.dnd.DragEvent) void {
+    _ = self;
+    _ = ev;
 }
 
 pub fn clipboardRequest(
