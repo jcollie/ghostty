@@ -13,6 +13,7 @@ const ScreenSet = @import("../ScreenSet.zig");
 const PageList = @import("../PageList.zig");
 const apc = @import("../apc.zig");
 const kitty = @import("../kitty/key.zig");
+const dnd_c = @import("dnd.zig");
 const kitty_gfx_c = @import("kitty_graphics.zig");
 const modes = @import("../modes.zig");
 const mouse = @import("../mouse.zig");
@@ -71,7 +72,7 @@ pub const Io = struct {
 /// Wrapper around ZigTerminal that tracks additional state for C API usage,
 /// such as the persistent VT stream needed to handle escape sequences split
 /// across multiple vt_write calls.
-const TerminalWrapper = struct {
+pub const TerminalWrapper = struct {
     terminal: *ZigTerminal,
     /// C construction has no I/O argument, so the wrapper retains the owner
     /// created by `new` or transferred from snapshot decoding until `free`.
@@ -89,7 +90,7 @@ const TerminalWrapper = struct {
     searches: std.AutoArrayHashMapUnmanaged(*search_c.SearchWrapper, void) = .{},
 
     /// Fetches a `TerminalWrapper` reference from a `Handler`.
-    fn fromHandler(handler: *Handler) *TerminalWrapper {
+    pub fn fromHandler(handler: *Handler) *TerminalWrapper {
         const stream_ptr: *Stream = @fieldParentPtr("handler", handler);
         return @alignCast(@fieldParentPtr("stream", stream_ptr));
     }
@@ -327,6 +328,8 @@ const Effects = struct {
     clipboard_read: ?ClipboardReadFn = null,
     unknown_sequence: ?UnknownSequenceFn = null,
     render_hold: ?RenderHoldFn = null,
+    drop: ?dnd_c.DropFn = null,
+    drag: ?dnd_c.DragFn = null,
 
     /// Scratch buffer for DA1 feature codes. The device attributes
     /// trampoline converts C feature codes into this buffer and returns
@@ -1332,6 +1335,8 @@ pub const Option = enum(c_int) {
     xt_checksum_report = 44,
     xt_checksum_extension = 45,
     program_status = 46,
+    drop = 47,
+    drag = 48,
 
     /// Input type expected for setting the option.
     pub fn InType(comptime self: Option) type {
@@ -1355,6 +1360,8 @@ pub const Option = enum(c_int) {
             .render_hold => ?Effects.RenderHoldFn,
             .semantic_prompt => ?Effects.SemanticPromptFn,
             .reset => ?Effects.ResetFn,
+            .drop => ?dnd_c.DropFn,
+            .drag => ?dnd_c.DragFn,
             .title, .pwd, .terminfo_name => ?*const lib.String,
             .color_foreground, .color_background, .color_cursor => ?*const color.RGB.C,
             .color_palette => ?*const color.PaletteC,
@@ -1448,6 +1455,20 @@ fn setTyped(
             wrapper.effects.program_status = value;
             wrapper.stream.handler.effects.program_status = if (value != null)
                 &Effects.programStatusTrampoline
+            else
+                null;
+        },
+        .drop => {
+            wrapper.effects.drop = value;
+            wrapper.stream.handler.effects.drop = if (value != null)
+                &dnd_c.dropTrampoline
+            else
+                null;
+        },
+        .drag => {
+            wrapper.effects.drag = value;
+            wrapper.stream.handler.effects.drag = if (value != null)
+                &dnd_c.dragTrampoline
             else
                 null;
         },

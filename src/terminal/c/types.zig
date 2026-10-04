@@ -31,6 +31,7 @@ const cell = @import("cell.zig");
 const color_c = @import("color.zig");
 const formatter = @import("formatter.zig");
 const grid_ref = @import("grid_ref.zig");
+const dnd = @import("dnd.zig");
 const io = @import("io.zig");
 const key_encode = @import("key_encode.zig");
 const kitty_graphics = @import("kitty_graphics.zig");
@@ -188,6 +189,26 @@ const type_decls = [_]TypeDecl{
     .initStruct("GhosttyDeviceAttributesPrimary", terminal.DeviceAttributes.Primary),
     .initStruct("GhosttyDeviceAttributesSecondary", terminal.DeviceAttributes.Secondary),
     .initStruct("GhosttyDeviceAttributesTertiary", terminal.DeviceAttributes.Tertiary),
+    .initStruct("GhosttyDndPosition", dnd.Position),
+    .initStruct("GhosttyDragData", dnd.DragData),
+    .initTaggedStruct("GhosttyDragEvent", dnd.DragEvent.C, "tag", "value", .generated),
+    .initUnion("GhosttyDragEventValue", dnd.DragEvent.CValue, dnd.DragEvent.C),
+    .initStruct("GhosttyDragImage", dnd.DragImage),
+    .initStruct("GhosttyDragImageChange", dnd.DragImageChange),
+    .initTaggedStruct("GhosttyDragInput", dnd.DragInput.C, "tag", "value", .generated),
+    .initUnion("GhosttyDragInputValue", dnd.DragInput.CValue, dnd.DragInput.C),
+    .initStruct("GhosttyDragItem", dnd.DragItem),
+    .initStruct("GhosttyDragOffer", dnd.DragOffer),
+    .initStruct("GhosttyDropAcceptance", dnd.DropAcceptance),
+    .initStruct("GhosttyDropData", dnd.DropData),
+    .initStruct("GhosttyDropDataRequest", dnd.DropDataRequest),
+    .initTaggedStruct("GhosttyDropEvent", dnd.DropEvent.C, "tag", "value", .generated),
+    .initUnion("GhosttyDropEventValue", dnd.DropEvent.CValue, dnd.DropEvent.C),
+    .initStruct("GhosttyDropFailure", dnd.DropFailure),
+    .initTaggedStruct("GhosttyDropInput", dnd.DropInput.C, "tag", "value", .generated),
+    .initUnion("GhosttyDropInputValue", dnd.DropInput.CValue, dnd.DropInput.C),
+    .initStruct("GhosttyDropMotion", dnd.DropMotion),
+    .initStruct("GhosttyDropRegistration", dnd.DropRegistration),
     .initStruct("GhosttyFormatterScreenExtra", formatter.ScreenOptions.Extra),
     .initStruct("GhosttyFormatterTerminalExtra", formatter.TerminalOptions.Extra),
     .initStruct("GhosttyFormatterTerminalOptions", formatter.TerminalOptions),
@@ -258,6 +279,15 @@ const type_decls = [_]TypeDecl{
     .initEnum("GhosttyClipboardReadResult", clipboard.Read.Status, "GHOSTTY_CLIPBOARD_READ_RESULT_"),
     .initEnum("GhosttyClipboardWriteResult", clipboard.Write.Status, "GHOSTTY_CLIPBOARD_WRITE_RESULT_"),
     .initEnum("GhosttyColorScheme", device_status.ColorScheme, "GHOSTTY_COLOR_SCHEME_"),
+    .initEnum("GhosttyDndOperation", dnd.Operation, "GHOSTTY_DND_OPERATION_"),
+    .initEnum("GhosttyDragDataStatus", @FieldType(dnd.DragData, "status"), "GHOSTTY_DRAG_DATA_STATUS_"),
+    .initEnum("GhosttyDragEventTag", dnd.DragEvent.Tag, "GHOSTTY_DRAG_EVENT_"),
+    .initEnum("GhosttyDragImageFormat", @FieldType(dnd.DragImage, "format"), "GHOSTTY_DRAG_IMAGE_FORMAT_"),
+    .initEnum("GhosttyDragInputTag", dnd.DragInput.Tag, "GHOSTTY_DRAG_INPUT_"),
+    .initEnum("GhosttyDragStartResult", dnd.DragStartResult, "GHOSTTY_DRAG_START_"),
+    .initEnum("GhosttyDropError", dnd.DropError, "GHOSTTY_DROP_ERROR_"),
+    .initEnum("GhosttyDropEventTag", dnd.DropEvent.Tag, "GHOSTTY_DROP_EVENT_"),
+    .initEnum("GhosttyDropInputTag", dnd.DropInput.Tag, "GHOSTTY_DROP_INPUT_"),
     .initEnum("GhosttyFocusEvent", focus_pkg.Event, "GHOSTTY_FOCUS_"),
     .initEnum("GhosttyFormatterFormat", formatter_pkg.Format, "GHOSTTY_FORMATTER_FORMAT_"),
     .initEnum("GhosttyKey", input_key.Key, "GHOSTTY_KEY_"),
@@ -736,6 +766,10 @@ const Json = struct {
 
     fn fieldTypeOverride(comptime owner: []const u8, comptime field_name: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, field_name, "value")) {
+            if (std.mem.eql(u8, owner, "GhosttyDragEvent")) return "GhosttyDragEventValue";
+            if (std.mem.eql(u8, owner, "GhosttyDragInput")) return "GhosttyDragInputValue";
+            if (std.mem.eql(u8, owner, "GhosttyDropEvent")) return "GhosttyDropEventValue";
+            if (std.mem.eql(u8, owner, "GhosttyDropInput")) return "GhosttyDropInputValue";
             if (std.mem.eql(u8, owner, "GhosttyPoint")) return "GhosttyPointValue";
             if (std.mem.eql(u8, owner, "GhosttySgrAttribute")) return "GhosttySgrAttributeValue";
             if (std.mem.eql(u8, owner, "GhosttyStyleColor")) return "GhosttyStyleColorValue";

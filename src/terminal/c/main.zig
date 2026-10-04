@@ -10,6 +10,9 @@ pub const focus = @import("focus.zig");
 pub const formatter = @import("formatter.zig");
 pub const grid_ref = @import("grid_ref.zig");
 pub const grid_ref_tracked = @import("grid_ref_tracked.zig");
+pub const dnd = @import("dnd.zig");
+pub const terminal_drop = dnd.terminal_drop;
+pub const terminal_drag = dnd.terminal_drag;
 pub const io = @import("io.zig");
 pub const kitty_graphics = @import("kitty_graphics.zig");
 pub const kitty_graphics_get = kitty_graphics.get;
@@ -266,6 +269,7 @@ test {
     _ = color_scheme;
     _ = grid_ref;
     _ = grid_ref_tracked;
+    _ = dnd;
     _ = io;
     _ = kitty_graphics;
     _ = row;
