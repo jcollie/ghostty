@@ -72,7 +72,7 @@ pub fn supportsClipboard(
 }
 
 /// The sides of drag and drop programs can take part in.
-pub const dnd_sides: terminal.kitty.dnd.Sides = .{ .drop = true, .drag = true };
+pub const dnd_sides: terminal.kitty.dnd.Options = .{ .drop = true, .drag = true };
 
 /// A change in drops onto the terminal from the program accepting them.
 pub fn dropEvent(self: *Self, ev: *const terminal.dnd.DropEvent) void {

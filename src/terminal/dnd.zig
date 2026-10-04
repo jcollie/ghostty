@@ -15,6 +15,42 @@ pub const Operation = enum(c_int) {
     move = 2,
 };
 
+/// A machine's identity, for telling whether a program is running on
+/// the machine the terminal is on: `1:` and the hex HMAC-SHA256 of the
+/// OS machine ID, keyed with "tty-dnd-protocol-machine-id". Kitty's drag
+/// and drop protocol compares it to the one a program declares.
+pub const MachineId = [66]u8;
+
+/// The machine ID for a raw OS machine ID: the contents of
+/// /etc/machine-id on Linux and the BSDs, IOPlatformUUID on macOS, or
+/// MachineGuid on Windows. Trailing whitespace is ignored.
+pub fn machineId(raw: []const u8) MachineId {
+    const Hmac = std.crypto.auth.hmac.sha2.HmacSha256;
+    var mac: [Hmac.mac_length]u8 = undefined;
+    Hmac.create(&mac, std.mem.trimEnd(u8, raw, &std.ascii.whitespace), "tty-dnd-protocol-machine-id");
+    var id: MachineId = undefined;
+    id[0..2].* = "1:".*;
+    id[2..].* = std.fmt.bytesToHex(mac, .lower);
+    return id;
+}
+
+/// What a file entry in a drop is, as the embedder reports it before its
+/// data. Symbolic links are never followed.
+///
+/// C: GhosttyDropFileKind
+pub const FileKind = enum(c_int) {
+    /// A regular file; the data is its contents.
+    file = 0,
+
+    /// A symbolic link; the data is its target.
+    symlink = 1,
+
+    /// A directory; the data is the names of its entries that are
+    /// regular files, directories or symbolic links, each followed by a
+    /// NUL byte.
+    directory = 2,
+};
+
 /// The set of operations a drag allows.
 ///
 /// C: GhosttyDndOperations
@@ -88,6 +124,7 @@ pub const DropEvent = union(enum) {
                 .id = r.id,
                 .mime_index = r.mime_index,
                 .mime = try alloc.dupe(u8, r.mime),
+                .path = if (r.path) |path| try alloc.dupe(u8, path) else null,
             } },
             .concluded => self,
         };
@@ -120,8 +157,16 @@ pub const DropEvent = union(enum) {
         /// Index into the MIME types of the drop.
         mime_index: u32,
 
-        /// The MIME type to read from the native drop.
+        /// The MIME type to read from the native drop. Empty for a file
+        /// request.
         mime: []const u8,
+
+        /// For a file request, the absolute path of a file the drop
+        /// named (in its text/uri-list) or one inside a directory it
+        /// named, for a program on another machine to copy. The embedder
+        /// reports what it is with `DropInput.kind`, without following
+        /// symbolic links, then sends its data. Null for a MIME request.
+        path: ?[]const u8 = null,
     };
 };
 
@@ -282,6 +327,10 @@ pub const DropInput = union(enum) {
     /// native drop open to serve data requests until it is concluded.
     drop: Motion,
 
+    /// What the file of the file request being served is, before any of
+    /// its data. A file request not reported is a regular file.
+    kind: Kind,
+
     /// Some of the data for the data request being served, sent as given.
     data: Data,
 
@@ -311,6 +360,11 @@ pub const DropInput = union(enum) {
         reason: Error,
     };
 
+    pub const Kind = struct {
+        id: u32,
+        kind: FileKind,
+    };
+
     /// Why reading drop data failed.
     ///
     /// C: GhosttyDropError
@@ -320,6 +374,10 @@ pub const DropInput = union(enum) {
         denied = 2,
         too_large = 3,
         out_of_memory = 4,
+
+        /// A file request named something other than a regular file,
+        /// directory or symbolic link.
+        unsupported = 5,
     };
 };
 
@@ -361,6 +419,15 @@ pub const DragInput = union(enum) {
         failed = 2,
     };
 };
+
+test "machine ID" {
+    // Computed with kitty's machine_id.py algorithm.
+    const id = machineId("0123456789abcdef0123456789abcdef\n");
+    try std.testing.expectEqualStrings(
+        "1:a81b6c3c9d37b0caa4a9c6b7de41059238bc101829db2975223b93d39d663b08",
+        &id,
+    );
+}
 
 test "MimeList iterates either separator" {
     const testing = std.testing;

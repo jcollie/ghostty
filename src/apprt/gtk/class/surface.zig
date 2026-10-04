@@ -4252,6 +4252,14 @@ const Dnd = struct {
         const priv = self.private();
         const surface = priv.core_surface orelse return;
         const fail: CoreSurface.DndDropInput = .{ .fail = .{ .id = req.id, .reason = .io } };
+
+        // Copying the files a drop names, for a program on another
+        // machine, isn't supported yet.
+        if (req.path != null) {
+            surface.dndDropInput(.{ .fail = .{ .id = req.id, .reason = .unsupported } }) catch {};
+            return;
+        }
+
         const d = priv.dnd.dropped orelse {
             surface.dndDropInput(fail) catch {};
             return;

@@ -2436,6 +2436,17 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Input type: GhosttyTerminalDragFn
    */
   GHOSTTY_TERMINAL_OPT_DRAG = 48,
+
+  /**
+   * This machine's ID, for drag and drop: the contents of
+   * /etc/machine-id on Linux and the BSDs, IOPlatformUUID on macOS, or
+   * MachineGuid on Windows. It tells programs on another machine (e.g.
+   * over ssh) apart so they can copy dropped files. Set to NULL to treat
+   * every program as local (the default). See @ref dnd.
+   *
+   * Input type: GhosttyString*
+   */
+  GHOSTTY_TERMINAL_OPT_DND_MACHINE_ID = 49,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 

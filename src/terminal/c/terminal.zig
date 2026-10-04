@@ -13,6 +13,7 @@ const ScreenSet = @import("../ScreenSet.zig");
 const PageList = @import("../PageList.zig");
 const apc = @import("../apc.zig");
 const kitty = @import("../kitty/key.zig");
+const dnd = @import("../dnd.zig");
 const dnd_c = @import("dnd.zig");
 const kitty_gfx_c = @import("kitty_graphics.zig");
 const modes = @import("../modes.zig");
@@ -1337,6 +1338,7 @@ pub const Option = enum(c_int) {
     program_status = 46,
     drop = 47,
     drag = 48,
+    dnd_machine_id = 49,
 
     /// Input type expected for setting the option.
     pub fn InType(comptime self: Option) type {
@@ -1362,6 +1364,7 @@ pub const Option = enum(c_int) {
             .reset => ?Effects.ResetFn,
             .drop => ?dnd_c.DropFn,
             .drag => ?dnd_c.DragFn,
+            .dnd_machine_id => ?*const lib.String,
             .title, .pwd, .terminfo_name => ?*const lib.String,
             .color_foreground, .color_background, .color_cursor => ?*const color.RGB.C,
             .color_palette => ?*const color.PaletteC,
@@ -1472,6 +1475,10 @@ fn setTyped(
             else
                 null;
         },
+        .dnd_machine_id => wrapper.stream.handler.dnd_machine_id = if (value) |v|
+            dnd.machineId(v.ptr[0..v.len])
+        else
+            null,
         .unknown_sequence => {
             wrapper.effects.unknown_sequence = value;
             wrapper.stream.handler.unknown_sequence = if (value != null)

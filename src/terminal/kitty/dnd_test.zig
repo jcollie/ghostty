@@ -11,12 +11,13 @@ const testing = std.testing;
 
 const osc = @import("../osc.zig");
 const dnd = @import("dnd.zig");
+const generic = @import("../dnd.zig");
 
 /// A test harness holding the lazily allocated protocol state and an
 /// output collector.
 const Harness = struct {
     state: ?*dnd.State = null,
-    sides: dnd.Sides = .{},
+    options: dnd.Options = .{},
     output: std.Io.Writer.Allocating,
 
     fn init() Harness {
@@ -45,7 +46,7 @@ const Harness = struct {
     /// Feed one client command, as it would arrive from the OSC parser,
     /// returning the events the stream handler would pass to its effect.
     fn command(self: *Harness, metadata: []const u8, payload: ?[]const u8) !dnd.Events {
-        return try dnd.handleCommand(&self.state, testing.allocator, &self.output.writer, self.sides, .{
+        return try dnd.handleCommand(&self.state, testing.allocator, &self.output.writer, self.options, .{
             .metadata = metadata,
             .payload = payload,
             .terminator = .st,
@@ -333,8 +334,8 @@ test "dnd: drop and data serving round trip" {
     try testing.expectEqualStrings("text/plain", req.mime);
 
     // Its data is a base64 chunk plus the empty end-of-data message.
-    try h.drop().respondData(h.writer(), req.id, "hello");
-    try testing.expect(try h.drop().respondEnd(h.writer(), req.id) == null);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "hello");
+    try testing.expect(try h.drop().respondEnd(testing.allocator, h.writer(), req.id) == null);
     try h.expectOutput(
         "\x1b]72;t=r:x=2:m=0;aGVsbG8=\x1b\\" ++ "\x1b]72;t=r:x=2\x1b\\",
     );
@@ -367,8 +368,8 @@ test "dnd: empty item served as a single end-of-data message" {
     // duplicate would be a second completion to the client.
     try h.expectEvents("t=r:x=1", null, &.{.data_request});
     const req = h.drop().request().?;
-    try h.drop().respondData(h.writer(), req.id, "");
-    _ = try h.drop().respondEnd(h.writer(), req.id);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
     try h.expectOutput("\x1b]72;t=r:x=1\x1b\\");
 }
 
@@ -382,11 +383,11 @@ test "dnd: data is sent as the embedder provides it" {
 
     // Each piece is sent as soon as it is given, as kitty sends data
     // as the OS delivers it.
-    try h.drop().respondData(h.writer(), req.id, "ab");
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "ab");
     try h.expectOutput("\x1b]72;t=r:x=1:m=0;YWI=\x1b\\");
-    try h.drop().respondData(h.writer(), req.id, "c");
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "c");
     try h.expectOutput("\x1b]72;t=r:x=1:m=0;Yw==\x1b\\");
-    _ = try h.drop().respondEnd(h.writer(), req.id);
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
     try h.expectOutput("\x1b]72;t=r:x=1\x1b\\");
 }
 
@@ -397,7 +398,7 @@ test "dnd: read errors carry the request keys" {
     try h.setupDrop(&.{"text/plain"});
     _ = try h.command("t=r:x=1", null);
     const req = h.drop().request().?;
-    try testing.expect(try h.drop().respondError(h.writer(), req.id, .EIO) == null);
+    try testing.expect(try h.drop().respondError(testing.allocator, h.writer(), req.id, .EIO) == null);
     try h.expectOutput(
         "\x1b]72;t=R:x=1:m=0;EIO:drop data request failed to read data\x1b\\",
     );
@@ -416,12 +417,12 @@ test "dnd: requests are served in order" {
     const first = h.drop().request().?;
     try testing.expectEqualStrings("text/plain", first.mime);
 
-    try h.drop().respondData(h.writer(), first.id, "plain");
-    const second = (try h.drop().respondEnd(h.writer(), first.id)).?;
+    try h.drop().respondData(testing.allocator, h.writer(), first.id, "plain");
+    const second = (try h.drop().respondEnd(testing.allocator, h.writer(), first.id)).?;
     try testing.expectEqualStrings("text/html", second.mime);
     try testing.expect(second.id != first.id);
-    try h.drop().respondData(h.writer(), second.id, "html");
-    try testing.expect(try h.drop().respondEnd(h.writer(), second.id) == null);
+    try h.drop().respondData(testing.allocator, h.writer(), second.id, "html");
+    try testing.expect(try h.drop().respondEnd(testing.allocator, h.writer(), second.id) == null);
     try h.expectOutput(
         "\x1b]72;t=r:x=1:m=0;cGxhaW4=\x1b\\" ++ "\x1b]72;t=r:x=1\x1b\\" ++
             "\x1b]72;t=r:x=2:m=0;aHRtbA==\x1b\\" ++ "\x1b]72;t=r:x=2\x1b\\",
@@ -449,7 +450,7 @@ test "dnd: errors are answered in queue order" {
     try h.expectEvents("t=r:x=30", null, &.{});
     try h.expectOutput("");
     const req = h.drop().request().?;
-    try testing.expect(try h.drop().respondEnd(h.writer(), req.id) == null);
+    try testing.expect(try h.drop().respondEnd(testing.allocator, h.writer(), req.id) == null);
     try h.expectOutput(
         "\x1b]72;t=r:x=1\x1b\\" ++
             "\x1b]72;t=R:x=30:m=0;ENOENT:drop data request index out of bounds\x1b\\",
@@ -476,7 +477,7 @@ test "dnd: queue overflow returns EMFILE and ends the drop" {
         "\x1b]72;t=R:x=1:m=0;EMFILE:too many drop data requests\x1b\\",
     );
     try testing.expect(h.drop().request() == null);
-    try testing.expectError(error.Stale, h.drop().respondEnd(h.writer(), req.id));
+    try testing.expectError(error.Stale, h.drop().respondEnd(testing.allocator, h.writer(), req.id));
 }
 
 test "dnd: replies to abandoned requests are stale" {
@@ -489,9 +490,9 @@ test "dnd: replies to abandoned requests are stale" {
 
     // The client concludes while the embedder is reading.
     try h.expectEvents("t=r:o=0", null, &.{.concluded_none});
-    try testing.expectError(error.Stale, h.drop().respondData(h.writer(), req.id, "x"));
-    try testing.expectError(error.Stale, h.drop().respondEnd(h.writer(), req.id));
-    try testing.expectError(error.Stale, h.drop().respondError(h.writer(), req.id, .EIO));
+    try testing.expectError(error.Stale, h.drop().respondData(testing.allocator, h.writer(), req.id, "x"));
+    try testing.expectError(error.Stale, h.drop().respondEnd(testing.allocator, h.writer(), req.id));
+    try testing.expectError(error.Stale, h.drop().respondError(testing.allocator, h.writer(), req.id, .EIO));
     try h.expectOutput("");
 }
 
@@ -546,30 +547,204 @@ test "dnd: new drag discards an unconcluded drop" {
     // unconcluded previous drop, which the embedder must finish.
     try testing.expect(try h.drop().dragMove(testing.allocator, h.writer(), origin, &.{"text/plain"}));
     h.clear();
-    try testing.expectError(error.Stale, h.drop().respondEnd(h.writer(), req.id));
+    try testing.expectError(error.Stale, h.drop().respondEnd(testing.allocator, h.writer(), req.id));
     _ = try h.command("t=r:x=1", null);
     try h.expectOutput(
         "\x1b]72;t=R:x=1:m=0;EPERM:drop data can only be requested after a drop\x1b\\",
     );
 }
 
-test "dnd: remote transfer requests refused" {
+test "dnd remote: machine ID decides whether a client is remote" {
     var h: Harness = .init();
     defer h.deinit();
 
-    try h.setupDrop(&.{ "text/plain", "text/uri-list" });
+    const ours = generic.machineId("this machine");
+    const theirs = generic.machineId("that machine");
 
-    // URI file content request.
-    _ = try h.command("t=r:x=2:y=1", null);
+    // Without our machine ID every client is local.
+    _ = try h.command("t=a", null);
+    _ = try h.command("t=a:x=1", &theirs);
+    try testing.expect(!h.drop().remote);
+
+    h.options.machine_id = &ours;
+    _ = try h.command("t=a:x=1", &ours);
+    try testing.expect(!h.drop().remote);
+    _ = try h.command("t=a:x=1", &theirs);
+    try testing.expect(h.drop().remote);
+
+    // An empty ID is local; a short one or an unknown version is remote.
+    _ = try h.command("t=a:x=1", "");
+    try testing.expect(!h.drop().remote);
+    _ = try h.command("t=a:x=1", "1:short");
+    try testing.expect(h.drop().remote);
+    _ = try h.command("t=a:x=1", "2:" ++ ours[2..]);
+    try testing.expect(h.drop().remote);
+
+    // Registering again forgets it, as kitty does.
+    _ = try h.command("t=a", null);
+    try testing.expect(!h.drop().remote);
+    try h.expectOutput("");
+}
+
+/// Register a remote client and drop a text/uri-list naming `uris` on
+/// it, having served the list. Discards the output.
+fn setupRemoteDrop(h: *Harness, ours: *const generic.MachineId, uris: []const u8) !void {
+    const theirs = generic.machineId("that machine");
+    h.options.machine_id = ours;
+    _ = try h.command("t=a", null);
+    _ = try h.command("t=a:x=1", &theirs);
+    _ = try h.drop().dragDrop(testing.allocator, h.writer(), origin, &.{ "text/plain", "text/uri-list" });
+    try h.expectEvents("t=r:x=2", null, &.{.data_request});
+    const id = h.drop().request().?.id;
+    try h.drop().respondData(testing.allocator, h.writer(), id, uris);
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), id);
+    h.clear();
+}
+
+test "dnd remote: text/uri-list carries the remote marker" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrop(&h, &ours, "");
+
+    try h.expectEvents("t=r:x=2", null, &.{.data_request});
+    const id = h.drop().request().?.id;
+    try h.drop().respondData(testing.allocator, h.writer(), id, "file:///a\r\n");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), id);
+    try h.expectOutput("\x1b]72;t=r:x=2:X=1:m=0;ZmlsZTovLy9hDQo=\x1b\\" ++
+        "\x1b]72;t=r:x=2:X=1\x1b\\");
+
+    // The other MIME types don't.
+    try h.expectEvents("t=r:x=1", null, &.{.data_request});
+    const text = h.drop().request().?.id;
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), text);
+    try h.expectOutput("\x1b]72;t=r:x=1\x1b\\");
+}
+
+test "dnd remote: local text/uri-list has no remote marker" {
+    var h: Harness = .init();
+    defer h.deinit();
+    try h.setupDrop(&.{"text/uri-list"});
+    try h.expectEvents("t=r:x=1", null, &.{.data_request});
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), h.drop().request().?.id);
+    try h.expectOutput("\x1b]72;t=r:x=1\x1b\\");
+}
+
+test "dnd remote: files, symlinks, and directories" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrop(&h, &ours, "# comment\r\nfile:///tmp/a%20b\r\n\r\nfile://localhost/tmp/dir/  \r\n");
+
+    // A file the list names, by index ignoring comments and blanks.
+    try h.expectEvents("t=r:x=2:y=1", null, &.{.data_request});
+    var req = h.drop().request().?;
+    try testing.expectEqualStrings("/tmp/a b", req.path.?);
+    try testing.expectEqualStrings("", req.mime);
+    try h.drop().respondKind(req.id, .file);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "hi");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
+    try h.expectOutput("\x1b]72;t=r:x=2:y=1:m=0;aGk=\x1b\\" ++
+        "\x1b]72;t=r:x=2:y=1\x1b\\");
+
+    // A directory gets a handle, sent with its listing.
+    try h.expectEvents("t=r:x=2:y=2", null, &.{.data_request});
+    req = h.drop().request().?;
+    try testing.expectEqualStrings("/tmp/dir/", req.path.?);
+    try h.drop().respondKind(req.id, .directory);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "file\x00link\x00");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
+    try h.expectOutput("\x1b]72;t=r:x=2:y=2:X=2:m=0;ZmlsZQBsaW5rAA==\x1b\\" ++
+        "\x1b]72;t=r:x=2:y=2:X=2\x1b\\");
+
+    // Its entries are read by handle; a symlink's data is its target.
+    try h.expectEvents("t=r:Y=2:x=2", null, &.{.data_request});
+    req = h.drop().request().?;
+    try testing.expectEqualStrings("/tmp/dir/link", req.path.?);
+    try h.drop().respondKind(req.id, .symlink);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "file");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
+    try h.expectOutput("\x1b]72;t=r:x=2:Y=2:X=1:m=0;ZmlsZQ==\x1b\\" ++
+        "\x1b]72;t=r:x=2:Y=2:X=1\x1b\\");
+
+    // The kind can't change once data was sent, or for a MIME request.
+    try h.expectEvents("t=r:Y=2:x=1", null, &.{.data_request});
+    req = h.drop().request().?;
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "x");
+    try testing.expectError(error.NotFile, h.drop().respondKind(req.id, .directory));
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
+    try h.expectEvents("t=r:x=1", null, &.{.data_request});
+    req = h.drop().request().?;
+    try testing.expectError(error.NotFile, h.drop().respondKind(req.id, .file));
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
+    h.clear();
+
+    // Errors don't end the drop.
+    _ = try h.command("t=r:Y=2:x=3", null);
+    _ = try h.command("t=r:Y=9:x=1", null);
+    _ = try h.command("t=r:x=2:y=5", null);
+    _ = try h.command("t=r:x=1:y=1", null);
     try h.expectOutput(
-        "\x1b]72;t=R:x=2:y=1:m=0;EINVAL:remote drop data is not supported\x1b\\",
+        "\x1b]72;t=R:x=3:Y=2:m=0;EINVAL:directory entry index out of bounds\x1b\\" ++
+            "\x1b]72;t=R:x=1:Y=9:m=0;EINVAL:invalid directory handle\x1b\\" ++
+            "\x1b]72;t=R:x=2:y=5:m=0;ENOENT:drop data uri index out of bounds\x1b\\" ++
+            "\x1b]72;t=R:x=1:y=1:m=0;EINVAL:drop data mime index out of bounds\x1b\\",
     );
 
-    // Directory handle request.
+    // Closing a directory needs no answer, and its handle is gone.
+    _ = try h.command("t=r:Y=2", null);
     _ = try h.command("t=r:Y=2:x=1", null);
+    try h.expectOutput("\x1b]72;t=R:x=1:Y=2:m=0;EINVAL:invalid directory handle\x1b\\");
+
+    // The embedder can fail a file it can't read.
+    try h.expectEvents("t=r:x=2:y=1", null, &.{.data_request});
+    _ = try h.drop().respondError(testing.allocator, h.writer(), h.drop().request().?.id, .EPERM);
+    try h.expectOutput("\x1b]72;t=R:x=2:y=1:m=0;EPERM:drop data request failed to read data\x1b\\");
+}
+
+test "dnd remote: only local file URIs" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrop(&h, &ours, "https://example.com/a\nfile://elsewhere/a\nfile:relative\nfile:///bad%zz\n");
+
+    _ = try h.command("t=r:x=2:y=1", null);
+    _ = try h.command("t=r:x=2:y=2", null);
+    _ = try h.command("t=r:x=2:y=3", null);
+    _ = try h.command("t=r:x=2:y=4", null);
     try h.expectOutput(
-        "\x1b]72;t=R:x=1:Y=2:m=0;EINVAL:remote drop data is not supported\x1b\\",
+        "\x1b]72;t=R:x=2:y=1:m=0;EUNKNOWN:unsupported uri\x1b\\" ++
+            "\x1b]72;t=R:x=2:y=2:m=0;EUNKNOWN:unsupported uri\x1b\\" ++
+            "\x1b]72;t=R:x=2:y=3:m=0;EUNKNOWN:unsupported uri\x1b\\" ++
+            "\x1b]72;t=R:x=2:y=4:m=0;EINVAL:invalid file uri\x1b\\",
     );
+}
+
+test "dnd remote: file requests need a uri list" {
+    var h: Harness = .init();
+    defer h.deinit();
+    try h.setupDrop(&.{ "text/plain", "text/uri-list" });
+    _ = try h.command("t=r:x=2:y=1", null);
+    try h.expectOutput("\x1b]72;t=R:x=2:y=1:m=0;EINVAL:drop data uri list empty\x1b\\");
+}
+
+test "dnd remote: no file reads for a drop of the client's own drag" {
+    var h: Harness = .init();
+    defer h.deinit();
+    const ours = generic.machineId("this machine");
+    try setupRemoteDrop(&h, &ours, "file:///a\n");
+
+    // An offer being built isn't a drag yet.
+    _ = try h.command("t=o:x=1", null);
+    _ = try h.command("t=o:o=1", "text/plain");
+    h.clear();
+    try h.expectEvents("t=r:x=2:y=1", null, &.{.data_request});
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), h.drop().request().?.id);
+    h.clear();
+
+    _ = try h.command("t=P:x=-1", null);
+    _ = try h.command("t=r:x=2:y=1", null);
+    try h.expectOutput("\x1b]72;t=R:x=2:y=1:m=0;EPERM:cannot drop into self window\x1b\\");
 }
 
 test "dnd: unregister ends a held drop" {
@@ -625,7 +800,7 @@ test "dnd: bel terminator echoed in responses" {
     var h: Harness = .init();
     defer h.deinit();
 
-    _ = try dnd.handleCommand(&h.state, testing.allocator, h.writer(), h.sides, .{
+    _ = try dnd.handleCommand(&h.state, testing.allocator, h.writer(), h.options, .{
         .metadata = "t=q",
         .payload = null,
         .terminator = .bel,
@@ -634,13 +809,13 @@ test "dnd: bel terminator echoed in responses" {
 
     // Including replies served after the command was processed.
     try h.setupDrop(&.{"text/plain"});
-    _ = try dnd.handleCommand(&h.state, testing.allocator, h.writer(), h.sides, .{
+    _ = try dnd.handleCommand(&h.state, testing.allocator, h.writer(), h.options, .{
         .metadata = "t=r:x=1",
         .payload = null,
         .terminator = .bel,
     });
     const req = h.drop().request().?;
-    _ = try h.drop().respondEnd(h.writer(), req.id);
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
     try h.expectOutput("\x1b]72;t=r:x=1\x07");
 }
 
@@ -694,8 +869,8 @@ test "dnd: kitten 0.47 conversation replay" {
     // The kitten requests the data and concludes with a copy.
     _ = try h.command("t=r:x=1", null);
     const req = h.drop().request().?;
-    try h.drop().respondData(h.writer(), req.id, "hello from ghostty\n");
-    _ = try h.drop().respondEnd(h.writer(), req.id);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, "hello from ghostty\n");
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
     try h.expectOutput(
         "\x1b]72;t=r:x=1:m=0;aGVsbG8gZnJvbSBnaG9zdHR5Cg==\x1b\\" ++
             "\x1b]72;t=r:x=1\x1b\\",
@@ -715,8 +890,8 @@ test "dnd: large data served in chunks" {
 
     // 3073 bytes: one full chunk plus one byte.
     const data = [_]u8{'Z'} ** 3073;
-    try h.drop().respondData(h.writer(), req.id, &data);
-    _ = try h.drop().respondEnd(h.writer(), req.id);
+    try h.drop().respondData(testing.allocator, h.writer(), req.id, &data);
+    _ = try h.drop().respondEnd(testing.allocator, h.writer(), req.id);
     const out = h.output.written();
 
     // First chunk is m=1 with 4096 base64 chars, second is m=0, and
@@ -1327,7 +1502,7 @@ test "dnd drag: unpadded pre-sent data and images end at start" {
 test "dnd: drag out refused without drag support" {
     var h: Harness = .init();
     defer h.deinit();
-    h.sides = .{ .drag = false };
+    h.options = .{ .drag = false };
 
     // Enabling and disabling offers is accepted silently and allocates
     // nothing.
@@ -1357,7 +1532,7 @@ test "dnd: drag out refused without drag support" {
 test "dnd: drops ignored without drop support" {
     var h: Harness = .init();
     defer h.deinit();
-    h.sides = .{ .drop = false };
+    h.options = .{ .drop = false };
 
     try h.expectEvents("t=a", "text/plain", &.{});
     try h.expectEvents("t=r:x=1", null, &.{});
