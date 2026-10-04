@@ -84,6 +84,33 @@ pub const DropDataRequest = extern struct {
     id: u32,
     mime_index: u32,
     mime: lib.String,
+    has_path: bool,
+    path: lib.String,
+};
+
+/// What a file entry in a drop is.
+///
+/// C: GhosttyDropFileKind
+pub const FileKind = enum(c_int) {
+    file = 0,
+    symlink = 1,
+    directory = 2,
+    _,
+
+    fn zig(self: FileKind) ?dnd.FileKind {
+        return switch (self) {
+            .file => .file,
+            .symlink => .symlink,
+            .directory => .directory,
+            _ => null,
+        };
+    }
+};
+
+/// C: GhosttyDropEntryKind
+pub const DropEntryKind = extern struct {
+    id: u32,
+    kind: FileKind,
 };
 
 /// A change in drops onto the terminal, delivered to the drop effect.
@@ -140,6 +167,7 @@ pub const DropError = enum(c_int) {
     denied = 2,
     too_large = 3,
     out_of_memory = 4,
+    unsupported = 5,
     _,
 
     fn zig(self: DropError) ?dnd.DropInput.Error {
@@ -147,6 +175,7 @@ pub const DropError = enum(c_int) {
             .io => .io,
             .not_found => .not_found,
             .denied => .denied,
+            .unsupported => .unsupported,
             .too_large => .too_large,
             .out_of_memory => .out_of_memory,
             _ => null,
@@ -170,6 +199,7 @@ pub const DropInput = union(Tag) {
     data: DropData,
     end: u32,
     fail: DropFailure,
+    kind: DropEntryKind,
 
     /// C: GhosttyDropInputTag
     pub const Tag = lib.Enum(lib.target, &.{
@@ -179,6 +209,7 @@ pub const DropInput = union(Tag) {
         "data",
         "end",
         "fail",
+        "kind",
     });
 
     const c_union = lib.TaggedUnion(lib.target, @This(), .{
@@ -347,6 +378,8 @@ pub fn dropTrampoline(handler: *Handler, ev: dnd.DropEvent) void {
             .id = r.id,
             .mime_index = r.mime_index,
             .mime = .init(r.mime),
+            .has_path = r.path != null,
+            .path = .init(r.path orelse ""),
         } },
         .concluded => |op| .{ .concluded = .init(op) },
     });
@@ -504,6 +537,10 @@ pub fn terminal_drop(
             .id = input.value.fail.id,
             .reason = input.value.fail.reason.zig() orelse return .invalid_value,
         } },
+        .kind => .{ .kind = .{
+            .id = input.value.kind.id,
+            .kind = input.value.kind.kind.zig() orelse return .invalid_value,
+        } },
     };
 
     var pty: Pty = .{};
@@ -624,7 +661,10 @@ const TestTerminal = struct {
         switch (ev.tag) {
             .registration => for (ev.value.registration.mimes.?[0..ev.value.registration.mimes_len]) |m| record(m),
             .acceptance => for (ev.value.acceptance.mimes.?[0..ev.value.acceptance.mimes_len]) |m| record(m),
-            .data_request => record(ev.value.data_request.mime),
+            .data_request => {
+                record(ev.value.data_request.mime);
+                if (ev.value.data_request.has_path) record(ev.value.data_request.path);
+            },
             .concluded => {},
         }
     }
@@ -776,6 +816,49 @@ test "dnd drop a new drag concludes an abandoned drop" {
     try testing.expectEqual(Result.success, tt.drop(.{ .move = motion }));
     try tt.expectDrops(&.{.concluded}, "");
     try testing.expectEqual(Operation.none, TestTerminal.last_drop.value.concluded);
+}
+
+test "dnd remote drop round trip" {
+    var tt: TestTerminal = try .init();
+    defer tt.deinit();
+
+    // This machine's ID, and a program declaring another.
+    const ours: lib.String = .init(@as([]const u8, "this machine"));
+    try testing.expectEqual(Result.success, terminal_c.set(tt.t, .dnd_machine_id, @ptrCast(&ours)));
+    const theirs = dnd.machineId("that machine");
+    tt.write("\x1b]72;t=a\x1b\\");
+    tt.write("\x1b]72;t=a:x=1;" ++ theirs ++ "\x1b\\");
+    try tt.expectDrops(&.{.registration}, "");
+
+    const mimes = [_]lib.String{.init(@as([]const u8, "text/uri-list"))};
+    const motion: DropMotion = .{
+        .position = .{ .cell_x = 0, .cell_y = 0, .pixel_x = 0, .pixel_y = 0 },
+        .operations = operations_copy,
+        .mimes = &mimes,
+        .mimes_len = mimes.len,
+    };
+    try testing.expectEqual(Result.success, tt.drop(.{ .drop = motion }));
+    try tt.expectOutput("\x1b]72;t=M:x=0:y=0:X=0:Y=0:o=1:m=0;text/uri-list \x1b\\");
+
+    // The list carries the remote marker.
+    tt.write("\x1b]72;t=r:x=1\x1b\\");
+    try tt.expectDrops(&.{.data_request}, "text/uri-list,");
+    var id = TestTerminal.last_drop.value.data_request.id;
+    try testing.expect(!TestTerminal.last_drop.value.data_request.has_path);
+    try testing.expectEqual(Result.success, tt.drop(.{ .data = .{ .id = id, .data = .init(@as([]const u8, "file:///tmp/x\n")) } }));
+    try testing.expectEqual(Result.success, tt.drop(.{ .end = id }));
+    try tt.expectOutput("\x1b]72;t=r:x=1:X=1:m=0;ZmlsZTovLy90bXAveAo=\x1b\\\x1b]72;t=r:x=1:X=1\x1b\\");
+
+    // The program copies the file it names, a symlink here.
+    tt.write("\x1b]72;t=r:x=1:y=1\x1b\\");
+    try tt.expectDrops(&.{.data_request}, ",/tmp/x,");
+    id = TestTerminal.last_drop.value.data_request.id;
+    try testing.expectEqual(Result.invalid_value, tt.drop(.{ .kind = .{ .id = id, .kind = @enumFromInt(9) } }));
+    try testing.expectEqual(Result.success, tt.drop(.{ .kind = .{ .id = id, .kind = .symlink } }));
+    try testing.expectEqual(Result.success, tt.drop(.{ .data = .{ .id = id, .data = .init(@as([]const u8, "y")) } }));
+    try testing.expectEqual(Result.rejected, tt.drop(.{ .kind = .{ .id = id, .kind = .file } }));
+    try testing.expectEqual(Result.success, tt.drop(.{ .end = id }));
+    try tt.expectOutput("\x1b]72;t=r:x=1:y=1:X=1:m=0;eQ==\x1b\\\x1b]72;t=r:x=1:y=1:X=1\x1b\\");
 }
 
 test "dnd drag round trip" {
