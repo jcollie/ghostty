@@ -196,6 +196,10 @@ pub const DragEvent = union(enum) {
     /// The native drag in progress must be canceled.
     cancel,
 
+    /// A file of a drag offered by a program on another machine arrived,
+    /// for the embedder to write out (see `Offer.remote`).
+    remote_file: RemoteFile,
+
     /// A copy of the event that owns everything it borrows, allocated
     /// with `alloc` (typically an arena), for delivering it somewhere the
     /// terminal's state can't be borrowed from.
@@ -218,12 +222,20 @@ pub const DragEvent = union(enum) {
                     .items = items,
                     .images = images,
                     .image = offer.image,
+                    .remote = offer.remote,
                 } };
             },
             .data => |data| .{ .data = .{
                 .index = data.index,
                 .bytes = try alloc.dupe(u8, data.bytes),
                 .status = data.status,
+            } },
+            .remote_file => |f| .{ .remote_file = .{
+                .entry = f.entry,
+                .path = try alloc.dupe(u8, f.path),
+                .kind = f.kind,
+                .bytes = try alloc.dupe(u8, f.bytes),
+                .status = f.status,
             } },
         };
     }
@@ -242,12 +254,50 @@ pub const DragEvent = union(enum) {
         /// The index of the image to show, or null for no image.
         image: ?u32,
 
+        /// The program is on another machine, so the files its
+        /// text/uri-list names aren't here. When a drop target wants the
+        /// text/uri-list, request its data even though it was pre-sent:
+        /// the files arrive first as `remote_file` events, which the
+        /// embedder writes under a directory of its own, then the list,
+        /// which the embedder rewrites to name its copies and keeps: the
+        /// files are fetched once, so the list can't be requested again.
+        /// The copies
+        /// can be deleted at the next drag's start, when the drag is
+        /// canceled, or when the program stops offering drags, but not
+        /// when the drag finishes, since the drop target may still be
+        /// reading them.
+        remote: bool = false,
+
         pub const Item = struct {
             mime: []const u8,
 
             /// The data the program sent ahead of the drag, if any.
             pre_sent: ?[]const u8 = null,
         };
+    };
+
+    pub const RemoteFile = struct {
+        /// The index of the file in the text/uri-list, counting only its
+        /// URIs (not comments).
+        entry: u32,
+
+        /// Where to write it, relative to the embedder's directory for
+        /// the drag: "<entry>/<name>" for the file the list names (create
+        /// the "<entry>" directory for it), with each directory level
+        /// below it appended. Names are sanitized
+        /// ("/" and NUL become "_", "." and ".." become "_"), but create
+        /// files exclusively and without following symbolic links all
+        /// the same. A directory arrives before its entries.
+        path: []const u8,
+
+        kind: FileKind,
+
+        /// A file's data since its last event, or a symbolic link's
+        /// target. Empty for a directory.
+        bytes: []const u8,
+
+        /// Complete once the file is.
+        status: Data.Status,
     };
 
     pub const Data = struct {
