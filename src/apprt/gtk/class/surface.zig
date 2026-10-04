@@ -2893,6 +2893,7 @@ pub const Surface = extern struct {
             const object = value.getObject() orelse return 0;
             const file = gobject.ext.cast(gio.File, object) orelse return 0;
             const path = file.getPath() orelse return 0;
+            defer glib.free(path);
             var stream: std.Io.Writer.Allocating = .init(alloc);
             defer stream.deinit();
 
@@ -2912,6 +2913,7 @@ pub const Surface = extern struct {
                 return 0;
             };
             defer alloc.free(string);
+            Clipboard.paste(self, string);
             return 1;
         }
 
