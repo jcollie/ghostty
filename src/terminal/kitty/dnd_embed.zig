@@ -32,6 +32,7 @@ pub fn isDrop(ev: Event) bool {
         .drag_image,
         .drag_data,
         .drag_cancel,
+        .drag_remote,
         => false,
     };
 }
@@ -114,7 +115,30 @@ pub fn dragEvents(
                 .items = items,
                 .images = images,
                 .image = src.currentImage(),
+                .remote = src.remote_drag != null,
             } });
+        },
+
+        // Delivered in the order they arrived, then freed.
+        .drag_remote => {
+            const state = slot.* orelse return;
+            const rd = if (state.drag.remote_drag) |*rd| rd else return;
+            defer if (slot.*) |s| if (s.drag.remote_drag) |*r| r.clearOut();
+            var i: usize = 0;
+            while (i < rd.out.items.len) : (i += 1) {
+                const o = rd.out.items[i];
+                emit(ctx, .{ .remote_file = .{
+                    .entry = o.entry,
+                    .path = o.path,
+                    .kind = o.kind,
+                    .bytes = o.bytes,
+                    .status = o.status,
+                } });
+
+                // The effect may have ended the drag.
+                const now = slot.* orelse return;
+                if (now.drag.remote_drag == null) return;
+            }
         },
 
         // Delivered for every item with news.

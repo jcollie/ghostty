@@ -991,7 +991,7 @@ pub const DropTarget = struct {
 /// Whether a client's declared machine ID is this machine's, mirroring
 /// kitty's is_same_machine: an empty ID is local, a short one or an
 /// unknown version is another machine.
-fn sameMachine(id: []const u8, ours: ?*const dnd.MachineId) bool {
+pub fn sameMachine(id: []const u8, ours: ?*const dnd.MachineId) bool {
     const mine = ours orelse return true;
     if (id.len == 0) return true;
     if (id.len < 20 or !std.mem.startsWith(u8, id, "1:")) return false;

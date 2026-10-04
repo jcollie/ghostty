@@ -4499,6 +4499,10 @@ const Dnd = struct {
             .data => |*data| if (dnd.content) |content| content.feed(data),
 
             .cancel => endDrag(self, false),
+
+            // The app sets no machine ID, so every program is local and
+            // its drags never need files fetched.
+            .remote_file => {},
         }
     }
 

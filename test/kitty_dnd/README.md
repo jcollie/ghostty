@@ -13,7 +13,7 @@ and `ghostty_terminal_drag` from `ghostty/vt/dnd.h`, hears what the kitten
 did through the drop and drag effects, then checks that the data arrived
 intact.
 
-It runs three scenarios:
+It runs four scenarios:
 
 - `drop`: the kitten registers to accept drops. The harness moves a drag
   carrying `text/plain` over the terminal, waits for the kitten to accept
@@ -32,6 +32,12 @@ It runs three scenarios:
   performs the drag gesture, starts the drag when the kitten asks, reports
   that a target accepted and dropped it, and requests the data. It passes
   when the data received matches the file.
+- `remote-drag`: with a machine ID that isn't this machine's, as in
+  `remote-drop`, the kitten drags the same file and directory tree. The
+  harness starts the drag, requests the `text/uri-list`, and writes the
+  files that arrive under `spool` in the working directory the way an
+  embedder would. It passes when the list follows the files and the copies
+  match the originals.
 
 ## Requirements
 
@@ -53,10 +59,11 @@ Then run a scenario, giving it the library and an empty working
 directory, which becomes the kitten's working directory:
 
 ```console
-$ mkdir -p /tmp/dnd-drop /tmp/dnd-drag /tmp/dnd-remote-drop
+$ mkdir -p /tmp/dnd-drop /tmp/dnd-drag /tmp/dnd-remote-drop /tmp/dnd-remote-drag
 $ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so drop /tmp/dnd-drop
 $ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so drag /tmp/dnd-drag
 $ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so remote-drop /tmp/dnd-remote-drop
+$ python3 test/kitty_dnd/harness.py zig-out/lib/libghostty-vt.so remote-drag /tmp/dnd-remote-drag
 ```
 
 On macOS the library is `zig-out/lib/libghostty-vt.dylib`.
@@ -105,8 +112,6 @@ for m in re.finditer(rb'\x1b\]72;([^\x1b\x07]*)', d): print(m.group(1))
 
 ## Limitations
 
-- Drags to a program on another machine aren't tested, since
-  libghostty-vt doesn't support them yet.
 - The structures are declared by hand with `ctypes`. Enum values are read
   from the library's ABI manifest (`ghostty_type_json`), and every
   structure's size and field offsets are checked against it at startup, so

@@ -576,7 +576,8 @@
             "START": "start",
             "IMAGE": "image",
             "DATA": "data",
-            "CANCEL": null
+            "CANCEL": null,
+            "REMOTE_FILE": "remote_file"
           }
         }
       }
@@ -593,7 +594,7 @@
         },
         "start": {
           "offset": 0,
-          "size": 28,
+          "size": 32,
           "type": "GhosttyDragOffer"
         },
         "image": {
@@ -605,6 +606,11 @@
           "offset": 0,
           "size": 16,
           "type": "GhosttyDragData"
+        },
+        "remote_file": {
+          "offset": 0,
+          "size": 28,
+          "type": "GhosttyDragRemoteFile"
         },
         "_padding": {
           "offset": 0,
@@ -759,7 +765,7 @@
     },
     "GhosttyDragOffer": {
       "kind": "struct",
-      "size": 28,
+      "size": 32,
       "align": 4,
       "fields": {
         "operations": {
@@ -802,6 +808,43 @@
           "offset": 24,
           "size": 4,
           "type": "u32"
+        },
+        "remote": {
+          "offset": 28,
+          "size": 1,
+          "type": "bool"
+        }
+      }
+    },
+    "GhosttyDragRemoteFile": {
+      "kind": "struct",
+      "size": 28,
+      "align": 4,
+      "fields": {
+        "entry": {
+          "offset": 0,
+          "size": 4,
+          "type": "u32"
+        },
+        "path": {
+          "offset": 4,
+          "size": 8,
+          "type": "GhosttyString"
+        },
+        "kind": {
+          "offset": 12,
+          "size": 4,
+          "type": "GhosttyDropFileKind"
+        },
+        "bytes": {
+          "offset": 16,
+          "size": 8,
+          "type": "GhosttyString"
+        },
+        "status": {
+          "offset": 24,
+          "size": 4,
+          "type": "GhosttyDragDataStatus"
         }
       }
     },
@@ -2918,6 +2961,7 @@
         "IMAGE": 2,
         "DATA": 3,
         "CANCEL": 4,
+        "REMOTE_FILE": 5,
         "MAX_VALUE": 2147483647
       }
     },
