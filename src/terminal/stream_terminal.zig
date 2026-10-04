@@ -7308,7 +7308,7 @@ test "kitty dnd: effect reports drag start and data" {
                     bytes.appendSlice(testing.allocator, data.bytes) catch unreachable;
                     status = data.status;
                 },
-                .image, .cancel => {},
+                .image, .cancel, .remote_file => {},
             }
         }
     };

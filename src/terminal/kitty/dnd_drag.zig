@@ -11,6 +11,8 @@ const osc = @import("../osc.zig");
 const command = @import("dnd_command.zig");
 const response = @import("dnd_response.zig");
 const dnd_drop = @import("dnd_drop.zig");
+const dnd = @import("../dnd.zig");
+const RemoteDrag = @import("dnd_drag_remote.zig").RemoteDrag;
 
 const Metadata = command.Metadata;
 const Operation = command.Operation;
@@ -164,6 +166,13 @@ pub const DragSource = struct {
 
     phase: Phase = .none,
 
+    /// True when the client declared a machine ID (t=o:x=1 payload)
+    /// other than this machine's: its files must be fetched (t=k).
+    remote: bool = false,
+
+    /// Fetching the files of a remote client's drag.
+    remote_drag: ?RemoteDrag = null,
+
     /// The operations the offer allows, as sent (`o`); zero until set.
     allowed: u32 = 0,
 
@@ -300,6 +309,8 @@ pub const DragSource = struct {
     /// Free the offer while preserving whether drags are enabled,
     /// mirroring kitty's drag_free_offer.
     pub fn freeOffer(self: *DragSource, alloc: Allocator) void {
+        if (self.remote_drag) |*rd| rd.deinit();
+        self.remote_drag = null;
         for (self.items) |*item| item.data.deinit(alloc);
         alloc.free(self.items);
         self.items = &.{};
@@ -345,11 +356,19 @@ pub const DragSource = struct {
 
         /// A native drag in progress must be canceled.
         cancel,
+
+        /// Files of a remote client's drag arrived.
+        remote,
+
+        /// The last files of a remote client's drag arrived, and with
+        /// them the text/uri-list's data.
+        remote_complete,
     };
 
-    /// Enable offering drags (t=o:x=1). The payload, the client's
-    /// machine ID for remote drags, is ignored.
-    pub fn enable(self: *DragSource) Result {
+    /// Enable offering drags (t=o:x=1). The payload is the client's
+    /// machine ID, deciding whether it is on another machine than `ours`.
+    pub fn enable(self: *DragSource, machine_id: []const u8, ours: ?*const dnd.MachineId) Result {
+        self.remote = !dnd_drop.sameMachine(machine_id, ours);
         if (self.enabled) return .none;
         self.enabled = true;
         return .offers;
@@ -361,6 +380,7 @@ pub const DragSource = struct {
         const was_active = self.active();
         self.freeOffer(alloc);
         self.enabled = false;
+        self.remote = false;
         return was_active;
     }
 
@@ -632,6 +652,30 @@ pub const DragSource = struct {
             }
         }
 
+        // A remote client's files are fetched from the text/uri-list it
+        // pre-sent, which is freed once the drag starts.
+        if (self.remote) {
+            const uri_item = for (self.items, 0..) |item, i| {
+                if (std.mem.eql(u8, item.mime, "text/uri-list") and item.data.items.len > 0) break i;
+            } else return try self.abort(
+                alloc,
+                writer,
+                .EINVAL,
+                "remote client must pre-send text/uri-list data",
+                terminator,
+            );
+            self.remote_drag = RemoteDrag.init(alloc, self.items[uri_item].data.items, uri_item) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.Invalid => return try self.abort(
+                    alloc,
+                    writer,
+                    .EINVAL,
+                    "remote drag file uri has no name",
+                    terminator,
+                ),
+            };
+        }
+
         self.phase = .starting;
         return .start;
     }
@@ -738,7 +782,8 @@ pub const DragSource = struct {
     /// drop target that wants it, mirroring kitty's drag_get_data. The
     /// request is sent once; the client's reply yields `drag_data`
     /// events and is read with `takeData`. Returns error.NotFound when
-    /// the drag isn't in progress or the index is out of range.
+    /// the drag isn't in progress, the index is out of range, or it is a
+    /// remote client's text/uri-list that already arrived.
     pub fn requestData(
         self: *DragSource,
         writer: *std.Io.Writer,
@@ -749,10 +794,25 @@ pub const DragSource = struct {
             .none, .building, .starting => return error.NotFound,
         }
         if (index >= self.items.len) return error.NotFound;
+
+        // A remote client's files are fetched instead, and the list
+        // follows once they arrived. They are fetched once: the embedder
+        // keeps the list.
+        const remote = if (self.remote_drag) |*rd|
+            if (rd.uri_item == index and rd.entries.len > 0) rd else null
+        else
+            null;
+        if (remote) |rd| if (rd.complete) return error.NotFound;
+
         const item = &self.items[index];
         if (item.requested) return;
         item.resetReply();
         item.requested = true;
+
+        if (remote) |rd| {
+            try rd.request(writer, self.client_id);
+            return;
+        }
 
         var header_buf: [64]u8 = undefined;
         const header = std.fmt.bufPrint(
@@ -799,6 +859,38 @@ pub const DragSource = struct {
             item.decoder = .{};
         }
         return .{ .bytes = bytes, .status = status };
+    }
+
+    /// Handle a remote client's file data (t=k), mirroring kitty's
+    /// drag_process_remote_data. Returns `remote` when files arrived and
+    /// `remote_complete` when the last one did, after which the
+    /// text/uri-list item's data is the pre-sent list.
+    pub fn remoteData(
+        self: *DragSource,
+        alloc: Allocator,
+        writer: *std.Io.Writer,
+        meta: Metadata,
+        payload: []const u8,
+        terminator: osc.Terminator,
+    ) (Allocator.Error || std.Io.Writer.Error)!Result {
+        const rd = if (self.remote_drag) |*rd| rd else return try self.abort(
+            alloc,
+            writer,
+            .EINVAL,
+            "remote drag data for a drag that isn't remote",
+            terminator,
+        );
+        if (try rd.data(meta, payload)) |failure| {
+            return try self.abort(alloc, writer, failure.errno, failure.desc, terminator);
+        }
+        if (!rd.complete) return .remote;
+
+        const item = &self.items[rd.uri_item];
+        item.resetReply();
+        item.requested = true;
+        try item.data.appendSlice(alloc, rd.list);
+        item.complete = true;
+        return .remote_complete;
     }
 
     /// Handle drag data (t=e) or a data error (t=E:y>=0) from the
