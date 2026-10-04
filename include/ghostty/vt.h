@@ -36,6 +36,7 @@
  * - @ref osc "OSC Parser" - Parse OSC (Operating System Command) sequences
  * - @ref sgr "SGR Parser" - Parse SGR (Select Graphic Rendition) sequences
  * - @ref paste "Paste" - Paste into a terminal, validate and encode paste data
+ * - @ref dnd "Drag and Drop" - Native drag and drop for programs in the terminal
  * - @ref unicode "Unicode Utilities" - Codepoint properties for text layout
  * - @ref build_info "Build Info" - Query compile-time build configuration
  * - @ref allocator "Memory Management" - Memory management and custom allocators
@@ -61,6 +62,7 @@
  * - @ref c-vt-grid-ref-tracked/src/main.c - Tracked grid ref example
  * - @ref c-vt-compression/src/main.c - Idle scrollback compression example
  * - @ref c-vt-search/src/main.c - Terminal search example
+ * - @ref c-vt-dnd/src/main.c - Drag and drop example
  *
  */
 
@@ -127,6 +129,12 @@
  * PNG decoder callback and send a Kitty Graphics Protocol image.
  */
 
+/** @example c-vt-dnd/src/main.c
+ * This example demonstrates how to connect drag and drop to the OS:
+ * forwarding a drop to a program and serving its data requests, and
+ * starting a drag the program offers.
+ */
+
 /** @example c-vt-search/src/main.c
  * This example demonstrates how to search terminal contents for a
  * string, navigate between the matches like a find bar, and read the
@@ -146,6 +154,7 @@ extern "C" {
 #include <ghostty/vt/color.h>
 #include <ghostty/vt/color_scheme.h>
 #include <ghostty/vt/device.h>
+#include <ghostty/vt/dnd.h>
 #include <ghostty/vt/focus.h>
 #include <ghostty/vt/formatter.h>
 #include <ghostty/vt/render.h>

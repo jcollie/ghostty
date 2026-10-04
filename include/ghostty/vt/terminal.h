@@ -17,6 +17,7 @@
 #include <ghostty/vt/osc.h>
 #include <ghostty/vt/size_report.h>
 #include <ghostty/vt/grid_ref.h>
+#include <ghostty/vt/dnd.h>
 #include <ghostty/vt/io.h>
 #include <ghostty/vt/kitty_graphics.h>
 #include <ghostty/vt/screen.h>
@@ -106,6 +107,8 @@ extern "C" {
  * | `GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT`  | `GhosttyTerminalSemanticPromptFn` | Shell reports a prompt or command step via OSC 133 |
  * | `GHOSTTY_TERMINAL_OPT_RESET`            | `GhosttyTerminalResetFn`          | Full reset (RIS, ESC c)                   |
  * | `GHOSTTY_TERMINAL_OPT_RESIZE_WINDOW`    | `GhosttyTerminalResizeWindowFn`   | Window resize request (CSI 8 t)           |
+ * | `GHOSTTY_TERMINAL_OPT_DROP`             | `GhosttyTerminalDropFn`           | Program accepts drops or wants dropped data (see @ref dnd) |
+ * | `GHOSTTY_TERMINAL_OPT_DRAG`             | `GhosttyTerminalDragFn`           | Program offers or starts a drag (see @ref dnd) |
  *
  * ### Defining a write_pty callback
  * @snippet c-vt-effects/src/main.c effects-write-pty
@@ -2535,6 +2538,24 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Input type: GhosttyTerminalResizeWindowFn
    */
   GHOSTTY_TERMINAL_OPT_RESIZE_WINDOW = 47,
+
+  /**
+   * Callback invoked when the running program changes how it takes drops
+   * onto the terminal. Setting it lets programs accept drops; while it is
+   * NULL they can't. See @ref dnd.
+   *
+   * Input type: GhosttyTerminalDropFn
+   */
+  GHOSTTY_TERMINAL_OPT_DROP = 48,
+
+  /**
+   * Callback invoked when the running program changes the drag it offers
+   * out of the terminal. Setting it lets programs offer drags; while it is
+   * NULL their offers are refused. See @ref dnd.
+   *
+   * Input type: GhosttyTerminalDragFn
+   */
+  GHOSTTY_TERMINAL_OPT_DRAG = 49,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 
