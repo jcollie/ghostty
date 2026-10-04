@@ -193,6 +193,7 @@ pub const DerivedConfig = struct {
     clipboard_write: configpkg.ClipboardAccess,
     clipboard_write_limit: usize,
     dnd_sides: terminalpkg.kitty.dnd.Options,
+    dnd_machine_id: ?terminalpkg.dnd.MachineId,
     enquiry_response: []const u8,
     xt_checksum_report: bool,
     xt_checksum_extension: terminalpkg.xt_checksum.Flags,
@@ -236,6 +237,12 @@ pub const DerivedConfig = struct {
                 apprt.surface.dnd_sides
             else
                 .{ .drop = false, .drag = false },
+            .dnd_machine_id = machine_id: {
+                if (!config.@"drag-and-drop-protocol" or !apprt.surface.dnd_remote) break :machine_id null;
+                var buf: [256]u8 = undefined;
+                const raw = internal_os.machineId(global.io(), &buf) orelse break :machine_id null;
+                break :machine_id terminalpkg.dnd.machineId(raw);
+            },
             .enquiry_response = try alloc.dupe(u8, config.@"enquiry-response"),
             .xt_checksum_report = config.@"vt-xt-checksum-report",
             .xt_checksum_extension = xtChecksumFlags(config.@"vt-xt-checksum-extension"),
@@ -329,6 +336,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
         .clipboard_write = opts.config.clipboard_write,
         .clipboard_write_limit = opts.config.clipboard_write_limit,
         .dnd_sides = opts.config.dnd_sides,
+        .dnd_machine_id = opts.config.dnd_machine_id,
         .enquiry_response = opts.config.enquiry_response,
         .xt_checksum_report = opts.config.xt_checksum_report,
     };
