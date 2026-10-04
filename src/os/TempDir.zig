@@ -21,6 +21,12 @@ name_buf: [file.random_basename_len:0]u8,
 
 /// Create the temporary directory.
 pub fn init() !TempDir {
+    return initWith(.default_dir);
+}
+
+/// Create the temporary directory with the given permissions, e.g. so
+/// only this user can read what goes in it.
+pub fn initWith(permissions: std.Io.File.Permissions) !TempDir {
     // Note: the tmp_path_buf sentinel is important because it ensures
     // we actually always have random_basename_len+1 bytes of available
     // space. We need that so we can set the sentinel in the case we use
@@ -39,7 +45,7 @@ pub fn init() !TempDir {
         const tmp_path = try file.randomBasename(&tmp_path_buf);
         tmp_path_buf[tmp_path.len] = 0;
 
-        dir.createDir(global.io(), tmp_path, .default_dir) catch |err| switch (err) {
+        dir.createDir(global.io(), tmp_path, permissions) catch |err| switch (err) {
             error.PathAlreadyExists => continue,
             else => |e| return e,
         };
