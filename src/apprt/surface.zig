@@ -18,6 +18,13 @@ pub const dnd_sides: terminal.kitty.dnd.Options = if (@hasDecl(apprt.runtime.Sur
 else
     .{ .drop = false, .drag = false };
 
+/// Whether the runtime moves files for programs on other machines (e.g.
+/// over ssh) in drag and drop. A runtime opts in by declaring
+/// `dnd_remote`, serving file requests (`DropEvent.DataRequest.path`) and
+/// writing out the files of remote drags (`DragEvent.remote_file`).
+pub const dnd_remote: bool = @hasDecl(apprt.runtime.Surface, "dnd_remote") and
+    apprt.runtime.Surface.dnd_remote;
+
 /// The message types that can be sent to a single surface.
 pub const Message = union(enum) {
     /// Represents a write request. Magic number comes from the max size
