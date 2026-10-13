@@ -355,35 +355,19 @@ pub const Parser = struct {
             // tmux sends %window-close when the window is still linked to
             // this session, and %unlinked-window-close once it is not
             // (typical for shell-exit destroying the last pane).
-            const pattern = if (std.mem.eql(u8, cmd, "%window-close"))
-                "^%window-close @([0-9]+)$"
+            const prefix = if (std.mem.eql(u8, cmd, "%window-close"))
+                "%window-close @"
             else
-                "^%unlinked-window-close @([0-9]+)$";
-            var re = oni.Regex.init(
-                pattern,
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
+                "%unlinked-window-close @";
+            const id = parseDecimalId(std.mem.cutPrefix(u8, line, prefix) orelse {
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
+                break :cmd;
+            }) orelse {
+                // A non-numeric or oversized id is a bad notification, not
+                // a crash. parseInt overflow must not be unreachable.
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
                 break :cmd;
             };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
 
             self.buffer.clearRetainingCapacity();
             self.state = .idle;
@@ -457,36 +441,23 @@ pub const Parser = struct {
         } else if (std.mem.eql(u8, cmd, "%session-window-changed")) cmd: {
             // Emitted when the session's current window changes (select-window).
             // Distinct from %window-pane-changed (active pane within a window).
-            var re = oni.Regex.init(
-                "^%session-window-changed \\$([0-9]+) @([0-9]+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
+            // `%session-window-changed $<session> @<window>`
+            const rest = std.mem.cutPrefix(u8, line, "%session-window-changed $") orelse {
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
                 break :cmd;
             };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const session_id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const window_id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[2])..@intCast(ends[2])],
-                10,
-            ) catch unreachable;
+            const split = std.mem.indexOf(u8, rest, " @") orelse {
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
+                break :cmd;
+            };
+            const session_id = parseDecimalId(rest[0..split]) orelse {
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
+                break :cmd;
+            };
+            const window_id = parseDecimalId(rest[split + 2 ..]) orelse {
+                log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
+                break :cmd;
+            };
 
             self.buffer.clearRetainingCapacity();
             self.state = .idle;
@@ -577,6 +548,14 @@ pub const Parser = struct {
         self.buffer.deinit();
     }
 };
+
+/// A tmux numeric id: a non-empty run of decimal digits that fits in `usize`.
+/// Oversized values are rejected so a hostile notification cannot crash us.
+fn parseDecimalId(text: []const u8) ?usize {
+    if (text.len == 0) return null;
+    for (text) |byte| if (!std.ascii.isDigit(byte)) return null;
+    return std.fmt.parseInt(usize, text, 10) catch null;
+}
 
 /// Possible notification types from tmux control mode. These are documented
 /// in tmux(1). A lot of the simple documentation was copied from that man
@@ -907,6 +886,29 @@ test "tmux unlinked-window-close" {
     try testing.expectEqual(2, n.window_close.id);
 }
 
+test "tmux window-close rejects an oversized id" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var c: Parser = .{ .buffer = .init(alloc) };
+    defer c.deinit();
+    const line = "%window-close @1111111111111111111111";
+    for (line) |byte| try testing.expect(try c.put(byte) == null);
+    try testing.expect(try c.put('\n') == null);
+    try testing.expect(c.state == .idle);
+}
+
+test "tmux window-close rejects trailing junk" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var c: Parser = .{ .buffer = .init(alloc) };
+    defer c.deinit();
+    for ("%window-close @7 extra") |byte| try testing.expect(try c.put(byte) == null);
+    try testing.expect(try c.put('\n') == null);
+    try testing.expect(c.state == .idle);
+}
+
 test "tmux window-renamed" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -944,6 +946,18 @@ test "tmux session-window-changed" {
     try testing.expect(n == .session_window_changed);
     try testing.expectEqual(0, n.session_window_changed.session_id);
     try testing.expectEqual(3, n.session_window_changed.window_id);
+}
+
+test "tmux session-window-changed rejects an oversized id" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var c: Parser = .{ .buffer = .init(alloc) };
+    defer c.deinit();
+    const line = "%session-window-changed $1 @1111111111111111111111";
+    for (line) |byte| try testing.expect(try c.put(byte) == null);
+    try testing.expect(try c.put('\n') == null);
+    try testing.expect(c.state == .idle);
 }
 
 test "tmux client-detached" {
