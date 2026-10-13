@@ -112,9 +112,11 @@ extern "C" {
 #define GHOSTTY_MODE_COLOR_SCHEME_REPORT (ghostty_mode_new(2031, false)) /**< Report color scheme */
 #define GHOSTTY_MODE_REPORT_COLOR_SCHEME GHOSTTY_MODE_COLOR_SCHEME_REPORT
 #define GHOSTTY_MODE_VISIBILITY_REPORT (ghostty_mode_new(2033, false)) /**< Report terminal visibility */
+#define GHOSTTY_MODE_REPORT_VISIBILITY GHOSTTY_MODE_VISIBILITY_REPORT
 #define GHOSTTY_MODE_IN_BAND_RESIZE   (ghostty_mode_new(2048, false)) /**< In-band size reports */
 #define GHOSTTY_MODE_IN_BAND_SIZE_REPORTS GHOSTTY_MODE_IN_BAND_RESIZE
 #define GHOSTTY_MODE_PASTE_EVENTS     (ghostty_mode_new(5522, false)) /**< Kitty clipboard protocol paste events */
+#define GHOSTTY_MODE_KITTY_PASTE_EVENTS GHOSTTY_MODE_PASTE_EVENTS
 /** @} */
 
 /**

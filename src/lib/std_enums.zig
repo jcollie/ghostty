@@ -197,9 +197,10 @@ const eval_branch_quota_cushion = 10;
 const EnumField = std.builtin.Type.EnumField;
 
 fn EnumIndexer(comptime E: type) type {
-    // n log n for `std.mem.sortUnstable` call below.
+    // n^2 for `std.mem.sortUnstable` call below: it is n log n on average,
+    // but falls back to insertion sort on short ranges.
     const fields_len = @typeInfo(E).@"enum".fields.len;
-    @setEvalBranchQuota(3 * fields_len * std.math.log2(@max(fields_len, 1)) + eval_branch_quota_cushion);
+    @setEvalBranchQuota(@max(1000, 3 * fields_len * fields_len) + eval_branch_quota_cushion);
 
     if (!@typeInfo(E).@"enum".is_exhaustive) {
         const BackingInt = @typeInfo(E).@"enum".tag_type;
