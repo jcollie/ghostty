@@ -1,4 +1,5 @@
 const std = @import("std");
+const translate_c = @import("translate_c");
 
 const Config = @import("Config.zig");
 
@@ -44,18 +45,8 @@ pub const Options = struct {
     optimize: ?std.builtin.OptimizeMode = null,
 };
 
-var _translate_c_dep: ?*std.Build.Dependency = null;
-
 /// Add the specified C dependency to the given module.
 pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const Config, options: Options) !void {
-    const translate_c = b.lazyImport(@This(), "translate_c") orelse return;
-    const translate_c_dep = d1: {
-        if (_translate_c_dep) |d2| break :d1 d2;
-        const d3 = b.lazyDependency("translate_c", .{}) orelse return;
-        _translate_c_dep = d3;
-        break :d1 d3;
-    };
-
     const target = options.target orelse config.target;
     const optimize = options.optimize orelse config.optimize;
 
@@ -70,39 +61,25 @@ pub fn add(b: *std.Build, dep: CDeps, module: *std.Build.Module, config: *const 
     };
 
     const value = modules.get(key) orelse value: {
-        const value = switch (dep) {
-            .@"ghostty-h" => v: {
-                // Verify our internal libghostty header.
-                const translated: translate_c.Translator = .init(translate_c_dep, .{
-                    .c_source_file = b.addWriteFiles().add(
-                        "ghostty_h_c.h",
-                        \\#include <ghostty.h>
-                        ,
-                    ),
-                    .target = target,
-                    .optimize = optimize,
-                    .link_libc = true,
-                });
-                translated.addSystemIncludePath(b.path("include"));
-                break :v translated.mod;
+        const translated = try translate_c.init(b, .{
+            .source = .{
+                .includes = .{
+                    .generated_name = b.fmt("{s}.h", .{@tagName(dep)}),
+                    .files = &.{.{
+                        .path = switch (dep) {
+                            // Verify our internal libghostty header.
+                            .@"ghostty-h" => "ghostty.h",
+                            // Verify our libghostty-vt header.
+                            .@"ghostty-vt-h" => "ghostty/vt.h",
+                        },
+                    }},
+                },
             },
-
-            .@"ghostty-vt-h" => v: {
-                // Verify our libghostty-vt header.
-                const translated: translate_c.Translator = .init(translate_c_dep, .{
-                    .c_source_file = b.addWriteFiles().add(
-                        "ghostty_vt_h_c.h",
-                        \\#include <ghostty/vt.h>
-                        ,
-                    ),
-                    .target = target,
-                    .optimize = optimize,
-                    .link_libc = true,
-                });
-                translated.addSystemIncludePath(b.path("include"));
-                break :v translated.mod;
-            },
-        };
+            .target = target,
+            .optimize = optimize,
+            .system_include_paths = &.{b.path("include")},
+        });
+        const value = translated.mod;
 
         try modules.put(b.allocator, key, value);
         break :value value;
