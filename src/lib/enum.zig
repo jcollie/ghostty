@@ -180,7 +180,10 @@ fn checkEnum(
                     field.value,
                     @field(c, expected_name),
                 ) catch |e| {
-                    std.log.err(@typeName(T) ++ " key " ++ field.name ++ " / " ++ expected_name ++ " failed its check: {t}", .{e});
+                    std.log.err(
+                        "{s} key {s} / " ++ expected_name ++ " failed its check: {t}",
+                        .{ @typeName(T), field.name, e },
+                    );
                     return e;
                 };
             }

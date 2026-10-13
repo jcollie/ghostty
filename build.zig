@@ -376,7 +376,7 @@ pub fn build(b: *std.Build) !void {
             .root_module = mod.vt_c,
             .filters = test_filters,
         });
-        try c_deps.add(b, .@"ghostty-vt-h", mod_vt_test.root_module, &config, .{
+        try c_deps.add(b, .@"ghostty-vt-h", mod_vt_c_test.root_module, &config, .{
             .optimize = .Debug,
             .target = config.baselineTarget(b.graph.io),
         });
