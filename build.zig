@@ -2,7 +2,6 @@ const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
 const buildpkg = @import("src/build/main.zig");
-const translate_c = @import("translate_c");
 
 const c_deps = @import("src/build/c_deps.zig");
 
@@ -417,8 +416,6 @@ pub fn build(b: *std.Build) !void {
             .target = config.baselineTarget(b.graph.io),
             .optimize = .Debug,
         });
-        // addGhosttyH(b, test_exe.root_module, config.baselineTarget(b.graph.io), .Debug);
-        // addGhosttyVTH(b, test_exe.root_module, config.baselineTarget(b.graph.io), .Debug);
 
         // Normal test running
         const test_run = b.addRunArtifact(test_exe);
@@ -450,53 +447,3 @@ pub fn build(b: *std.Build) !void {
         try translations_step.addError("cannot update translations when i18n is disabled", .{});
     }
 }
-
-// fn addGhosttyH(
-//     b: *std.Build,
-//     module: *std.Build.Module,
-//     target: std.Build.ResolvedTarget,
-//     optimize: std.builtin.OptimizeMode,
-// ) void {
-//     const translate_c = b.lazyImport(@This(), "translate_c") orelse return;
-//     const translate_c_dep = b.lazyDependency("translate_c", .{}) orelse return;
-
-//     const translated: translate_c.Translator = .init(translate_c_dep, .{
-//         .c_source_file = b.addWriteFiles().add(
-//             "ghostty_h_c.h",
-//             \\#include <ghostty.h>
-//             ,
-//         ),
-//         .target = target,
-//         .optimize = optimize,
-//         .link_libc = true,
-//     });
-
-//     translated.addSystemIncludePath(b.path("include"));
-
-//     module.addImport("ghostty-h", translated.mod);
-// }
-
-// fn addGhosttyVTH(
-//     b: *std.Build,
-//     module: *std.Build.Module,
-//     target: std.Build.ResolvedTarget,
-//     optimize: std.builtin.OptimizeMode,
-// ) void {
-//     const translate_c = b.lazyImport(@This(), "translate_c") orelse return;
-//     const translate_c_dep = b.lazyDependency("translate_c", .{}) orelse return;
-
-//     const translated: translate_c.Translator = .init(translate_c_dep, .{
-//         .c_source_file = b.addWriteFiles().add(
-//             "ghostty_vt_h_c.h",
-//             \\#include <ghostty/vt.h>
-//             ,
-//         ),
-//         .target = target,
-//         .optimize = optimize,
-//         .link_libc = true,
-//     });
-
-//     translated.addSystemIncludePath(b.path("include"));
-
-//     module.addImport("ghostty-vt-h", translated.mod);
-// }
