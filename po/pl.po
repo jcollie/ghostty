@@ -1126,10 +1126,6 @@ msgstr "Powtórz ostatnią cofniętą akcję."
 msgid "Quit the application."
 msgstr "Zakończ działanie aplikacji."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Wstaw małego Ghostty do terminala."

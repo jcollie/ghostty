@@ -1133,10 +1133,6 @@ msgstr "Gentag den sidste fortrudte handling."
 msgid "Quit the application."
 msgstr "Afslut programmet."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Sæt en lille Ghostty i din terminal."

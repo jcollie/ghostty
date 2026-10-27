@@ -1124,10 +1124,6 @@ msgstr "Son geri alınmış eylemi yineleyin."
 msgid "Quit the application."
 msgstr "Uygulamadan çıkın."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Uçbiriminize minik bir Ghostty koyun."

@@ -1141,10 +1141,6 @@ msgstr "Refazer a última ação desfeita."
 msgid "Quit the application."
 msgstr "Sair do aplicativo."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Colocar um pouco de Ghostty no seu terminal."

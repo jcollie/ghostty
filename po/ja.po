@@ -1126,10 +1126,6 @@ msgstr "直前に取り消した操作をやり直します。"
 msgid "Quit the application."
 msgstr "アプリケーションを終了します。"
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "ターミナルに Ghostty（👻）を入力します。"

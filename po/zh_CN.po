@@ -1086,10 +1086,6 @@ msgstr "重做上一个撤销的操作。"
 msgid "Quit the application."
 msgstr "退出应用。"
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "把一只小 Ghostty 塞进终端里。"

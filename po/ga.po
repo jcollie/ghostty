@@ -1146,10 +1146,6 @@ msgstr "Athdhéan an gníomh deireanach a cealaíodh."
 msgid "Quit the application."
 msgstr "Scoir an feidhmchlár."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Cuir Ghosttín i do teirminéal."

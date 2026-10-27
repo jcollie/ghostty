@@ -1137,10 +1137,6 @@ msgstr "Az utolsó visszavont művelet ismétlése."
 msgid "Quit the application."
 msgstr "Az alkalmazásból kilépés."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Egy kis Ghostty a terminálban."

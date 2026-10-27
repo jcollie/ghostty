@@ -1078,10 +1078,6 @@ msgstr ""
 msgid "Quit the application."
 msgstr ""
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr ""
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr ""

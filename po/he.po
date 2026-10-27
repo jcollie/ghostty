@@ -1113,10 +1113,6 @@ msgstr "בצע/י שוב את הפעולה האחרונה שבוטלה."
 msgid "Quit the application."
 msgstr "צא/י מהאפליקציה."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "הכנס/י קצת Ghostty למסוף שלך."

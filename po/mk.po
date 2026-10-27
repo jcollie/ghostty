@@ -1153,10 +1153,6 @@ msgstr "Повтори го последното вратено дејство."
 msgid "Quit the application."
 msgstr "Прекини ја апликацијата."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Внеси мал Ghostty во твојот терминал."

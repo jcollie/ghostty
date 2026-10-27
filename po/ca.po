@@ -1140,10 +1140,6 @@ msgstr "Refés l'última acció desfeta."
 msgid "Quit the application."
 msgstr "Surt de l'aplicació."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Posa una mica de Ghostty al teu terminal."

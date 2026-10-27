@@ -1151,10 +1151,6 @@ msgstr "Berregin desegindako azken eragiketa."
 msgid "Quit the application."
 msgstr "Itxi aplikazioa"
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Jarri Ghostty txiki bat zure terminalean."

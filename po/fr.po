@@ -1155,10 +1155,6 @@ msgstr "Rétablir la dernière action annulée."
 msgid "Quit the application."
 msgstr "Quitter l'application."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Mettre un petit Ghostty dans votre terminal."

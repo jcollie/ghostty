@@ -1118,10 +1118,6 @@ msgstr "Аднавіць апошняе адмененае дзеянне."
 msgid "Quit the application."
 msgstr "Выйсці з праграмы."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Дадаць трохі Ghostty ў свой тэрмінал."

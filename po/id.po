@@ -1118,10 +1118,6 @@ msgstr "Ulangi tindakan yang terakhir diurungkan."
 msgid "Quit the application."
 msgstr "Keluar dari aplikasi."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Taruh Ghostty kecil di terminal anda."

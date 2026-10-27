@@ -1119,10 +1119,6 @@ msgstr "Làm lại hành động vừa hoàn tác."
 msgid "Quit the application."
 msgstr "Thoát ứng dụng."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Mang một chút Ghostty vào terminal của bạn."

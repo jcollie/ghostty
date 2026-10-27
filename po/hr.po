@@ -1126,10 +1126,6 @@ msgstr "Ponovi zadnju poništenu radnju."
 msgid "Quit the application."
 msgstr "Izađi iz aplikacije."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Stavi maloga Ghosttyja u svoj terminal."

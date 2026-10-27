@@ -1125,10 +1125,6 @@ msgstr "Letzte rückgängig gemachte Aktion wiederholen."
 msgid "Quit the application."
 msgstr "Anwendung beenden."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Einen kleinen Ghostty in dein Terminal setzen."

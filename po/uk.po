@@ -1121,10 +1121,6 @@ msgstr "Повторити останню скасовану дію."
 msgid "Quit the application."
 msgstr "Вийти із застосунку."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Привид Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Вставити маленького Ghostty у ваш термінал."

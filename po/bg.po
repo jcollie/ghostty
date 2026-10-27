@@ -1149,10 +1149,6 @@ msgstr "Повтаряне на последното отменено дейст
 msgid "Quit the application."
 msgstr "Излизане от приложението."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Добавете малко Ghostty в терминала си."

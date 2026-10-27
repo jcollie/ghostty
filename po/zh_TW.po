@@ -1082,10 +1082,6 @@ msgstr "重做上一個已復原的動作。"
 msgid "Quit the application."
 msgstr "結束應用程式。"
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "在您的終端機裡放一隻小小的 Ghostty。"

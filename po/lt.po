@@ -1126,10 +1126,6 @@ msgstr "Pakartoti paskutinį atšauktą veiksmą."
 msgid "Quit the application."
 msgstr "Išeiti iš programos."
 
-#: src/input/command.zig:708
-msgid "Ghostty"
-msgstr "Ghostty"
-
 #: src/input/command.zig:709
 msgid "Put a little Ghostty in your terminal."
 msgstr "Įleiskite truputį Ghostty į savo terminalą."
