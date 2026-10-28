@@ -202,7 +202,7 @@ test "RepeatableStringMap: formatConfig long value" {
     var value: [300]u8 = undefined;
     @memset(&value, 'x');
 
-    const input = try std.fmt.allocPrint(alloc, "EXAMPLE={s}", .{&value});
+    const input = try alloc.print("EXAMPLE={s}", .{&value});
 
     var map: RepeatableStringMap = .{};
     try map.parseCLI(alloc, input);
@@ -212,6 +212,6 @@ test "RepeatableStringMap: formatConfig long value" {
 
     try map.formatEntry(formatterpkg.entryFormatter("env", &output.writer));
 
-    const expected = try std.fmt.allocPrint(alloc, "env = {s}\n", .{input});
+    const expected = try alloc.print("env = {s}\n", .{input});
     try testing.expectEqualStrings(expected, output.written());
 }
