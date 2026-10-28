@@ -103,7 +103,8 @@ jobs:
       - build-libghostty-vt-windows
       - build-linux
       - build-linux-libghostty
-      - build-nix
+      - build-nix-ghostty
+      - build-nix-lib-vt
       # - build-nix-macos
       - build-macos
       - build-macos-xcode-27
@@ -1057,11 +1058,21 @@ jobs:
       - name: Build Libghostty
         run: nix develop -c zig build -Dapp-runtime=none
 
-  build-nix:
+  build-nix-ghostty:
     strategy:
       fail-fast: false
       matrix:
         os: [namespace-profile-ghostty-md, namespace-profile-ghostty-md-arm64]
+        variant:
+          - optimize: releasefast
+            version: ".fast"
+            # Release builds must be stripped.
+            symbols: "no symbols"
+          - optimize: debug
+            version: ".debug"
+            # Debug builds must not be stripped.
+            symbols: "main_ghostty.main"
+    name: build-nix ghostty-${{ matrix.variant.optimize }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: build-gate
     env:
@@ -1077,6 +1088,7 @@ jobs:
           path: |
             /nix
             /zig
+            /home/runner/.cache/nix
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
@@ -1087,59 +1099,65 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: Test release NixOS package build
-        run: nix build .#ghostty-releasefast
+      - name: Test NixOS package build
+        run: nix build .#ghostty-${{ matrix.variant.optimize }}
 
       - name: Check version
-        run: result/bin/ghostty +version | grep -q '.fast'
+        run: result/bin/ghostty +version | grep -q '${{ matrix.variant.version }}'
 
-      - name: Check to see if the binary has been stripped
-        run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q 'no symbols'
+      - name: Check symbols
+        run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q '${{ matrix.variant.symbols }}'
 
-      - name: Test debug NixOS package build
-        run: nix build .#ghostty-debug
+  build-nix-lib-vt:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [namespace-profile-ghostty-md, namespace-profile-ghostty-md-arm64]
+        variant:
+          - releasefast
+          - releasefast-no-simd
+          - debug
+          - debug-no-simd
+    name: build-nix libghostty-vt-${{ matrix.variant }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: build-gate
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Check version
-        run: result/bin/ghostty +version | grep -q '.debug'
+      - name: Setup Cache
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: |
+            /nix
+            /zig
+            /home/runner/.cache/nix
 
-      - name: Check to see if the binary has not been stripped
-        run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q 'main_ghostty.main'
+      # Install Nix and use that to run our tests so our environment matches exactly.
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: Test fast build of libghostty-vt
+      # One invocation so the flake is evaluated once and the test
+      # derivations build in parallel.
+      - name: Test libghostty-vt build
+        env:
+          PKG: libghostty-vt-${{ matrix.variant }}
         run: |
-          nix build .#libghostty-vt-releasefast
-          nix build .#libghostty-vt-releasefast.tests.sanity-check
-          nix build .#libghostty-vt-releasefast.tests.pkg-config
-          nix build .#libghostty-vt-releasefast.tests.build-with-shared
-          nix build .#libghostty-vt-releasefast.tests.build-with-static
-          nix build .#libghostty-vt-releasefast.tests.build-example-c-vt-build-info
-
-      - name: Test fast (no SIMD) build of libghostty-vt
-        run: |
-          nix build .#libghostty-vt-releasefast-no-simd
-          nix build .#libghostty-vt-releasefast-no-simd.tests.sanity-check
-          nix build .#libghostty-vt-releasefast-no-simd.tests.pkg-config
-          nix build .#libghostty-vt-releasefast-no-simd.tests.build-with-shared
-          nix build .#libghostty-vt-releasefast-no-simd.tests.build-with-static
-          nix build .#libghostty-vt-releasefast-no-simd.tests.build-example-c-vt-build-info
-
-      - name: Test debug build of libghostty-vt
-        run: |
-          nix build .#libghostty-vt-debug
-          nix build .#libghostty-vt-debug.tests.sanity-check
-          nix build .#libghostty-vt-debug.tests.pkg-config
-          nix build .#libghostty-vt-debug.tests.build-with-shared
-          nix build .#libghostty-vt-debug.tests.build-with-static
-          nix build .#libghostty-vt-debug.tests.build-example-c-vt-build-info
-
-      - name: Test debug (no SIMD) build of libghostty-vt
-        run: |
-          nix build .#libghostty-vt-debug-no-simd
-          nix build .#libghostty-vt-debug-no-simd.tests.sanity-check
-          nix build .#libghostty-vt-debug-no-simd.tests.pkg-config
-          nix build .#libghostty-vt-debug-no-simd.tests.build-with-shared
-          nix build .#libghostty-vt-debug-no-simd.tests.build-with-static
-          nix build .#libghostty-vt-debug-no-simd.tests.build-example-c-vt-build-info
+          nix build \
+            ".#$PKG" \
+            ".#$PKG.tests.sanity-check" \
+            ".#$PKG.tests.pkg-config" \
+            ".#$PKG.tests.build-with-shared" \
+            ".#$PKG.tests.build-with-static" \
+            ".#$PKG.tests.build-example-c-vt-build-info"
 
   build-dist:
     runs-on: namespace-profile-ghostty-sm
