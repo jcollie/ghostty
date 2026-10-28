@@ -267,7 +267,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -371,7 +371,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -880,7 +880,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -1382,7 +1382,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -1434,7 +1434,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -1474,7 +1474,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -1838,7 +1838,11 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
+      # The x11 and wayland options only change which windowing code is
+      # compiled and none of it has unit tests, so the full suite runs once
+      # in the default configuration. The other legs are build-only.
       - name: Test
+        if: matrix.x11 == 'true' && matrix.wayland == 'true'
         run: |
           nix develop -c \
             zig build \
@@ -1859,8 +1863,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        simd: ["true", "false"]
-    name: Build -Dsimd=${{ matrix.simd }}
+        # -Dsimd=true is the default, which the GTK tests already cover.
+        simd: ["false"]
+    name: Test -Dsimd=${{ matrix.simd }}
     runs-on: namespace-profile-ghostty-sm
     needs: build-gate
     env:
@@ -1944,7 +1949,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
@@ -2141,7 +2146,7 @@ jobs:
             /Users/runner/zig
 
       # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           determinate: true
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
