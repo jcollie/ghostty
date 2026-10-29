@@ -27,13 +27,22 @@ pub fn parameter(
     comptime name: Texture.Parameter,
     value: name.Type(),
 ) errors.Error!void {
-    switch (@TypeOf(value)) {
+    const T = name.Type();
+
+    switch (T) {
         c.GLint => glad.context.SamplerParameteri.?(
             self.id,
-            @intFromEnum(name),
+            @backingInt(name),
             value,
         ),
-        else => unreachable,
+        else => switch (@typeInfo(T)) {
+            .@"enum" => glad.context.SamplerParameteri.?(
+                self.id,
+                @backingInt(name),
+                @backingInt(value),
+            ),
+            else => @compileLog("unsupported parameter type", T),
+        },
     }
     try errors.getError();
 }
