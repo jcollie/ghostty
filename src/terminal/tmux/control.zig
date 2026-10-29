@@ -446,7 +446,7 @@ pub const Parser = struct {
                 log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
                 break :cmd;
             };
-            const split = std.mem.indexOf(u8, rest, " @") orelse {
+            const split = std.mem.find(u8, rest, " @") orelse {
                 log.warn("failed to match notification cmd={s} line=\"{s}\"", .{ cmd, line });
                 break :cmd;
             };
@@ -957,6 +957,32 @@ test "tmux session-window-changed rejects an oversized id" {
     const line = "%session-window-changed $1 @1111111111111111111111";
     for (line) |byte| try testing.expect(try c.put(byte) == null);
     try testing.expect(try c.put('\n') == null);
+    try testing.expect(c.state == .idle);
+}
+
+test "tmux exit" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var c: Parser = .{ .buffer = .init(alloc) };
+    defer c.deinit();
+    for ("%exit") |byte| try testing.expect(try c.put(byte) == null);
+    const n = (try c.put('\n')).?;
+    try testing.expect(n == .exit);
+    try testing.expect(c.state == .idle);
+}
+
+test "tmux exit with reason" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var c: Parser = .{ .buffer = .init(alloc) };
+    defer c.deinit();
+    // tmux reasons can contain spaces ("server exited"). The reason is
+    // currently dropped; the notification is still an exit.
+    for ("%exit server exited") |byte| try testing.expect(try c.put(byte) == null);
+    const n = (try c.put('\n')).?;
+    try testing.expect(n == .exit);
     try testing.expect(c.state == .idle);
 }
 
