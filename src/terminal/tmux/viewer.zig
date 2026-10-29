@@ -2870,6 +2870,7 @@ fn testRawStartupScreen(comptime alternate_on: bool) !void {
                         command_index += 1;
                     },
                     .windows => {},
+                    .active_window => {},
                     .exit => {
                         return error.UnexpectedViewerExit;
                     },
